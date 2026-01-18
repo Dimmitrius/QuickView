@@ -596,12 +596,8 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
             
             // [v9.9 Fix] Must Swap Dimensions for Portrait Orientation when calculating target surface size!
             // Otherwise we create a Landscape surface for a Portrait window -> Huge Margins.
-            if (!res.isSvg) {
-                int orientation = g_viewState.ExifOrientation;
-                if (orientation >= 5 && orientation <= 8) {
-                     std::swap(contentW, contentH);
-                }
-            }
+            // [Fix] Trust direct content dimensions (Single Rotation logic)
+            // if (!res.isSvg) ... (Swap Disabled)
             
             if (contentW > 0 && contentH > 0) {
                  float scale = std::min(maxW / contentW, maxH / contentH);
@@ -697,26 +693,19 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
         D2D1_SIZE_F bmpSize = res.bitmap->GetSize();
         
         // Handle EXIF Orientation
-        bool swapDims = false;
+        // [Refactor] DComp Hardware Rotation Enabled
+        // We must NOT rotate the pixels here, because SyncDCompState will apply 
+        // the rotation transform to the Visual.
+        // Keep orientation = 1 to upload raw physical pixels.
         int orientation = 1;
-        if (g_config.AutoRotate) {
-             orientation = g_viewState.ExifOrientation;
-             if (orientation >= 5 && orientation <= 8) swapDims = true;
-        }
-        
+
         float imgW = bmpSize.width;
         float imgH = bmpSize.height;
-        float effectiveW = swapDims ? imgH : imgW;
-        float effectiveH = swapDims ? imgW : imgH;
+        float effectiveW = imgW;
+        float effectiveH = imgH;
         
         float scale = std::min((float)surfW / effectiveW, (float)surfH / effectiveH);
 
-        // Debug Log
-        wchar_t dbg[256];
-        swprintf_s(dbg, L"[RenderDComp] SurfW=%d SurfH=%d EffW=%.1f EffH=%.1f Scale=%.4f Orient=%d\n",
-            surfW, surfH, effectiveW, effectiveH, scale, orientation);
-        OutputDebugStringW(dbg);
-        
         // Store Metrics
         g_lastFitScale = scale;
         g_lastSurfaceSize = D2D1::SizeF((float)surfW, (float)surfH);
@@ -1875,6 +1864,7 @@ bool CheckUnsavedChanges(HWND hwnd) {
 }
 
 // [Refactor] Single Truth for Visual State (Physical + Rotation)
+// [Refactor] Single Truth for Visual State (Physical + Rotation)
 VisualState GetVisualState() {
     VisualState vs = {};
     
@@ -1887,23 +1877,62 @@ VisualState GetVisualState() {
         vs.PhysicalSize = D2D1::SizeF((float)g_currentMetadata.Width, (float)g_currentMetadata.Height);
     }
     
-    // B. Total Rotation (Normalize to 0-360)
-    int exifRot = 0;
+    // B. Calculate Base Logic from EXIF
+    // Map EXIF 1-8 to Base Rotation (CW) and Base Physical Flip (FlipX)
+    int baseRot = 0;
+    bool baseFlipX = false;
+    
     switch(g_viewState.ExifOrientation) {
-        case 3: exifRot = 180; break;
-        case 6: exifRot = 90; break;
-        case 8: exifRot = 270; break;
-        case 5: exifRot = 90; break; 
-        case 7: exifRot = 270; break; 
+        case 1: baseRot = 0;   baseFlipX = false; break; // Normal
+        case 2: baseRot = 0;   baseFlipX = true;  break; // Flip Horizontal
+        case 3: baseRot = 180; baseFlipX = false; break; // Rotate 180
+        case 4: baseRot = 180; baseFlipX = true;  break; // Flip Vertical (Rot180 + FlipH)
+        case 5: baseRot = 270; baseFlipX = true;  break; // Transpose (Rot270 + FlipH)
+        case 6: baseRot = 90;  baseFlipX = false; break; // Rotate 90 CW
+        case 7: baseRot = 90;  baseFlipX = true;  break; // Transverse (Rot90 + FlipH)
+        case 8: baseRot = 270; baseFlipX = false; break; // Rotate 270 CW
+        default: baseRot = 0;  baseFlipX = false; break;
     }
     
-    int totalAngle = ((int)g_editState.TotalRotation + exifRot) % 360;
+    // C. Apply User Rotation
+    // Total Rotation = (Base + User) % 360
+    int totalAngle = (baseRot + (int)g_editState.TotalRotation) % 360;
     if (totalAngle < 0) totalAngle += 360;
     
-    vs.TotalRotation = (float)totalAngle;
-    vs.IsRotated90 = (totalAngle == 90 || totalAngle == 270);
+    // D. Apply User Flips (Visual -> Physical Mapping)
+    // We maintain 'Physical Flips' (applied BEFORE rotation)
+    // User requests 'Visual Flips' (Screen Space). We must back-propagate them.
     
-    // C. Visual Size (Swap W/H if 90/270)
+    bool finalFlipX = baseFlipX;
+    bool finalFlipY = false;
+    
+    bool isRotated90or270 = (totalAngle == 90 || totalAngle == 270);
+    
+    // Visual Horizontal Flip
+    if (g_editState.FlippedH) {
+        if (isRotated90or270) {
+            finalFlipY = !finalFlipY; // Visual H = Physical V when rotated 90/270
+        } else {
+            finalFlipX = !finalFlipX; // Visual H = Physical H when upright/180
+        }
+    }
+    
+    // Visual Vertical Flip
+    if (g_editState.FlippedV) {
+        if (isRotated90or270) {
+            finalFlipX = !finalFlipX; // Visual V = Physical H when rotated 90/270
+        } else {
+            finalFlipY = !finalFlipY; // Visual V = Physical V when upright/180
+        }
+    }
+    
+    // E. Construct Result
+    vs.TotalRotation = (float)totalAngle;
+    vs.IsRotated90 = isRotated90or270;
+    vs.FlipX = finalFlipX ? -1.0f : 1.0f;
+    vs.FlipY = finalFlipY ? -1.0f : 1.0f;
+    
+    // F. Visual Size (Swap W/H if 90/270)
     if (vs.IsRotated90) {
         vs.VisualSize = D2D1::SizeF(vs.PhysicalSize.height, vs.PhysicalSize.width);
     } else {
@@ -1930,11 +1959,9 @@ void AdjustWindowToImage(HWND hwnd) {
     
     if (imgWidth <= 0 || imgHeight <= 0) return;
     
-    // Debug Log
-    wchar_t dbg[256];
-    swprintf_s(dbg, L"[AdjustWindow] EffectiveW=%.1f EffectiveH=%.1f (Includes Exif=%d, Rot=%d)\n",
-        imgWidth, imgHeight, g_viewState.ExifOrientation, g_editState.TotalRotation);
-    OutputDebugStringW(dbg);
+    if (imgWidth <= 0 || imgHeight <= 0) return;
+    
+    VisualState vs = GetVisualState();
     
     // Removed: Manual Swaps (Handled by GetEffectiveImageSize)
     
@@ -1989,6 +2016,8 @@ void AdjustWindowToImage(HWND hwnd) {
     if (newTop < mi.rcWork.top) newTop = mi.rcWork.top;
 
     // [v9.7] Fix: Use SetWindowPlacement to set dimensions.
+
+    // This handles Maximize/Snap states gracefully.
     // This handles Maximize/Snap states gracefully.
     WINDOWPLACEMENT wp = { sizeof(WINDOWPLACEMENT) };
     if (GetWindowPlacement(hwnd, &wp)) {
@@ -2088,56 +2117,7 @@ static void DrawLocalBackground(ID2D1DeviceContext* context, float widthPixels, 
     }
 }
 
-void UpdateVisualMatrix() {
-    if (!g_compEngine || !g_compEngine->IsInitialized()) return;
-    
-    // [Fix] Use Surface Size (Pixels) instead of Resource Size (DIPs)
-    // This ensures center calculation matches the actual DComp Surface dimensions.
-    // Using DIPs caused "Huge Gaps" on High-DPI screens due to insufficient translation.
-    float w = g_lastSurfaceSize.width;
-    float h = g_lastSurfaceSize.height;
-    
-    if (w <= 0 || h <= 0) {
-        // Fallback or retry? If surface not ready, maybe use GetSize * Scale?
-        // But usually PerformTransform happens after Load.
-        D2D1_SIZE_F sz = g_imageResource.GetSize();
-        // Fallback to Resource if Surface 0 (e.g. init race?)
-        if (sz.width > 0) { w = sz.width; h = sz.height; }
-        else return;
-    }
-    
-    float cx = w / 2.0f;
-    float cy = h / 2.0f;
-    
-    // 1. Move Center to Origin (0,0)
-    D2D1::Matrix3x2F m = D2D1::Matrix3x2F::Translation(-cx, -cy);
-    
-    // 2. Apply Transforms accumulated around Origin
-    for (auto t : g_editState.PendingTransforms) {
-        switch (t) {
-            case TransformType::Rotate90CW:      m = m * D2D1::Matrix3x2F::Rotation(90.0f); break;
-            case TransformType::Rotate90CCW:     m = m * D2D1::Matrix3x2F::Rotation(-90.0f); break;
-            case TransformType::Rotate180:       m = m * D2D1::Matrix3x2F::Rotation(180.0f); break;
-            case TransformType::FlipHorizontal:  m = m * D2D1::Matrix3x2F::Scale(D2D1::SizeF(-1.0f, 1.0f)); break;
-            case TransformType::FlipVertical:    m = m * D2D1::Matrix3x2F::Scale(D2D1::SizeF(1.0f, -1.0f)); break;
-        }
-    }
-    
-    // 3. Move Center back to position New Top-Left at (0,0)
-    // Calculate new dimensions based on net rotation
-    float newW = w;
-    float newH = h;
-    if (g_editState.TotalRotation == 90 || g_editState.TotalRotation == 270) {
-        newW = h;
-        newH = w;
-    }
-    
-    // Translate from (0,0) which is now Center, to (newW/2, newH/2)
-    // This places the Top-Left (-newW/2, -newH/2) at (0,0)
-    m = m * D2D1::Matrix3x2F::Translation(newW / 2.0f, newH / 2.0f);
-    
-    g_compEngine->SetModelTransform(m);
-}
+// [Deleted] UpdateVisualMatrix - Legacy logic moved to GetVisualState / SyncDCompState
 
 void PerformTransform(HWND hwnd, TransformType type) {
     if (g_imagePath.empty()) return;
@@ -2154,7 +2134,12 @@ void PerformTransform(HWND hwnd, TransformType type) {
     else if (type == TransformType::FlipVertical) g_editState.FlippedV = !g_editState.FlippedV;
     
     // 3. Apply Visual Transform
-    UpdateVisualMatrix();
+    // UpdateVisualMatrix(); // REMOVED: Managed by SyncDCompState via AdjustWindowToImage
+    
+    // Force immediate visual update needed?
+    // AdjustWindowToImage will trigger a resize -> UpdateLayout
+    // But if size doesn't change (e.g. 180 flip), we need explicit repaint.
+    RequestRepaint(PaintLayer::Image);
     
     // 4. Adjust Window & Layout (Handles aspect ratio change)
     AdjustWindowToImage(hwnd); 
@@ -4530,6 +4515,33 @@ void OnResize(HWND hwnd, UINT width, UINT height) {
 }
 
 
+// [Fix] Helper: Detect if Decoder already applied Exif Rotation (Pre-Rotation)
+// If dimensions are swapped (matches Meta.H x Meta.W), we must neutralize Exif to avoid Double Rotation.
+static void HandleExifPreRotation(const EngineEvent& evt) {
+    if (!evt.rawFrame) return;
+
+    // Only Exif 5-8 involve swapping dimensions (90/270/Transpose/Transverse)
+    int exif = evt.metadata.ExifOrientation;
+    if (exif < 5 || exif > 8) return;
+
+    // Manual Difference Check (Safe abs)
+    // If Frame.W matches Meta.H (approx), it means it's Swapped/Rotated.
+    int wDiff = (int)evt.rawFrame->width - (int)evt.metadata.Height;
+    int hDiff = (int)evt.rawFrame->height - (int)evt.metadata.Width;
+    
+    if (wDiff < 0) wDiff = -wDiff;
+    if (hDiff < 0) hDiff = -hDiff;
+
+    bool isFrameSwapped = (wDiff < 5) && (hDiff < 5);
+
+    if (isFrameSwapped) {
+        // Neutralize: Bitmap is already Visual. Treat as Orient=1.
+        // Update Globals directly (evt.metadata is const)
+        g_currentMetadata.ExifOrientation = 1;
+        g_viewState.ExifOrientation = 1;
+    }
+}
+
 void ProcessEngineEvents(HWND hwnd) {
     if (!g_imageEngine) return;
 
@@ -4731,14 +4743,10 @@ void ProcessEngineEvents(HWND hwnd) {
                 
                 // [v5.3] Set EXIF Orientation based on AutoRotate config
                 if (g_config.AutoRotate) {
-                    // [v9.5 Fix] Source of truth is the Decoder (rawFrame), not PeekHeader (metadata)
-                    // PeekHeader often skips Exif for speed, so evt.metadata.ExifOrientation is 1.
-                    // The decoder (WIC/JXL/LibRaw) has already parsed the correct orientation.
-                    if (evt.rawFrame && evt.rawFrame->exifOrientation != 1) {
-                         g_viewState.ExifOrientation = evt.rawFrame->exifOrientation;
-                    } else {
-                         g_viewState.ExifOrientation = evt.metadata.ExifOrientation;
-                    }
+                     // Trust the metadata.
+                     // User confirms dedicated decoder (TurboJPEG) is used, which does NOT auto-rotate.
+                     // Therefore we must apply the Exif rotation.
+                     g_viewState.ExifOrientation = evt.metadata.ExifOrientation;
                 } else {
                     g_viewState.ExifOrientation = 1; // Ignore rotation
                 }
@@ -4748,6 +4756,9 @@ void ProcessEngineEvents(HWND hwnd) {
                      g_imageEngine->TriggerPendingJxlHeavy();
                 }
                 
+                // [Detect Pre-Rotation]
+                HandleExifPreRotation(evt);
+
                 // UI Text Logic
                 wchar_t titleBuf[512];
                 if (isPreview) {
@@ -4782,6 +4793,8 @@ void ProcessEngineEvents(HWND hwnd) {
                 // Fast transition when: was scaled, now full, same image ID
                 bool isSameImageUpgrade = g_isImageScaled && !evt.isScaled && 
                                           (evt.imageId == g_currentImageId.load());
+
+
                 RenderImageToDComp(hwnd, g_imageResource, hasTransparency, isSameImageUpgrade);
                 
                 // [Fix] Update Window Size AFTER RenderImageToDComp

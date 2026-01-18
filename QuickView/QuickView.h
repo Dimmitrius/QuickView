@@ -12,6 +12,8 @@ struct VisualState {
     // 2. Transform Layer
     float TotalRotation;         // 0, 90, 180, 270 (Exif + User)
     bool IsRotated90;            // True if 90 or 270
+    float FlipX = 1.0f;          // Horizontal Scale (1.0 or -1.0)
+    float FlipY = 1.0f;          // Vertical Scale (1.0 or -1.0)
     
     // 3. Visual Layer
     D2D1_SIZE_F VisualSize;      // Logically swapped dimensions (if 90 deg)

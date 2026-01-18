@@ -330,6 +330,7 @@ std::wstring g_lastFormatDetails;
 int g_lastExifOrientation = 1;
 
 // Read EXIF Orientation from JPEG file (Tag 0x0112)
+// Read EXIF Orientation from JPEG file (Tag 0x0112)
 // Returns 1-8, or 1 if not found/error
 static int ReadJpegExifOrientation(const uint8_t* data, size_t size) {
     if (size < 12) return 1;
@@ -467,6 +468,11 @@ static void PopulateMetadataFromEasyExif_Refined(const easyexif::EXIFInfo& exif,
     if (exif.ColorSpace == 1) meta.ColorSpace = L"sRGB";
     else if (exif.ColorSpace == 2) meta.ColorSpace = L"Adobe RGB";
     else if (exif.ColorSpace == 65535) meta.ColorSpace = L"Uncalibrated";
+
+    // [Fix] Populate Orientation!
+    if (exif.Orientation >= 1 && exif.Orientation <= 8) {
+        meta.ExifOrientation = exif.Orientation;
+    }
 }
 
 
@@ -1171,6 +1177,11 @@ static void PopulateMetadataFromEasyExif(const easyexif::EXIFInfo& exif, CImageL
      if (exif.ColorSpace == 1) meta.ColorSpace = L"sRGB";
      else if (exif.ColorSpace == 2) meta.ColorSpace = L"Adobe RGB";
      else if (exif.ColorSpace == 65535) meta.ColorSpace = L"Uncalibrated";
+
+     // [Fix] Populate Orientation! (Crucial for TurboJPEG/Buffer Loaders)
+     if (exif.Orientation >= 1 && exif.Orientation <= 8) {
+         meta.ExifOrientation = exif.Orientation;
+     }
 }
 
     namespace Codec {
@@ -2069,7 +2080,7 @@ namespace QuickView {
                     if (marker->marker == JPEG_APP0 + 1 && marker->data_length >= 6 && memcmp(marker->data, "Exif\0\0", 6) == 0) {
                         easyexif::EXIFInfo exif;
                         if (exif.parseFromEXIFSegment(marker->data, marker->data_length) == 0) {
-                             QuickView::PopulateMetadataFromEasyExif(exif, result.metadata);
+                             PopulateMetadataFromEasyExif(exif, result.metadata);
                         }
                         break; // Found it
                     }
@@ -2226,7 +2237,11 @@ namespace QuickView {
                 if (cinfo.output_width < cinfo.image_width) result.metadata.FormatDetails += L" [Scaled]";
                 result.metadata.Width = cinfo.image_width; // Original size
                 result.metadata.Height = cinfo.image_height;
-                result.metadata.ExifOrientation = ReadJpegExifOrientation(pBuf, bufSize);
+                
+                // [Fix] Respect EasyExif result if available. Fallback to Raw Scan only if needed.
+                if (result.metadata.ExifOrientation == 1) {
+                    result.metadata.ExifOrientation = ReadJpegExifOrientation(pBuf, bufSize);
+                }
 
                 return S_OK;
             }

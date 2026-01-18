@@ -546,6 +546,10 @@ HRESULT CompositionEngine::UpdateTransformMatrix(VisualState vs, float winW, flo
     float originY = -vs.PhysicalSize.height / 2.0f;
     D2D1_MATRIX_3X2_F mOrigin = D2D1::Matrix3x2F::Translation(originX, originY);
     
+    // [Fix] Apply Flip (Mirroring) BEFORE Rotation (relative to unrotated image)
+    // EXIF mirroring operates on the raw pixel grid.
+    D2D1_MATRIX_3X2_F mFlip = D2D1::Matrix3x2F::Scale(vs.FlipX, vs.FlipY);
+    
     // B. Rotate: Around (0,0)
     D2D1_MATRIX_3X2_F mRotate = D2D1::Matrix3x2F::Rotation(vs.TotalRotation);
     
@@ -560,10 +564,8 @@ HRESULT CompositionEngine::UpdateTransformMatrix(VisualState vs, float winW, flo
     float screenCenterY = winH / 2.0f;
     D2D1_MATRIX_3X2_F mScreen = D2D1::Matrix3x2F::Translation(screenCenterX, screenCenterY);
     
-    // Combine: Origin * Rotate * Scale * Pan * Screen
-    // Transforms applied Left-to-Right on the point P:
-    // P_final = P * mOrigin * mRotate * mScale * mPan * mScreen
-    D2D1_MATRIX_3X2_F finalMatrix = mOrigin * mRotate * mScale * mPan * mScreen;
+    // Combine: Origin * Flip * Rotate * Scale * Pan * Screen
+    D2D1_MATRIX_3X2_F finalMatrix = mOrigin * mFlip * mRotate * mScale * mPan * mScreen;
     
     m_modelTransform->SetMatrix(finalMatrix);
     

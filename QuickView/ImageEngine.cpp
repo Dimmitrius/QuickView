@@ -122,6 +122,9 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
             e.metadata.FileSize = info.fileSize;
             
             if (cachedFrame->IsSvg()) e.metadata.Format = L"SVG"; 
+
+            // [Fix] Propagate EXIF Orientation from Cache (Critical for Rotation persistence)
+            e.metadata.ExifOrientation = cachedFrame->exifOrientation;
             
             QueueEvent(std::move(e)); 
             
@@ -890,6 +893,9 @@ void ImageEngine::FastLane::QueueWorker() {
                 if (e.rawFrame) {
                     e.metadata.FormatDetails = e.rawFrame->formatDetails;
                 }
+                
+                // [Fix] Propagate EXIF Orientation from Decoder to Metadata (Critical for AutoRotate)
+                e.metadata.ExifOrientation = rawFrame.exifOrientation;
                 
                 // [v5.3 Lazy] Reverted Sync ReadMetadata. 
                 // Metadata will be populated only when InfoPanel requests it.
