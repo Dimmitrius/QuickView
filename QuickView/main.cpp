@@ -596,8 +596,12 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
             
             // [v9.9 Fix] Must Swap Dimensions for Portrait Orientation when calculating target surface size!
             // Otherwise we create a Landscape surface for a Portrait window -> Huge Margins.
-            // [Fix] Trust direct content dimensions (Single Rotation logic)
-            // if (!res.isSvg) ... (Swap Disabled)
+            if (!res.isSvg && g_config.AutoRotate) {
+                 int orient = g_viewState.ExifOrientation;
+                 if (orient >= 5 && orient <= 8) {
+                     std::swap(contentW, contentH);
+                 }
+            }
             
             if (contentW > 0 && contentH > 0) {
                  float scale = std::min(maxW / contentW, maxH / contentH);
@@ -692,17 +696,18 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
         
         D2D1_SIZE_F bmpSize = res.bitmap->GetSize();
         
-        // Handle EXIF Orientation
-        // [Refactor] DComp Hardware Rotation Enabled
-        // We must NOT rotate the pixels here, because SyncDCompState will apply 
-        // the rotation transform to the Visual.
-        // Keep orientation = 1 to upload raw physical pixels.
-        int orientation = 1;
+        // Handle EXIF Orientation (GPU Pre-Rotation)
+        int orientation = g_viewState.ExifOrientation;
+        // If AutoRotate is disabled, force 1 (unless we want to support manual rotation later)
+        if (!g_config.AutoRotate) orientation = 1;
 
         float imgW = bmpSize.width;
         float imgH = bmpSize.height;
-        float effectiveW = imgW;
-        float effectiveH = imgH;
+        
+        // Swap dimensions for portrait orientations (5-8) to ensure Surface matches Window shape
+        bool isSwapped = (orientation >= 5 && orientation <= 8);
+        float effectiveW = isSwapped ? imgH : imgW;
+        float effectiveH = isSwapped ? imgW : imgH;
         
         float scale = std::min((float)surfW / effectiveW, (float)surfH / effectiveH);
 
@@ -710,36 +715,54 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
         g_lastFitScale = scale;
         g_lastSurfaceSize = D2D1::SizeF((float)surfW, (float)surfH);
         
-        float drawW = imgW * scale;
-        float drawH = imgH * scale;
-        D2D1_POINT_2F center = D2D1::Point2F(surfW / 2.0f, surfH / 2.0f);
-        
-        float x = center.x - drawW / 2.0f;
-        float y = center.y - drawH / 2.0f;
-        D2D1_RECT_F destRect = D2D1::RectF(x, y, x + drawW, y + drawH);
-        
-        g_lastFitOffset = D2D1::Point2F(x, y);
-
-        // Apply Rotation
+        // GPU Rotation Matrix Calculation
+        // Goal: Map the source bitmap (0,0,imgW,imgH) to the destination surface center, rotated and scaled.
         D2D1::Matrix3x2F m = D2D1::Matrix3x2F::Identity();
+        
         if (orientation > 1) {
-             // ... Rotation Logic (Simplified for brevity, copying existing logic is safer if I can see it)
-             // I'll assume standard rotation cases
+             // 1. Move Center of Bitmap to (0,0)
+             m = m * D2D1::Matrix3x2F::Translation(-imgW / 2.0f, -imgH / 2.0f);
+             
+             // 2. Apply Rotation / Flip
              switch (orientation) {
-                case 2: m = D2D1::Matrix3x2F::Scale(-1, 1, center); break;
-                case 3: m = D2D1::Matrix3x2F::Rotation(180, center); break;
-                case 4: m = D2D1::Matrix3x2F::Scale(1, -1, center); break;
-                case 5: m = D2D1::Matrix3x2F::Scale(-1, 1, center) * D2D1::Matrix3x2F::Rotation(270, center); break;
-                case 6: m = D2D1::Matrix3x2F::Rotation(90, center); break;
-                case 7: m = D2D1::Matrix3x2F::Scale(-1, 1, center) * D2D1::Matrix3x2F::Rotation(90, center); break;
-                case 8: m = D2D1::Matrix3x2F::Rotation(270, center); break;
-            }
-            ctx->SetTransform(m);
+                case 1: break;
+                case 2: m = m * D2D1::Matrix3x2F::Scale(-1, 1); break; // Flip X
+                case 3: m = m * D2D1::Matrix3x2F::Rotation(180); break;
+                case 4: m = m * D2D1::Matrix3x2F::Scale(1, -1); break; // Flip Y
+                case 5: m = m * D2D1::Matrix3x2F::Scale(-1, 1) * D2D1::Matrix3x2F::Rotation(270); break; // Transpose
+                case 6: m = m * D2D1::Matrix3x2F::Rotation(90); break;
+                case 7: m = m * D2D1::Matrix3x2F::Scale(-1, 1) * D2D1::Matrix3x2F::Rotation(90); break; // Transverse
+                case 8: m = m * D2D1::Matrix3x2F::Rotation(270); break;
+             }
+             
+             // 3. Scale to Fit Surface
+             m = m * D2D1::Matrix3x2F::Scale(scale, scale);
+             
+             // 4. Move to Center of Surface
+             m = m * D2D1::Matrix3x2F::Translation(surfW / 2.0f, surfH / 2.0f);
+             
+             ctx->SetTransform(m);
+             
+             // Draw bitmap at its original coordinates. The Transform handles placement.
+             // Note: Source Rect is implicitly (0, 0, imgW, imgH).
+             ctx->DrawBitmap(res.bitmap.Get(), D2D1::RectF(0, 0, imgW, imgH), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+             
+             // Reset Transform
+             ctx->SetTransform(D2D1::Matrix3x2F::Identity());
+        } else {
+             // Standard Path (Optimization: No Matrix overhead)
+             float drawW = imgW * scale;
+             float drawH = imgH * scale;
+             float x = (surfW - drawW) / 2.0f;
+             float y = (surfH - drawH) / 2.0f;
+             ctx->DrawBitmap(res.bitmap.Get(), D2D1::RectF(x, y, x + drawW, y + drawH), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
         }
         
-        ctx->DrawBitmap(res.bitmap.Get(), destRect, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        // [Optimization] We used the GPU to bake rotation. 
+        // Logic path (AdjustWindow) still thinks Exif=6 etc.
+        // We will reset global Exif to 1 in ProcessEngineEvents.
         
-        if (orientation > 1) ctx->SetTransform(D2D1::Matrix3x2F::Identity());
+        g_lastFitOffset = D2D1::Point2F((surfW - effectiveW * scale)/2.0f, (surfH - effectiveH * scale)/2.0f);
         
         // [v9.3 Fix] Calculate window centering offset like SVG path
         // This ensures Bitmap images are centered when Surface size differs from window size
@@ -1959,14 +1982,9 @@ void AdjustWindowToImage(HWND hwnd) {
     
     if (imgWidth <= 0 || imgHeight <= 0) return;
     
-    if (imgWidth <= 0 || imgHeight <= 0) return;
-    
     VisualState vs = GetVisualState();
     
-    // Removed: Manual Swaps (Handled by GetEffectiveImageSize)
-    
-    // [First Principles] Dimensions are already Effective Pixels (from Surface)
-    // Map 1 Image Pixel into 1 Window Logical Unit directly.
+    // [First Principles] Map 1 Image Pixel into 1 Window Logical Unit directly.
     // DComp will handle the scaling to physical pixels.
     int windowW = static_cast<int>(imgWidth);
     int windowH = static_cast<int>(imgHeight);
@@ -4797,9 +4815,16 @@ void ProcessEngineEvents(HWND hwnd) {
 
                 RenderImageToDComp(hwnd, g_imageResource, hasTransparency, isSameImageUpgrade);
                 
+                // [Optimization] GPU-Assistant Surface Rotation Complete
+                // The Surface is now physically rotated. Neutralize global Exif.
+                // This ensures AdjustWindowToImage sees "Orientation 1" and uses the already-swapped Surface dimensions.
+                if (g_viewState.ExifOrientation > 1 && g_config.AutoRotate) {
+                    g_currentMetadata.ExifOrientation = 1;
+                    g_viewState.ExifOrientation = 1;
+                }
+                
                 // [Fix] Update Window Size AFTER RenderImageToDComp
-                // This ensures g_lastSurfaceSize (used by AdjustWindowToImage) is updated with the NEW image dimensions.
-                // Previously, calling this before Render used STALE dimensions, causing layout failures on orientation switch.
+                // This ensures g_lastSurfaceSize is updated with the NEW image dimensions.
                 AdjustWindowToImage(hwnd);
                 
                 // Cleanup
