@@ -11,8 +11,8 @@ extern AppConfig g_config;
 #define ICON_ROTATE_L L"\uE7AD"
 #define ICON_ROTATE_R L"\uE7AD" 
 #define ICON_FLIP L"\uE8AB" // Mirror
-#define ICON_LOCK L"\uE9A6" // Lock icon (same for both states, color changes)
-#define ICON_UNLOCK L"\uE9A6"
+#define ICON_LOCK L"\uE72E" // Standard MDL2 Lock
+#define ICON_UNLOCK L"\uE785" // Standard MDL2 Unlock
 #define ICON_GALLERY L"\uE80A"
 #define ICON_INFO L"\uE946"
 #define ICON_RAW L"\uE722" // RAW icon (same for both states, color changes)
@@ -55,8 +55,28 @@ void Toolbar::CreateResources(ID2D1RenderTarget* pRT) {
         // Font
         DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_dwriteFactory.GetAddressOf()));
         if (m_dwriteFactory) {
+            // [v9.98] Font Fallback Logic
+            const wchar_t* fontCandidates[] = { 
+                L"Segoe Fluent Icons", 
+                L"Segoe MDL2 Assets", 
+                L"Segoe UI Symbol" 
+            };
+            const wchar_t* selectedFont = L"Segoe UI Symbol";
+
+            ComPtr<IDWriteFontCollection> sysFonts;
+            if (SUCCEEDED(m_dwriteFactory->GetSystemFontCollection(&sysFonts, FALSE))) {
+                for (const auto& name : fontCandidates) {
+                    UINT32 index;
+                    BOOL exists;
+                    if (SUCCEEDED(sysFonts->FindFamilyName(name, &index, &exists)) && exists) {
+                        selectedFont = name;
+                        break;
+                    }
+                }
+            }
+
             m_dwriteFactory->CreateTextFormat(
-                L"Segoe Fluent Icons",
+                selectedFont,
                 NULL,
                 DWRITE_FONT_WEIGHT_NORMAL,
                 DWRITE_FONT_STYLE_NORMAL,
@@ -340,8 +360,7 @@ void Toolbar::SetLockState(bool locked) {
     for (auto& btn : m_buttons) {
         if (btn.id == ToolbarButtonID::LockSize) {
             btn.isToggled = locked;
-            // Icon stays the same (E9A6), only color changes via isToggled
-            // Tooltip handled by GetTooltipText based on isToggled
+            btn.iconChar = locked ? ICON_LOCK[0] : ICON_UNLOCK[0];
         }
     }
 }

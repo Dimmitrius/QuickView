@@ -521,9 +521,29 @@ void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
     m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeHeader, L"en-us", &m_textFormatHeader);
     m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeItem, L"en-us", &m_textFormatItem);
     
-    // Icon font (Segoe MDL2 Assets)
-    m_dwriteFactory->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 18.0f, L"en-us", &m_textFormatIcon);
-    m_dwriteFactory->CreateTextFormat(L"Segoe MDL2 Assets", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f, L"en-us", &m_textFormatSymbol); // For small button icons
+    // [v9.98] Font Fallback Logic (Unified)
+    const wchar_t* fontCandidates[] = { 
+        L"Segoe Fluent Icons", 
+        L"Segoe MDL2 Assets", 
+        L"Segoe UI Symbol" 
+    };
+    const wchar_t* selectedFont = L"Segoe UI Symbol";
+
+    ComPtr<IDWriteFontCollection> sysFonts;
+    if (SUCCEEDED(m_dwriteFactory->GetSystemFontCollection(&sysFonts, FALSE))) {
+        for (const auto& name : fontCandidates) {
+             UINT32 index;
+             BOOL exists;
+             if (SUCCEEDED(sysFonts->FindFamilyName(name, &index, &exists)) && exists) {
+                 selectedFont = name;
+                 break;
+             }
+        }
+    }
+
+    // Icon font
+    m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 18.0f, L"en-us", &m_textFormatIcon);
+    m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f, L"en-us", &m_textFormatSymbol); // For small button icons
 
     if (m_textFormatItem) {
         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);

@@ -306,8 +306,29 @@ void UIRenderer::EnsureTextFormats() {
     }
     
     if (!m_iconFormat) {
+        // [v9.98] Font Fallback: Fluent -> MDL2 -> Symbol
+        const wchar_t* fontCandidates[] = { 
+            L"Segoe Fluent Icons", 
+            L"Segoe MDL2 Assets", 
+            L"Segoe UI Symbol" 
+        };
+        const wchar_t* selectedFont = L"Segoe UI Symbol"; // Ultimate fallback
+
+        ComPtr<IDWriteFontCollection> sysFonts;
+        // Check if font exists to prevent boxes
+        if (SUCCEEDED(m_dwriteFactory->GetSystemFontCollection(&sysFonts, FALSE))) {
+            for (const auto& name : fontCandidates) {
+                UINT32 index;
+                BOOL exists;
+                if (SUCCEEDED(sysFonts->FindFamilyName(name, &index, &exists)) && exists) {
+                    selectedFont = name;
+                    break;
+                }
+            }
+        }
+
         m_dwriteFactory->CreateTextFormat(
-            L"Segoe Fluent Icons", nullptr,
+            selectedFont, nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             12.0f, L"en-us", &m_iconFormat
         );
