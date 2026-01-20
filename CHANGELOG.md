@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.1.3] - Fullscreen & Interaction Polish
+**Release Date**: 2026-01-20
+
+### 🖥️ Fullscreen Experience
+- **True Fullscreen**: Replaced legacy "Maximized" fullscreen with exclusive-mode-like "True Fullscreen" (no borders, covers taskbar).
+- **Interaction Guards**:
+    -   **Edge Lock**: Completely disabled window edge resizing and cursor changes while in fullscreen.
+    -   **Drag Lock**: Prevented accidental window dragging (`WM_LBUTTONDOWN`) in fullscreen.
+    -   **Zoom Lock**: Fixed window resizing/jumping when zooming via mouse wheel in fullscreen.
+- **Intuitive Exits**:
+    -   **Double-Click**: Double-clicking anywhere on the background (or image, if configured) now exits fullscreen.
+    -   **Maximize Button**: Clicking the specialized Maximize button in the hover controls now reliably exits fullscreen.
+
+### 🐛 Bug Fixes
+- **Toolbar Pinning**: Fixed an issue where the toolbar pin button state (and visual icon) would not update immediately upon clicking.
+- **Settings Refresh**: Fixed "Lock Toolbar" setting toggle not applying in real-time.
+
+
 All notable changes to QuickView will be documented in this file.
 
 
