@@ -13,11 +13,13 @@
 #include <wincodec.h>
 #pragma comment(lib, "version.lib")
 #pragma comment(lib, "windowscodecs.lib")
+#include "Toolbar.h" // [Fix] Required for g_toolbar extern
 
 // Global Accessor from main.cpp
 extern ImageEngine* g_pImageEngine;
 extern AppConfig g_config;
 extern RuntimeConfig g_runtime;
+extern Toolbar g_toolbar; // [Fix] Allow Settings to update toolbar state directly
 
 
 static std::wstring GetAppVersion() {
@@ -814,7 +816,22 @@ void SettingsOverlay::BuildMenu() {
     tabVisuals.items.push_back({ AppStrings::Settings_Label_AutoHideTitle, OptionType::Toggle, &g_config.AutoHideWindowControls });
     
     tabVisuals.items.push_back({ AppStrings::Settings_Header_Panel, OptionType::Header });
-    tabVisuals.items.push_back({ AppStrings::Settings_Label_LockToolbar, OptionType::Toggle, &g_config.LockBottomToolbar });
+    
+    // [Fix] Lock Toolbar: Update runtime state immediately
+    SettingsItem itemToolbar = { AppStrings::Settings_Label_LockToolbar, OptionType::Toggle, &g_config.LockBottomToolbar };
+    itemToolbar.onChange = []() {
+        g_toolbar.SetPinned(g_config.LockBottomToolbar);
+        
+        // [Fix] Update Layout to refresh Pin Button Icon state
+        HWND hwnd = GetActiveWindow();
+        if (hwnd) {
+            RECT rc; GetClientRect(hwnd, &rc);
+            g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+        }
+
+        if (g_config.LockBottomToolbar) g_toolbar.SetVisible(true);
+    };
+    tabVisuals.items.push_back(itemToolbar);
     
     // Exif Panel Mode (Syncs to Runtime ShowInfoPanel)
     SettingsItem itemExif = { AppStrings::Settings_Label_ExifMode, OptionType::Segment, nullptr, nullptr, BindEnum(&g_config.ExifPanelMode), nullptr, 0, 0, {AppStrings::Settings_Option_Off, AppStrings::Settings_Option_Lite, AppStrings::Settings_Option_Full} };
