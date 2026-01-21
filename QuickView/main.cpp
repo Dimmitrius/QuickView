@@ -1673,6 +1673,7 @@ void SaveConfig() {
     // Control
     WritePrivateProfileStringW(L"Controls", L"InvertWheel", g_config.InvertWheel ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"InvertXButton", g_config.InvertXButton ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"Controls", L"EnableZoomSnapDamping", g_config.EnableZoomSnapDamping ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"LeftDragAction", std::to_wstring((int)g_config.LeftDragAction).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"MiddleDragAction", std::to_wstring((int)g_config.MiddleDragAction).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"MiddleClickAction", std::to_wstring((int)g_config.MiddleClickAction).c_str(), iniPath.c_str());
@@ -1755,6 +1756,7 @@ void LoadConfig() {
     // Control
     g_config.InvertWheel = GetPrivateProfileIntW(L"Controls", L"InvertWheel", 0, iniPath.c_str()) != 0;
     g_config.InvertXButton = GetPrivateProfileIntW(L"Controls", L"InvertXButton", 0, iniPath.c_str()) != 0;
+    g_config.EnableZoomSnapDamping = GetPrivateProfileIntW(L"Controls", L"EnableZoomSnapDamping", 1, iniPath.c_str()) != 0;
     g_config.LeftDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"LeftDragAction", (int)MouseAction::WindowDrag, iniPath.c_str());
     g_config.MiddleDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"MiddleDragAction", (int)MouseAction::PanImage, iniPath.c_str());
     g_config.MiddleClickAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"MiddleClickAction", (int)MouseAction::ExitApp, iniPath.c_str());
@@ -3471,7 +3473,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         
         // --- Magnetic Snap Time Lock ---
         static DWORD s_lastSnapTime = 0;
-        if (GetTickCount() - s_lastSnapTime < 400) {
+        if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 200)) {
             return 0; // Ignore input briefly after snapping
         }
         

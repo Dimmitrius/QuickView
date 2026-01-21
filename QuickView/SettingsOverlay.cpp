@@ -867,6 +867,7 @@ void SettingsOverlay::BuildMenu() {
     
     tabControl.items.push_back({ AppStrings::Settings_Header_Mouse, OptionType::Header });
     tabControl.items.push_back({ AppStrings::Settings_Label_InvertWheel, OptionType::Toggle, &g_config.InvertWheel });
+    tabControl.items.push_back({ AppStrings::Settings_Label_ZoomSnapDamping, OptionType::Toggle, &g_config.EnableZoomSnapDamping });
     tabControl.items.push_back({ AppStrings::Settings_Label_InvertButtons, OptionType::Toggle, &g_config.InvertXButton });
     
     // Left Drag: {Window=0, Pan=1} -> {WindowDrag=1, PanImage=2}

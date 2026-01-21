@@ -166,6 +166,7 @@ namespace AppStrings {
     const wchar_t* Settings_Label_ExifMode = nullptr;
     const wchar_t* Settings_Label_ToolbarInfoDefault = nullptr;
     const wchar_t* Settings_Label_InvertWheel = nullptr;
+    const wchar_t* Settings_Label_ZoomSnapDamping = nullptr; // New
     const wchar_t* Settings_Label_InvertButtons = nullptr;
     const wchar_t* Settings_Label_LeftDrag = nullptr;
     const wchar_t* Settings_Label_MiddleDrag = nullptr;
@@ -381,7 +382,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF Panel Mode";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Toolbar Info Default";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Invert Wheel";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Zoom 100% Snap Damping";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Invert Side Buttons";
+        static constexpr const wchar_t* Settings_Label_ZoomMode = L"Zoom Mode";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Left Drag";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Middle Drag";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"Middle Click";
@@ -517,6 +520,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF 面板模式";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"工具栏信息默认值";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"反转滚轮";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"缩放 100% 吸附阻尼";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"反转侧键";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"左键拖动";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"中键拖动";
@@ -793,6 +797,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF 面板模式";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"工具列資訊預設值";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"反轉滾輪";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"縮放 100% 吸附阻尼";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"反轉側鍵";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"左鍵拖曳";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"中鍵拖曳";
@@ -987,6 +992,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIFパネルモード";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"ツールバー情報デフォルト";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"ホイール反転";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"100%ズーム吸着ダンピング";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"サイドボタン反転";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"左ドラッグ";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"中ドラッグ";
@@ -1179,8 +1185,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Автоскрытие заголовка";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Закрепить нижнюю панель";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"Режим панели EXIF";
-        static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Информация панели по умолчанию";
+        static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Инфо. в панели по умолчанию";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Инвертировать колесо";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Задержка привязки зума (100%)";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Инвертировать боковые кнопки";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Перетаскивание левой кнопкой";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Перетаскивание средней кнопкой";
@@ -1375,6 +1382,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF-Panel-Modus";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Symbolleisten-Info Standard";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Mausrad invertieren";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Zoom 100% Einrast-Dämpfung";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Seitentasten invertieren";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Links ziehen";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Mitte ziehen";
@@ -1569,6 +1577,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ExifMode = L"Modo panel EXIF";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Info de barra por defecto";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Invertir rueda";
+        static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Amortiguación de ajuste 100%";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Invertir botones laterales";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Arrastrar izquierdo";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Arrastrar central";
@@ -1783,6 +1792,7 @@ namespace AppStrings {
         Settings_Label_ExifMode = T::Settings_Label_ExifMode;
         Settings_Label_ToolbarInfoDefault = T::Settings_Label_ToolbarInfoDefault;
         Settings_Label_InvertWheel = T::Settings_Label_InvertWheel;
+        Settings_Label_ZoomSnapDamping = T::Settings_Label_ZoomSnapDamping;
         Settings_Label_InvertButtons = T::Settings_Label_InvertButtons;
         Settings_Label_LeftDrag = T::Settings_Label_LeftDrag;
         Settings_Label_MiddleDrag = T::Settings_Label_MiddleDrag;

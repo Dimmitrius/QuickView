@@ -98,6 +98,8 @@ struct AppConfig {
     // --- Control ---
     bool InvertWheel = false;
     bool InvertXButton = false;          // Invert mouse forward/back buttons for navigation
+    // [v3.2.2] Zoom Snap Damping (Time Lock)
+    bool EnableZoomSnapDamping = true;
     MouseAction LeftDragAction = MouseAction::WindowDrag;
     MouseAction MiddleDragAction = MouseAction::PanImage;
     MouseAction MiddleClickAction = MouseAction::ExitApp;
