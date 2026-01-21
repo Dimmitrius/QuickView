@@ -709,9 +709,17 @@ void SettingsOverlay::BuildMenu() {
     
     tabGeneral.items.push_back({ AppStrings::Settings_Label_CheckUpdates, OptionType::Toggle, &g_config.CheckUpdates });
     
+    // Pro Habits
     tabGeneral.items.push_back({ AppStrings::Settings_Group_Habits, OptionType::Header });
     tabGeneral.items.push_back({ AppStrings::Settings_Label_LoopNav, OptionType::Toggle, &g_config.LoopNavigation });
     tabGeneral.items.push_back({ AppStrings::Settings_Label_ConfirmDel, OptionType::Toggle, &g_config.ConfirmDelete });
+    
+    // [Phase 2] Cross-Monitor
+    SettingsItem itemCrossMon = { AppStrings::Settings_Label_SpanDisplays, OptionType::Toggle, &g_config.EnableCrossMonitor };
+    itemCrossMon.onChange = [this]() {
+         g_runtime.CrossMonitorMode = g_config.EnableCrossMonitor;
+    };
+    tabGeneral.items.push_back(itemCrossMon);
     
 
     

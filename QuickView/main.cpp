@@ -121,10 +121,17 @@ static std::string GetAppVersionUTF8() {
     return "2.1.0";
 }
 
+// Function Prototypes
+// Function Prototypes
+static void SyncDCompState(HWND hwnd, float winW, float winH);
+RECT GetVirtualScreenRect();
+
 // --- Globals ---
 
 #define WM_UPDATE_FOUND (WM_APP + 2)
+#define WM_UPDATE_FOUND (WM_APP + 2)
 #define WM_ENGINE_EVENT (WM_APP + 3)
+
 
 
 static const wchar_t* g_szClassName = L"QuickViewClass";
@@ -524,34 +531,17 @@ static bool UpgradeSvgSurface(HWND hwnd, ImageResource& res, int tier) {
     g_svgRenderedScale = multiplier;
     
     // [Seamless Transition] Calculate new DComp transforms to maintain exact visual state
-    // Old state: oldSurface displayed at oldDCompScale with oldPan
-    // New state: newSurface (larger) should show SAME visual result
-    // 
-    // Visual size = SurfaceSize × DCompScale
-    // To maintain same visual: newDCompScale = oldDCompScale × (oldSurfSize / newSurfSize)
     
+    // [Fix] Restore winW/winH needed for SyncDCompState
     float winW = (float)rc.right;
     float winH = (float)rc.bottom;
-    
-    // Calculate base fit scales (how much to scale surface to fit window at 100%)
-    float oldBaseFit = (oldSurfW > 0) ? std::min(winW / oldSurfW, winH / oldSurfH) : 1.0f;
-    float newBaseFit = std::min(winW / (float)surfW, winH / (float)surfH);
-    
-    // New DComp scale to maintain same visual zoom
-    float newDCompScale = newBaseFit * g_viewState.Zoom;
-    
-    // Centering offset for new surface
-    float newScaledW = (float)surfW * newDCompScale;
-    float newScaledH = (float)surfH * newDCompScale;
-    float newOffsetX = (winW - newScaledW) / 2.0f;
-    float newOffsetY = (winH - newScaledH) / 2.0f;
-    
+
     // Apply CrossFade transition
     g_compEngine->PlayPingPongCrossFade(100.0f, true);
     
-    // Apply new transforms (maintains visual state)
-    g_compEngine->SetZoom(newDCompScale, 0.0f, 0.0f);
-    g_compEngine->SetPan(newOffsetX + g_viewState.PanX, newOffsetY + g_viewState.PanY);
+    // [Refactor] Use Unified SyncDCompState
+    // This ensures the new surface is displayed correctly based on VisualState
+    SyncDCompState(hwnd, winW, winH);
     g_compEngine->Commit();
     
     // ViewState unchanged - user's zoom/pan state preserved
@@ -670,17 +660,9 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
         g_viewState.PanY = 0;
         
         // [DComp Logic]
-        // Surface is larger than window (e.g. 2x). We need to scale it DOMN to fit window visual.
-        float baseFit = std::min((float)winW / surfW, (float)winH / surfH);
-        
-        // Center the scaled surface in window
-        float scaledW = surfW * baseFit;
-        float scaledH = surfH * baseFit;
-        float winOffsetX = (winW - scaledW) / 2.0f;
-        float winOffsetY = (winH - scaledH) / 2.0f;
-        
-        g_compEngine->SetZoom(baseFit, 0, 0);
-        g_compEngine->SetPan(winOffsetX, winOffsetY);
+        // [Refactor] Use Unified SyncDCompState
+        SyncDCompState(hwnd, winW, winH);
+        g_compEngine->Commit();
 
     } else {
         // === Bitmap Path (Legacy) ===
@@ -756,30 +738,9 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
         
         g_lastFitOffset = D2D1::Point2F((surfW - effectiveW * scale)/2.0f, (surfH - effectiveH * scale)/2.0f);
         
-        // [v9.3 Fix] Calculate window centering offset like SVG path
-        // This ensures Bitmap images are centered when Surface size differs from window size
+        // [Refactor] Use Unified SyncDCompState
         if (g_compEngine->IsInitialized()) {
-             // Calculate base fit scale: Surface -> Window
-             float baseFit = std::min((float)winW / surfW, (float)winH / surfH);
-             
-             // For regular view (non-zoomed), calculate centered position
-             if (g_viewState.Zoom == 1.0f) {
-                 float scaledW = surfW * baseFit;
-                 float scaledH = surfH * baseFit;
-                 
-                 // [v9.4] Tolerance for rounding errors (1px)
-                 // If the scaled size is extremely close to window size, align perfectly (0,0)
-                 // Otherwise, center it.
-                 float winOffsetX = (abs(winW - scaledW) < 1.0f) ? 0.0f : (winW - scaledW) / 2.0f;
-                 float winOffsetY = (abs(winH - scaledH) < 1.0f) ? 0.0f : (winH - scaledH) / 2.0f;
-                 
-                 g_compEngine->SetZoom(baseFit, 0.0f, 0.0f);
-                 g_compEngine->SetPan(winOffsetX, winOffsetY);
-             } else {
-                 // Zoomed mode - use existing logic
-                 g_compEngine->SetZoom(g_viewState.Zoom * baseFit, 0.0f, 0.0f);
-                 g_compEngine->SetPan(g_viewState.PanX, g_viewState.PanY);
-             }
+             SyncDCompState(hwnd, (float)winW, (float)winH);
         }
     }
     
@@ -1707,6 +1668,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"View", L"ToolbarAlpha", std::to_wstring(g_config.ToolbarAlpha).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"SettingsAlpha", std::to_wstring(g_config.SettingsAlpha).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"NavIndicator", std::to_wstring(g_config.NavIndicator).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"View", L"EnableCrossMonitor", g_config.EnableCrossMonitor ? L"1" : L"0", iniPath.c_str());
 
     // Control
     WritePrivateProfileStringW(L"Controls", L"InvertWheel", g_config.InvertWheel ? L"1" : L"0", iniPath.c_str());
@@ -1788,6 +1750,7 @@ void LoadConfig() {
     GetPrivateProfileStringW(L"View", L"SettingsAlpha", L"0.95", buf, 32, iniPath.c_str());
     g_config.SettingsAlpha = (float)_wtof(buf);
     g_config.NavIndicator = GetPrivateProfileIntW(L"View", L"NavIndicator", 0, iniPath.c_str());
+    g_config.EnableCrossMonitor = GetPrivateProfileIntW(L"View", L"EnableCrossMonitor", 0, iniPath.c_str()) != 0;
 
     // Control
     g_config.InvertWheel = GetPrivateProfileIntW(L"Controls", L"InvertWheel", 0, iniPath.c_str()) != 0;
@@ -2022,9 +1985,20 @@ void AdjustWindowToImage(HWND hwnd) {
     int newLeft = currentCenterX - windowW / 2;
     int newTop = currentCenterY - windowH / 2;
     
-    // Ensure on screen
-    if (newLeft < mi.rcWork.left) newLeft = mi.rcWork.left;
-    if (newTop < mi.rcWork.top) newTop = mi.rcWork.top;
+    // Ensure on screen (Clamping)
+    // [Phase 2] Cross-Monitor Toggle: Only clamp if disabled.
+    if (!g_config.EnableCrossMonitor) {
+         if (newLeft < mi.rcWork.left) newLeft = mi.rcWork.left;
+         if (newTop < mi.rcWork.top) newTop = mi.rcWork.top;
+         
+         // Also clamp right/bottom?
+         // Existing code only clamped top-left, relying on windowW/H resize earlier.
+         // Let's keep existing logic minimal.
+    } else {
+         // Cross-Monitor: Allow negative coordinates / spanning.
+         // No clamping applied.
+    }
+
 
     // [v9.7] Fix: Use SetWindowPlacement to set dimensions.
 
@@ -2054,6 +2028,22 @@ void ReloadCurrentImage(HWND hwnd) {
     // [v4.1] Reload: Skip OSD (to preserve Rotate/Flip messages)
     LoadImageAsync(hwnd, path.c_str(), false);
     // Note: AdjustWindowToImage is called inside LoadImageAsync upon success
+}
+
+// [Cross-Monitor] Calculate Union Rect of all monitors
+RECT GetVirtualScreenRect() {
+    RECT vRect = { 0, 0, 0, 0 };
+    auto MonitorEnumProc = [](HMONITOR hMon, HDC hdc, LPRECT lprcMonitor, LPARAM dwData) -> BOOL {
+        RECT* pRect = (RECT*)dwData;
+        if (pRect->right == 0 && pRect->bottom == 0 && pRect->left == 0 && pRect->top == 0) {
+             *pRect = *lprcMonitor;
+        } else {
+             UnionRect(pRect, pRect, lprcMonitor);
+        }
+        return TRUE;
+    };
+    EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&vRect);
+    return vRect;
 }
 
 // [Visual Rotation] Helper to calculate accumulated matrix
@@ -2600,12 +2590,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
     }
     case WM_GETMINMAXINFO: {
-        // Limit minimum window size when Settings HUD is visible
+        MINMAXINFO* pMMI = (MINMAXINFO*)lParam;
+        
+        // 1. Minimum Size (Settings HUD)
         if (g_settingsOverlay.IsVisible()) {
-            MINMAXINFO* pMMI = (MINMAXINFO*)lParam;
-            pMMI->ptMinTrackSize.x = 500; // [v9.8] Match global min w
-            pMMI->ptMinTrackSize.y = 400; // [v9.8] Match global min h
+            pMMI->ptMinTrackSize.x = 500; 
+            pMMI->ptMinTrackSize.y = 400; 
         }
+
+        // 2. [Phase 2] Cross-Monitor: Logic moved to WM_SYSCOMMAND (Fake Maximize) to avoid DWM clipping.
+        // We do NOT override MinMaxInfo for spanning, as native Maximize forces single monitor clipping.
         return 0;
     }
     case WM_NCHITTEST: {
@@ -2649,47 +2643,37 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             CalculateWindowControls(D2D1::SizeF((float)LOWORD(lParam), (float)HIWORD(lParam)));
             
             // NOTE: Do not reset zoom/pan here. Window resize should not implicitly
-            // discard the current view transform. Explicit actions (Fit, Reset)
-            // will call g_viewState.Reset() when needed. Clear programmatic flag.
+            // reset user's manual zoom state.
+            
+            // [Fix] Auto-Fit when restoring from Maximize/Fullscreen/Span
+            // Logic: Detect transition from "Large" state to "Normal" state.
+            static bool s_wasMaximized = false;
+            
+            // Check current "Maximized" state
+            bool isMaximized = IsZoomed(hwnd) || g_isFullScreen;
+            
+            // Check Fake Maximize (Span Mode) - Heuristic: Client Width close to Virtual Width
+            if (!isMaximized && g_runtime.CrossMonitorMode) {
+                 RECT vRect = GetVirtualScreenRect();
+                 int vW = vRect.right - vRect.left;
+                 if (LOWORD(lParam) >= (vW - 100)) isMaximized = true;
+            }
+
+            // Restore Trigger: If we *were* maximized and now are *not*, RESET zoom to fit.
+            if (!isMaximized && s_wasMaximized) {
+                 // Reset to default view state (centered, fit)
+                 g_viewState.Reset();
+                 RequestRepaint(PaintLayer::All);
+            }
+            s_wasMaximized = isMaximized;
+            
             g_programmaticResize = false;
             
             // [DComp Fix] Update Image Layout (Fit + Zoom) logic
-            // This ensures image scales correctly with Window Resize AND behaves correctly when Zoom > Screen
-            if (g_compEngine && g_compEngine->IsInitialized() && g_lastSurfaceSize.width > 0 && g_lastSurfaceSize.height > 0) {
-                 float winW = (float)LOWORD(lParam);
-                 float winH = (float)HIWORD(lParam);
-                 // [First Principles] Use Effective Dimensions (Rotated/Exif handled)
-                 D2D1_SIZE_F effSize = GetEffectiveImageSize();
-                 float imgW = effSize.width;
-                 float imgH = effSize.height;
-                 
-                 if (imgW <= 0 || imgH <= 0) return 0;
-                 
-                 // 1. Calculate Fit Scale (Base)
-                 float scaleX = winW / imgW;
-                 float scaleY = winH / imgH;
-                 float fitScale = std::min(scaleX, scaleY);
-                 
-                 // 2. Apply User Zoom
-                 // g_viewState.Zoom is relative to "Fit-to-Window" (1.0 = Fit)
-                 float finalScale = fitScale * g_viewState.Zoom;
-                 
-                 // 3. Calculate Centering Offsets
-                 float scaledW = imgW * finalScale;
-                 float scaledH = imgH * finalScale;
-                 
-                 float offsetX = (winW - scaledW) / 2.0f;
-                 float offsetY = (winH - scaledH) / 2.0f;
-                 
-                 // Add User Pan
-                 offsetX += g_viewState.PanX;
-                 offsetY += g_viewState.PanY;
-                 
-                 // 4. Update DComp
-                 g_compEngine->SetZoom(finalScale, 0.0f, 0.0f); // Scale from top-left
-                 g_compEngine->SetPan(offsetX, offsetY);
-                 g_compEngine->Commit();
-            }
+            // [Refactor] Use Centralized SyncDCompState
+            RECT rc; GetClientRect(hwnd, &rc);
+            SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+
             
             // [Phase 7] Fit Stage: Update screen dimensions for decode-to-scale
             g_runtime.screenWidth = LOWORD(lParam);
@@ -2697,6 +2681,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (g_imageEngine) g_imageEngine->UpdateConfig(g_runtime);
         }
         return 0;
+
+// Merged into previous handler
     
     case WM_DPICHANGED: {
         // Handle DPI change (e.g., window dragged to different monitor)
@@ -2993,8 +2979,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_viewState.PanY = 0;
                     // [DComp] Hardware pan reset
                     if (g_compEngine && g_compEngine->IsInitialized()) {
-                        g_compEngine->SetPan(0, 0);
-                        g_compEngine->Commit();
+                        RECT rc; GetClientRect(hwnd, &rc);
+                        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
                     }
                     RequestRepaint(PaintLayer::Dynamic);  // Only OSD update needed
                     break;
@@ -3011,7 +2997,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_viewState.PanY = 0;
                     // [DComp] Hardware transform reset
                     if (g_compEngine && g_compEngine->IsInitialized()) {
-                        g_compEngine->ResetImageTransform();
+                        RECT rc; GetClientRect(hwnd, &rc);
+                        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
                     }
                     RequestRepaint(PaintLayer::Dynamic);  // Only OSD update needed
                     break;
@@ -3093,13 +3080,41 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     // [Fix] Exit Fullscreen if active, else toggle Maximize
                     if (g_isFullScreen) {
                         SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
-                        // Optional: Reset size to initial? 
-                        // IDM_FULLSCREEN restores placement. 
-                        // User requested "Initial window size" - AdjustWindowToImage or similar?
-                        // For now, toggle Fullscreen restores prior state, which is standard behavior.
-                        // If user wants specific size, standard Restore should handle it via WindowPlacement.
                     } else {
-                        ShowWindow(hwnd, IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE); 
+                        // [Phase 2] Cross-Monitor: Fake Maximize (Video Wall)
+                        if (g_runtime.CrossMonitorMode) {
+                             RECT vRect = GetVirtualScreenRect();
+                             RECT rcNow; GetWindowRect(hwnd, &rcNow);
+                             
+                             // Check if we are already "Fake Maximized" (Span all monitors)
+                             bool isSpanned = (rcNow.left == vRect.left && rcNow.top == vRect.top &&
+                                               (rcNow.right - rcNow.left) == (vRect.right - vRect.left) &&
+                                               (rcNow.bottom - rcNow.top) == (vRect.bottom - vRect.top));
+                             
+                             if (isSpanned) {
+                                 // Restore to saved placement
+                                 SetWindowPlacement(hwnd, &g_savedWindowPlacement);
+                                 // Force SW_SHOWNORMAL to ensure style flags update if needed
+                                 ShowWindow(hwnd, SW_SHOWNORMAL);
+                                 // Reset view state for proper fit
+                                 g_viewState.Reset();
+                             } else {
+                                 // Save current placement before spanning
+                                 GetWindowPlacement(hwnd, &g_savedWindowPlacement);
+                                 
+                                 // Fake Maximize -> Set to Virtual Rect
+                                 ShowWindow(hwnd, SW_SHOWNORMAL); // Ensure we remain compatible with DComp
+                                 SetWindowPos(hwnd, nullptr, vRect.left, vRect.top, 
+                                              vRect.right - vRect.left, vRect.bottom - vRect.top, 
+                                              SWP_NOZORDER | SWP_FRAMECHANGED);
+                             }
+                        } else {
+                            // Standard Windows Maximize
+                            bool wasZoomed = IsZoomed(hwnd);
+                            ShowWindow(hwnd, wasZoomed ? SW_RESTORE : SW_MAXIMIZE);
+                            // Reset view state if restoring
+                            if (wasZoomed) g_viewState.Reset();
+                        }
                     }
                     return 0;
                 }
@@ -3529,8 +3544,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              int finalWinW = targetW;
              int finalWinH = targetH;
              
-             if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
-             if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
+             if (!g_config.EnableCrossMonitor) {
+                if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
+                if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
+             }
              if (finalWinW < 400) finalWinW = 400; // Min size
              if (finalWinH < 300) finalWinH = 300;
              
@@ -3589,14 +3606,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              if (imgW <= 0 || imgH <= 0) break; // Safety check
              
              // Calculate fit scale and new zoom
+             // Calculate fit scale and new zoom
              float fitScale = std::min(winW / imgW, winH / imgH);
              float oldZoom = g_viewState.Zoom;
              float newZoom = newTotalScale / fitScale;
              
-             // Update pan proportionally (center-based zoom behavior)
+             // [Center-Origin] Zoom-to-Point Logic
+             // Formula: P_new = P_old * ratio + (Mouse - Center) * (1 - ratio)
              float zoomRatio = newZoom / oldZoom;
-             g_viewState.PanX *= zoomRatio;
-             g_viewState.PanY *= zoomRatio;
+             
+             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+             ScreenToClient(hwnd, &pt);
+             
+             float mouseX = (float)pt.x;
+             float mouseY = (float)pt.y;
+             float winCenterX = winW / 2.0f;
+             float winCenterY = winH / 2.0f;
+             
+             float dx = mouseX - winCenterX;
+             float dy = mouseY - winCenterY;
+             
+             g_viewState.PanX = g_viewState.PanX * zoomRatio + dx * (1.0f - zoomRatio);
+             g_viewState.PanY = g_viewState.PanY * zoomRatio + dy * (1.0f - zoomRatio);
+             
              g_viewState.Zoom = newZoom;
              
              // [DComp] Apply using unified SyncDCompState path for consistency
@@ -4013,7 +4045,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         
         // Fullscreen
         case VK_RETURN: case VK_F11: // Enter/F11: Toggle fullscreen
-            SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+            if (GetKeyState(VK_CONTROL) < 0) {
+                 SendMessage(hwnd, WM_COMMAND, IDM_TOGGLE_SPAN, 0); // Ctrl+F11: Toggle Video Wall
+            } else {
+                 SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+            }
             break;
         
         // Exit
@@ -4041,10 +4077,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              isRaw = IsRawFile(g_imagePath);
         }
         
-        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0);
+        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode);
         return 0;
     }
     
+    case WM_SYSCOMMAND: {
+        UINT cmd = wParam & 0xFFF0;
+        if (cmd == SC_MAXIMIZE && g_runtime.CrossMonitorMode) {
+             RECT vRect = GetVirtualScreenRect();
+             // Fake Maximize -> Set to Virtual Rect
+             ShowWindow(hwnd, SW_SHOWNORMAL); 
+             SetWindowPos(hwnd, nullptr, vRect.left, vRect.top, 
+                          vRect.right - vRect.left, vRect.bottom - vRect.top, 
+                          SWP_NOZORDER | SWP_FRAMECHANGED);
+             return 0; // Consume
+        }
+        break; // Pass to DefWindowProc
+    }
+
     case WM_COMMAND: {
         UINT cmdId = LOWORD(wParam);
         switch (cmdId) {
@@ -4163,24 +4213,42 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             
             if (g_isFullScreen) {
                 // Restore to Windowed
+                // [Fix] Set flag BEFORE SetWindowPos so WM_SIZE sees correct state
+                g_isFullScreen = false;
+                
                 SetWindowLong(hwnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
                 SetWindowPlacement(hwnd, &g_savedWindowPlacement);
                 SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, 
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-                g_isFullScreen = false;
+                
+                // [Fix] Reset zoom/pan to ensure image fits restored window
+                g_viewState.Reset();
             } else {
                 // Enter Fullscreen
-                MONITORINFO mi = { sizeof(mi) };
-                if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi)) {
+                RECT targetRect = { 0 };
+                
+                // [Phase 2] Cross-Monitor Spanning (Video Wall Mode)
+                if (g_runtime.CrossMonitorMode) {
+                    targetRect = GetVirtualScreenRect();
+                } else {
+                    MONITORINFO mi = { sizeof(mi) };
+                    if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi)) {
+                        targetRect = mi.rcMonitor;
+                    }
+                }
+
+                if (!IsRectEmpty(&targetRect)) {
                     GetWindowPlacement(hwnd, &g_savedWindowPlacement);
+                    
+                    // [Fix] Set flag BEFORE SetWindowPos so WM_SIZE sees correct state
+                    g_isFullScreen = true;
                     
                     SetWindowLong(hwnd, GWL_STYLE, dwStyle & ~WS_OVERLAPPEDWINDOW);
                     SetWindowPos(hwnd, HWND_TOP, 
-                                 mi.rcMonitor.left, mi.rcMonitor.top,
-                                 mi.rcMonitor.right - mi.rcMonitor.left,
-                                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                                 targetRect.left, targetRect.top,
+                                 targetRect.right - targetRect.left,
+                                 targetRect.bottom - targetRect.top,
                                  SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-                    g_isFullScreen = true;
                 }
             }
             // Trigger repaint to center/resize image
@@ -4299,6 +4367,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_osd.Show(hwnd, g_config.AlwaysOnTop ? AppStrings::OSD_AlwaysOnTopOn : AppStrings::OSD_AlwaysOnTopOff, false);
             RequestRepaint(PaintLayer::Static | PaintLayer::Dynamic);
             break;
+        }
+
+        case IDM_TOGGLE_SPAN: {
+             // [Persistence] Update Config & Runtime
+             g_config.EnableCrossMonitor = !g_config.EnableCrossMonitor;
+             g_runtime.CrossMonitorMode = g_config.EnableCrossMonitor;
+             SaveConfig();
+
+             // If fullscreen, re-apply fullscreen to switch mode
+             if (g_isFullScreen) {
+                 // Toggle OFF then ON to apply new rect
+                 SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0); // OFF
+                 SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0); // ON (with new mode)
+             }
+             std::wstring msg = g_runtime.CrossMonitorMode ? AppStrings::OSD_SpanOn : AppStrings::OSD_SpanOff;
+             g_osd.Show(hwnd, msg, false);
+             break;
         }
         
         case IDM_HUD_GALLERY:

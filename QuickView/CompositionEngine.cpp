@@ -315,100 +315,11 @@ HRESULT CompositionEngine::AlignActiveLayer(float windowW, float windowH) {
     return S_OK;
 }
 
-// ============================================================================
-// Hardware Transforms (Zero CPU Cost)
-// ============================================================================
-HRESULT CompositionEngine::UpdateLayout(float windowW, float windowH, float surfaceW, float surfaceH) {
-    if (!m_scaleTransform || !m_translateTransform) return E_FAIL;
-    if (surfaceW <= 0 || surfaceH <= 0) return E_INVALIDARG;
-    
-    // [Fix] Consistent Scaled Offset Logic
-    // We revert to calculating Scaled Offset (Original Logic) to match main.cpp expectation.
-    // But we apply internal compensation for Center Scaling.
-    
-    float scaleX = windowW / surfaceW;
-    float scaleY = windowH / surfaceH;
-    float scale = std::min(scaleX, scaleY);
-    
-    // Calculate SCALED offset (as main.cpp likely does)
-    float scaledW = surfaceW * scale;
-    float scaledH = surfaceH * scale;
-    float offsetX = (windowW - scaledW) / 2.0f;
-    float offsetY = (windowH - scaledH) / 2.0f;
-    
-    // Set Center Scaling
-    float imgCenterX = surfaceW / 2.0f;
-    float imgCenterY = surfaceH / 2.0f;
 
-    m_scaleTransform->SetScaleX(scale);
-    m_scaleTransform->SetScaleY(scale);
-    m_scaleTransform->SetCenterX(imgCenterX);
-    m_scaleTransform->SetCenterY(imgCenterY);
-    
-    // Compensation: ADD (W/2 * (S-1))
-    float compX = (surfaceW / 2.0f) * (scale - 1.0f);
-    float compY = (surfaceH / 2.0f) * (scale - 1.0f);
-    
-    m_translateTransform->SetOffsetX(offsetX + compX);
-    m_translateTransform->SetOffsetY(offsetY + compY);
-    
-    m_currentScale = scale;
-    m_currentPanX = offsetX; // Store base input
-    m_currentPanY = offsetY;
-    
-    return m_device->Commit();
-}
 
-HRESULT CompositionEngine::SetZoom(float scale, float centerX, float centerY) {
-    if (!m_scaleTransform) return E_FAIL;
-    
-    m_currentScale = scale;
-    
-    // [Fix] Use passed center coordinates instead of calculating image center
-    // main.cpp calculates the appropriate center based on zoom mode:
-    // - Window resize zoom: uses 0,0 (top-left) with centering offset in Pan
-    // - Standard zoom: uses window center
-    m_scaleTransform->SetScaleX(scale);
-    m_scaleTransform->SetScaleY(scale);
-    m_scaleTransform->SetCenterX(centerX);
-    m_scaleTransform->SetCenterY(centerY);
-    
-    return S_OK; // Caller should Commit
-}
 
-HRESULT CompositionEngine::SetPan(float offsetX, float offsetY) {
-    if (!m_translateTransform) return E_FAIL;
-    
-    m_currentPanX = offsetX;
-    m_currentPanY = offsetY;
-    
-    m_translateTransform->SetOffsetX(offsetX);
-    m_translateTransform->SetOffsetY(offsetY);
-    
-    return S_OK; // Caller should Commit
-}
 
-HRESULT CompositionEngine::ResetImageTransform() {
-    if (!m_scaleTransform || !m_translateTransform || !m_modelTransform) return E_FAIL;
-    
-    m_scaleTransform->SetScaleX(1.0f);
-    m_scaleTransform->SetScaleY(1.0f);
-    m_scaleTransform->SetCenterX(0.0f);
-    m_scaleTransform->SetCenterY(0.0f);
-    
-    m_translateTransform->SetOffsetX(0.0f);
-    m_translateTransform->SetOffsetY(0.0f);
-    
-    m_modelTransform->SetMatrix(D2D1::Matrix3x2F::Identity());
-    
-    return m_device->Commit();
-}
 
-HRESULT CompositionEngine::SetModelTransform(const D2D1_MATRIX_3X2_F& matrix) {
-    if (!m_modelTransform) return E_FAIL;
-    m_modelTransform->SetMatrix(matrix);
-    return S_OK; // Caller must Commit
-}
 
 // ============================================================================
 // UI Layer Management

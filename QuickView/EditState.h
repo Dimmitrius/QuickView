@@ -90,6 +90,7 @@ struct AppConfig {
     bool ResizeWindowOnZoom = true;
     bool AutoHideWindowControls = true;
     bool LockBottomToolbar = false;
+    bool EnableCrossMonitor = false; // [Phase 2] Cross-Monitor Spanning
     int ExifPanelMode = 0;              // 0=Off, 1=Lite, 2=Full (startup default)
     int ToolbarInfoDefault = 0;         // 0=Lite, 1=Full (toolbar button default)
     wchar_t CustomLiteTags[256] = L"ISO, Aperture, Shutter, Date"; // Using array for easier serialization or wstring
@@ -190,6 +191,9 @@ struct RuntimeConfig {
     int screenWidth = 0;  // 0 = full decode (no scaling)
     int screenHeight = 0;
     
+    // [Phase 2] Cross-Monitor Runtime State
+    bool CrossMonitorMode = false;
+    
     // Sync Helper
     void SyncFrom(const AppConfig& cfg) {
         LockWindowSize = cfg.LockWindowSize;
@@ -197,6 +201,7 @@ struct RuntimeConfig {
         InfoPanelExpanded = (cfg.ExifPanelMode == 2); // 2=Full
         ForceRawDecode = cfg.ForceRawDecode;
         RenderRAW = cfg.RenderRAW;
+        CrossMonitorMode = cfg.EnableCrossMonitor; // Init from config
     }
 };
 

@@ -50,6 +50,7 @@ namespace AppStrings {
     const wchar_t* Settings_Label_LoopNav = nullptr;
     const wchar_t* Settings_Label_ConfirmDel = nullptr;
     const wchar_t* Settings_Label_Portable = nullptr;
+    const wchar_t* Settings_Label_SpanDisplays = nullptr;
     
     const wchar_t* Settings_Status_RestartRequired = nullptr;
     const wchar_t* Settings_Status_NoWritePerm = nullptr;
@@ -82,6 +83,7 @@ namespace AppStrings {
     const wchar_t* Context_FullInfoPanel = nullptr;
     const wchar_t* Context_RenderRAW = nullptr;
     const wchar_t* Context_Fullscreen = nullptr;
+    const wchar_t* Context_SpanDisplays = nullptr;
     const wchar_t* Context_View = nullptr;
     const wchar_t* Context_WallpaperFill = nullptr;
     const wchar_t* Context_WallpaperFit = nullptr;
@@ -134,6 +136,8 @@ namespace AppStrings {
     const wchar_t* OSD_LastImage = nullptr;
     const wchar_t* OSD_HD = nullptr;
     const wchar_t* OSD_ZoomPrefix = nullptr;
+    const wchar_t* OSD_SpanOn = nullptr;
+    const wchar_t* OSD_SpanOff = nullptr;
 
     const wchar_t* Settings_Tab_Visuals = nullptr;
     const wchar_t* Settings_Tab_Controls = nullptr;
@@ -223,6 +227,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"Lossy";
         static constexpr const wchar_t* OSD_ReadOnly = L"Access denied - file may be in use or read-only";
         static constexpr const wchar_t* OSD_NotPerfect = L"Transform is not perfect (Edge optimized)";
+        static constexpr const wchar_t* OSD_SpanOn = L"Video Wall: ON";
+        static constexpr const wchar_t* OSD_SpanOff = L"Video Wall: OFF";
 
         static constexpr const wchar_t* Action_RotateCW = L"Rotate 90\x00B0 CW";
         static constexpr const wchar_t* Action_RotateCCW = L"Rotate 90\x00B0 CCW";
@@ -259,6 +265,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"Loop Navigation";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"Confirm Delete";
         static constexpr const wchar_t* Settings_Label_Portable = L"Portable Mode";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"Span Displays";
         
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"Restart required";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"No Write Permission!";
@@ -334,6 +341,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"Full Info Panel\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"Render RAW";
         static constexpr const wchar_t* Context_Fullscreen = L"Fullscreen\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"View";
         static constexpr const wchar_t* Context_WallpaperFill = L"Fill";
         static constexpr const wchar_t* Context_WallpaperFit = L"Fit";
@@ -435,6 +443,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"重编码";
         static constexpr const wchar_t* OSD_ReadOnly = L"拒绝访问 - 文件即使被占用或只读";
         static constexpr const wchar_t* OSD_NotPerfect = L"变换不完美 (已进行边缘优化)";
+        static constexpr const wchar_t* OSD_SpanOn = L"跨屏模式: 开启";
+        static constexpr const wchar_t* OSD_SpanOff = L"跨屏模式: 关闭";
 
         static constexpr const wchar_t* Action_RotateCW = L"顺时针旋转 90\x00B0";
         static constexpr const wchar_t* Action_RotateCCW = L"逆时针旋转 90\x00B0";
@@ -471,6 +481,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"循环导航";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"删除确认";
         static constexpr const wchar_t* Settings_Label_Portable = L"便携模式";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"跨屏模式 (电视墙)";
         
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"需要重启";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"无写入权限!";
@@ -580,6 +591,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"详细信息面板\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"渲染 RAW";
         static constexpr const wchar_t* Context_Fullscreen = L"全屏\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"跨越显示器 (电视墙模式)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"视图";
         static constexpr const wchar_t* Context_WallpaperFill = L"填充";
         static constexpr const wchar_t* Context_WallpaperFit = L"适应";
@@ -647,6 +659,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"有損";
         static constexpr const wchar_t* OSD_ReadOnly = L"拒絕存取 - 檔案可能被佔用或唯讀";
         static constexpr const wchar_t* OSD_NotPerfect = L"變換不完美 (已進行邊緣優化)";
+        static constexpr const wchar_t* OSD_SpanOn = L"跨屏模式: 開啟";
+        static constexpr const wchar_t* OSD_SpanOff = L"跨屏模式: 關閉";
         static constexpr const wchar_t* Action_RotateCW = L"順時針旋轉 90\x00B0";
         static constexpr const wchar_t* Action_RotateCCW = L"逆時針旋轉 90\x00B0";
         static constexpr const wchar_t* Action_Rotate180 = L"旋轉 180\x00B0";
@@ -676,6 +690,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"循環導覽";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"刪除確認";
         static constexpr const wchar_t* Settings_Label_Portable = L"可攜式模式";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"跨屏模式 (電視牆)";
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"需要重新啟動";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"無寫入權限!";
         static constexpr const wchar_t* Settings_Status_Enabled = L"已啟用";
@@ -741,6 +756,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"詳細資訊面板\\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"渲染 RAW";
         static constexpr const wchar_t* Context_Fullscreen = L"全螢幕\\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"跨越顯示器 (電視牆模式)\\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"檢視";
         static constexpr const wchar_t* Context_WallpaperFill = L"填滿";
         static constexpr const wchar_t* Context_WallpaperFit = L"適應";
@@ -837,6 +853,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"再エンコード";
         static constexpr const wchar_t* OSD_ReadOnly = L"アクセス拒否 - ファイルが使用中または読み取り専用";
         static constexpr const wchar_t* OSD_NotPerfect = L"変換が不完全 (エッジ最適化済み)";
+        static constexpr const wchar_t* OSD_SpanOn = L"Video Wall: ON";
+        static constexpr const wchar_t* OSD_SpanOff = L"Video Wall: OFF";
         static constexpr const wchar_t* Action_RotateCW = L"時計回りに90\x00B0回転";
         static constexpr const wchar_t* Action_RotateCCW = L"反時計回りに90\x00B0回転";
         static constexpr const wchar_t* Action_Rotate180 = L"180\x00B0回転";
@@ -866,6 +884,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"ループナビゲーション";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"削除確認";
         static constexpr const wchar_t* Settings_Label_Portable = L"ポータブルモード";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"Span Displays (Video Wall)";
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"再起動が必要";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"書き込み権限なし!";
         static constexpr const wchar_t* Settings_Status_Enabled = L"有効";
@@ -931,6 +950,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"詳細情報パネル\\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"RAWをレンダリング";
         static constexpr const wchar_t* Context_Fullscreen = L"全画面\\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"表示";
         static constexpr const wchar_t* Context_WallpaperFill = L"塗りつぶし";
         static constexpr const wchar_t* Context_WallpaperFit = L"フィット";
@@ -1027,6 +1047,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"Перекодировано";
         static constexpr const wchar_t* OSD_ReadOnly = L"Доступ запрещён - файл используется или только для чтения";
         static constexpr const wchar_t* OSD_NotPerfect = L"Преобразование неидеально (оптимизация краёв)";
+        static constexpr const wchar_t* OSD_SpanOn = L"Video Wall: ON";
+        static constexpr const wchar_t* OSD_SpanOff = L"Video Wall: OFF";
         static constexpr const wchar_t* Action_RotateCW = L"Повернуть на 90\x00B0 по часовой";
         static constexpr const wchar_t* Action_RotateCCW = L"Повернуть на 90\x00B0 против часовой";
         static constexpr const wchar_t* Action_Rotate180 = L"Повернуть на 180\x00B0";
@@ -1056,6 +1078,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"Циклическая навигация";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"Подтверждение удаления";
         static constexpr const wchar_t* Settings_Label_Portable = L"Портативный режим";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"Span Displays (Video Wall)";
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"Требуется перезапуск";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"Нет прав на запись!";
         static constexpr const wchar_t* Settings_Status_Enabled = L"Включено";
@@ -1121,6 +1144,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"Полная панель информации\\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"Рендеринг RAW";
         static constexpr const wchar_t* Context_Fullscreen = L"Полный экран\\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"Вид";
         static constexpr const wchar_t* Context_WallpaperFill = L"Заполнение";
         static constexpr const wchar_t* Context_WallpaperFit = L"По размеру";
@@ -1217,6 +1241,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"Neu kodiert";
         static constexpr const wchar_t* OSD_ReadOnly = L"Zugriff verweigert - Datei wird verwendet oder ist schreibgeschützt";
         static constexpr const wchar_t* OSD_NotPerfect = L"Transformation nicht perfekt (Kantenoptimiert)";
+        static constexpr const wchar_t* OSD_SpanOn = L"Video Wall: ON";
+        static constexpr const wchar_t* OSD_SpanOff = L"Video Wall: OFF";
         static constexpr const wchar_t* Action_RotateCW = L"90\x00B0 im Uhrzeigersinn drehen";
         static constexpr const wchar_t* Action_RotateCCW = L"90\x00B0 gegen Uhrzeigersinn drehen";
         static constexpr const wchar_t* Action_Rotate180 = L"180\x00B0 drehen";
@@ -1246,6 +1272,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"Endlosnavigation";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"Löschen bestätigen";
         static constexpr const wchar_t* Settings_Label_Portable = L"Portabler Modus";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"Span Displays (Video Wall)";
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"Neustart erforderlich";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"Keine Schreibrechte!";
         static constexpr const wchar_t* Settings_Status_Enabled = L"Aktiviert";
@@ -1311,6 +1338,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"Vollständiges Info-Panel\\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"RAW rendern";
         static constexpr const wchar_t* Context_Fullscreen = L"Vollbild\\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"Ansicht";
         static constexpr const wchar_t* Context_WallpaperFill = L"Ausfüllen";
         static constexpr const wchar_t* Context_WallpaperFit = L"Anpassen";
@@ -1407,6 +1435,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_Reencoded = L"Recodificado";
         static constexpr const wchar_t* OSD_ReadOnly = L"Acceso denegado - el archivo está en uso o es de solo lectura";
         static constexpr const wchar_t* OSD_NotPerfect = L"Transformación no perfecta (bordes optimizados)";
+        static constexpr const wchar_t* OSD_SpanOn = L"Video Wall: ON";
+        static constexpr const wchar_t* OSD_SpanOff = L"Video Wall: OFF";
         static constexpr const wchar_t* Action_RotateCW = L"Girar 90\x00B0 en sentido horario";
         static constexpr const wchar_t* Action_RotateCCW = L"Girar 90\x00B0 en sentido antihorario";
         static constexpr const wchar_t* Action_Rotate180 = L"Girar 180\x00B0";
@@ -1436,6 +1466,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LoopNav = L"Navegación en bucle";
         static constexpr const wchar_t* Settings_Label_ConfirmDel = L"Confirmar eliminación";
         static constexpr const wchar_t* Settings_Label_Portable = L"Modo portátil";
+        static constexpr const wchar_t* Settings_Label_SpanDisplays = L"Span Displays (Video Wall)";
         static constexpr const wchar_t* Settings_Status_RestartRequired = L"Reinicio requerido";
         static constexpr const wchar_t* Settings_Status_NoWritePerm = L"¡Sin permisos de escritura!";
         static constexpr const wchar_t* Settings_Status_Enabled = L"Habilitado";
@@ -1501,6 +1532,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FullInfoPanel = L"Panel de info completo\\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"Renderizar RAW";
         static constexpr const wchar_t* Context_Fullscreen = L"Pantalla completa\\tF11";
+        static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"Ver";
         static constexpr const wchar_t* Context_WallpaperFill = L"Rellenar";
         static constexpr const wchar_t* Context_WallpaperFit = L"Ajustar";
@@ -1598,6 +1630,8 @@ namespace AppStrings {
         OSD_Reencoded = T::OSD_Reencoded;
         OSD_ReadOnly = T::OSD_ReadOnly;
         OSD_NotPerfect = T::OSD_NotPerfect;
+        OSD_SpanOn = T::OSD_SpanOn;
+        OSD_SpanOff = T::OSD_SpanOff;
 
         Action_RotateCW = T::Action_RotateCW;
         Action_RotateCCW = T::Action_RotateCCW;
@@ -1634,6 +1668,7 @@ namespace AppStrings {
         Settings_Label_LoopNav = T::Settings_Label_LoopNav;
         Settings_Label_ConfirmDel = T::Settings_Label_ConfirmDel;
         Settings_Label_Portable = T::Settings_Label_Portable;
+        Settings_Label_SpanDisplays = T::Settings_Label_SpanDisplays;
         
         Settings_Status_RestartRequired = T::Settings_Status_RestartRequired;
         Settings_Status_NoWritePerm = T::Settings_Status_NoWritePerm;
@@ -1716,6 +1751,7 @@ namespace AppStrings {
         OSD_LastImage = T::OSD_LastImage;
         OSD_HD = T::OSD_HD;
         OSD_ZoomPrefix = T::OSD_ZoomPrefix;
+        Context_SpanDisplays = T::Context_SpanDisplays;
 
         Settings_Header_PoweredBy = T::Settings_Header_PoweredBy;
         Settings_Text_Copyright = T::Settings_Text_Copyright;

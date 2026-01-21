@@ -52,22 +52,7 @@ public:
     // AlignActiveLayer: Center the active layer in window
     HRESULT AlignActiveLayer(float windowW, float windowH);
     
-    // ===== Hardware Transforms (Zero CPU) =====
-    // UpdateLayout: Adjust transform when window resizes (no pixel repainting)
-    HRESULT UpdateLayout(float windowW, float windowH, float surfaceW, float surfaceH);
-    
-    // SetZoom: Apply scale transform around center point
-    HRESULT SetZoom(float scale, float centerX, float centerY);
-    
-    // SetPan: Apply translation transform
-    HRESULT SetPan(float offsetX, float offsetY);
-    
-    // ResetImageTransform: Reset to identity (Scale=1, Offset=0)
-    HRESULT ResetImageTransform();
-    
-    // [Visual Rotation] Set model transform (Rotation/Flip)
-    // Legacy: SetModelTransform(matrix)
-    HRESULT SetModelTransform(const D2D1_MATRIX_3X2_F& matrix);
+
     
     // [New] Virtual Canvas Matrix Chain (T-R-S-T)
     // Unifies Rotation, Scale, and Pan into a single logic flow.

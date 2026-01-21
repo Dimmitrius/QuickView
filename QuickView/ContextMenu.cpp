@@ -8,7 +8,7 @@
 // ContextMenu.cpp - Right-click Context Menu Implementation
 // ============================================================
 
-void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix, bool isWindowLocked, bool showInfoPanel, bool infoPanelExpanded, bool alwaysOnTop, bool renderRaw, bool isRawFile, bool isFullscreen) {
+void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix, bool isWindowLocked, bool showInfoPanel, bool infoPanelExpanded, bool alwaysOnTop, bool renderRaw, bool isRawFile, bool isFullscreen, bool isCrossMonitor) {
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
@@ -63,6 +63,9 @@ void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix,
     AppendMenuW(hViewMenu, rawFlags, IDM_RENDER_RAW, AppStrings::Context_RenderRAW);
     
     AppendMenuW(hViewMenu, MF_STRING | (isFullscreen ? MF_CHECKED : 0), IDM_FULLSCREEN, AppStrings::Context_Fullscreen);
+    
+    // [New] Video Wall Mode
+    AppendMenuW(hViewMenu, MF_STRING | (isCrossMonitor ? MF_CHECKED : 0), IDM_TOGGLE_SPAN, AppStrings::Context_SpanDisplays);
 
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, AppStrings::Context_View);
     

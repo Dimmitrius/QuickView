@@ -27,6 +27,8 @@ namespace AppStrings {
     extern const wchar_t* OSD_Reencoded;
     extern const wchar_t* OSD_ReadOnly;
     extern const wchar_t* OSD_NotPerfect;
+    extern const wchar_t* OSD_SpanOn;
+    extern const wchar_t* OSD_SpanOff;
     
     // Transform Action Names
     extern const wchar_t* Action_RotateCW;
@@ -66,6 +68,7 @@ namespace AppStrings {
     extern const wchar_t* Context_FullInfoPanel;
     extern const wchar_t* Context_RenderRAW;
     extern const wchar_t* Context_Fullscreen;
+    extern const wchar_t* Context_SpanDisplays;
     extern const wchar_t* Context_View;
     extern const wchar_t* Context_WallpaperFill;
     extern const wchar_t* Context_WallpaperFit;
@@ -120,6 +123,7 @@ namespace AppStrings {
     extern const wchar_t* OSD_LastImage;
     extern const wchar_t* OSD_HD; // High Definition / Full Load
     extern const wchar_t* OSD_ZoomPrefix;
+
     
     // Checkbox Labels
     extern const wchar_t* Checkbox_AlwaysSaveLossless;
@@ -147,6 +151,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_LoopNav;
     extern const wchar_t* Settings_Label_ConfirmDel;
     extern const wchar_t* Settings_Label_Portable;
+    extern const wchar_t* Settings_Label_SpanDisplays;
     
     // Settings Status Messages
     extern const wchar_t* Settings_Status_RestartRequired;
