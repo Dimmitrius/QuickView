@@ -175,6 +175,19 @@ QuickView 利用 **多线程解码** 技术处理 **JXL** 和 **AVIF** 等现代
 
 ---
 
+## 💻 系统要求
+
+| 组件 | 最低要求 | 备注 |
+| :--- | :--- | :--- |
+| **操作系统** | Windows 10 (1511+) | 需要 DirectComposition Visual3 支持 |
+| **处理器** | Intel Haswell / AMD Ryzen | **必须支持 AVX2** (编译时硬性要求) |
+| **显卡** | DirectX 10 兼容 | 2008 年后的任意显卡均可 |
+| **内存** | 4 GB+ | 推荐用于大型图片 |
+
+> ⚠️ **重要提示:** QuickView 使用 `/arch:AVX2` 编译以获得最佳性能。它**无法在不支持 AVX2 的 CPU 上运行**（如 Intel Sandy Bridge、AMD FX 系列）。
+
+---
+
 ## 📥 安装
 
 **QuickView 是 100% 绿色便携的。**

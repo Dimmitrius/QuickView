@@ -181,6 +181,19 @@ We are constantly evolving. Here is what's currently in development:
 
 ---
 
+## 💻 System Requirements
+
+| Component | Minimum Requirement | Notes |
+| :--- | :--- | :--- |
+| **OS** | Windows 10 (1511+) | DirectComposition Visual3 required |
+| **CPU** | Intel Haswell / AMD Ryzen | **AVX2 support required** (compile-time hard requirement) |
+| **GPU** | DirectX 10 Compatible | Any GPU from 2008+ should work |
+| **RAM** | 4 GB+ | Recommended for large images |
+
+> ⚠️ **Important:** QuickView is compiled with `/arch:AVX2` for maximum performance. It will **not run** on CPUs without AVX2 support (e.g., Intel Sandy Bridge, AMD FX series).
+
+---
+
 ## 📥 Installation
 
 **QuickView is 100% Portable.**

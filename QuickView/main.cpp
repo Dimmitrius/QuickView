@@ -2245,6 +2245,19 @@ void PerformTransform(HWND hwnd, TransformType type) {
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) {
+    // [v3.2.3] AVX2 Check - Critical: App compiled with /arch:AVX2, will crash without it
+    if (!IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE)) {
+        MessageBoxW(nullptr, 
+            L"QuickView requires a CPU with AVX2 support.\n\n"
+            L"Minimum Requirements:\n"
+            L"• Intel: Core 4th Gen (Haswell, 2013) or later\n"
+            L"• AMD: Ryzen (Zen, 2017) or later\n\n"
+            L"Your CPU does not support AVX2. The application cannot run.",
+            L"QuickView - Hardware Not Supported",
+            MB_OK | MB_ICONERROR);
+        return 1;
+    }
+    
     AppStrings::Init();
 
     // Enable Per-Monitor DPI Awareness V2 for proper multi-monitor support
