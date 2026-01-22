@@ -852,6 +852,20 @@ HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData*
         pData->stride = res.stride;
         pData->isValid = true;
         pData->loaderName = loaderName.empty() ? L"Unified" : loaderName;
+        
+        // [BugFix] Populate original dimensions and file size for Gallery tooltip
+        // Use metadata if available, otherwise use decoded dimensions (for scaled previews)
+        pData->origWidth = (res.metadata.Width > 0) ? res.metadata.Width : res.width;
+        pData->origHeight = (res.metadata.Height > 0) ? res.metadata.Height : res.height;
+        pData->fileSize = res.metadata.FileSize;
+        
+        // If FileSize not populated by codec, get it from file system
+        if (pData->fileSize == 0) {
+            WIN32_FILE_ATTRIBUTE_DATA fad;
+            if (GetFileAttributesExW(filePath, GetFileExInfoStandard, &fad)) {
+                pData->fileSize = (static_cast<uint64_t>(fad.nFileSizeHigh) << 32) | fad.nFileSizeLow;
+            }
+        }
         return S_OK;
     }
     
@@ -872,6 +886,8 @@ HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData*
                  if (PreviewExtractor::ExtractFromPSD(buf.data(), buf.size(), exData) && exData.IsValid()) {
                      if (SUCCEEDED(LoadThumbJPEGFromMemory(exData.pData, exData.size, targetSize, pData))) {
                          pData->loaderName = L"PSD (Preview)";
+                         // [BugFix] Set file size for Gallery tooltip (origWidth/Height from embedded preview is acceptable)
+                         pData->fileSize = buf.size();
                          return S_OK;
                      }
                  }
