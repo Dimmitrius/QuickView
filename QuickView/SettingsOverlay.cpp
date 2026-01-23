@@ -1327,8 +1327,17 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         pRT->DrawLine(D2D1::Point2F(hudX + SIDEBAR_WIDTH, hudY), D2D1::Point2F(hudX + SIDEBAR_WIDTH, hudY + HUD_HEIGHT), m_brushTextDim.Get(), 0.5f);
 
         // Back Button (Top of Sidebar)
+        // Back Button (Top of Sidebar)
+        // [Fix] Explicitly set alignment to prevent layout shifts (state persists from previous frame)
+        m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        
         D2D1_RECT_F backIconRect = D2D1::RectF(hudX + 15, hudY, hudX + 45, hudY + 50);
         pRT->DrawTextW(L"\xE72B", 1, m_textFormatIcon.Get(), backIconRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+        
+        m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
         D2D1_RECT_F backTextRect = D2D1::RectF(hudX + 55, hudY, hudX + SIDEBAR_WIDTH, hudY + 50);
         pRT->DrawTextW(L"Back", 4, m_textFormatItem.Get(), backTextRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
