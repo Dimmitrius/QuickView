@@ -13,6 +13,8 @@
 #include <wincodec.h>
 #pragma comment(lib, "version.lib")
 #pragma comment(lib, "windowscodecs.lib")
+#pragma comment(lib, "windowscodecs.lib")
+#include <dwmapi.h> // Required for DwmSetWindowAttribute
 #include "Toolbar.h" // [Fix] Required for g_toolbar extern
 
 // Global Accessor from main.cpp
@@ -885,6 +887,16 @@ void SettingsOverlay::BuildMenu() {
     };
     tabVisuals.items.push_back(itemAoT);
     
+    // Rounded Corners
+    SettingsItem itemRounded = { AppStrings::Settings_Label_RoundedCorners, OptionType::Toggle, &g_config.RoundedCorners };
+    itemRounded.onChange = []() {
+        bool enable = g_config.RoundedCorners;
+        DWM_WINDOW_CORNER_PREFERENCE preference = enable ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
+        DwmSetWindowAttribute(GetActiveWindow(), DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
+        SaveConfig();
+    };
+    tabVisuals.items.push_back(itemRounded);
+
     tabVisuals.items.push_back({ AppStrings::Settings_Label_ResizeOnZoom, OptionType::Toggle, &g_config.ResizeWindowOnZoom });
     tabVisuals.items.push_back({ AppStrings::Settings_Label_AutoHideTitle, OptionType::Toggle, &g_config.AutoHideWindowControls });
     

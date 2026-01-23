@@ -178,6 +178,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_AlwaysOnTop;
     extern const wchar_t* Settings_Label_ResizeOnZoom;
     extern const wchar_t* Settings_Label_AutoHideTitle;
+    extern const wchar_t* Settings_Label_RoundedCorners; // [v3.1.2]
     extern const wchar_t* Settings_Label_LockToolbar;
     extern const wchar_t* Settings_Label_ExifMode;
     extern const wchar_t* Settings_Label_ToolbarInfoDefault;

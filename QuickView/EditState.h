@@ -94,6 +94,7 @@ struct AppConfig {
     int ExifPanelMode = 0;              // 0=Off, 1=Lite, 2=Full (startup default)
     int ToolbarInfoDefault = 0;         // 0=Lite, 1=Full (toolbar button default)
     wchar_t CustomLiteTags[256] = L"ISO, Aperture, Shutter, Date"; // Using array for easier serialization or wstring
+    bool RoundedCorners = true; // [v3.1.2] Toggle rounded corners
 
     // --- Control ---
     bool InvertWheel = false;

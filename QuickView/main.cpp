@@ -934,125 +934,29 @@ void RequestRepaint(PaintLayer layer) {
 #define MarkGalleryLayerDirty() RequestRepaint(PaintLayer::Gallery)
 #define MarkAllUILayersDirty() RequestRepaint(PaintLayer::Static | PaintLayer::Dynamic | PaintLayer::Gallery)
 
-void CalculateWindowControls(D2D1_SIZE_F size) {
+void CalculateWindowControls(HWND hwnd, D2D1_SIZE_F size) {
     float btnW = 46.0f;
     float btnH = 32.0f;
-    g_winControls.CloseRect = D2D1::RectF(size.width - btnW, 0, size.width, btnH);
-    g_winControls.MaxRect = D2D1::RectF(size.width - btnW * 2, 0, size.width - btnW, btnH);
-    g_winControls.MinRect = D2D1::RectF(size.width - btnW * 3, 0, size.width - btnW * 2, btnH);
-    g_winControls.PinRect = D2D1::RectF(size.width - btnW * 4, 0, size.width - btnW * 3, btnH);
+    
+    // [Fix] Offset buttons when maximized to avoid being clipped by screen edge
+    float xOffset = 0.0f;
+    float yOffset = 0.0f;
+    if (IsZoomed(hwnd)) {
+        int frameX = GetSystemMetrics(SM_CXSIZEFRAME);
+        int frameY = GetSystemMetrics(SM_CYSIZEFRAME);
+        int paddedBorder = GetSystemMetrics(SM_CXPADDEDBORDER);
+        xOffset = (float)(frameX + paddedBorder);
+        yOffset = (float)(frameY + paddedBorder);
+    }
+
+    float rightEdge = size.width - xOffset;
+    g_winControls.CloseRect = D2D1::RectF(rightEdge - btnW, yOffset, rightEdge, btnH + yOffset);
+    g_winControls.MaxRect = D2D1::RectF(rightEdge - btnW * 2, yOffset, rightEdge - btnW, btnH + yOffset);
+    g_winControls.MinRect = D2D1::RectF(rightEdge - btnW * 3, yOffset, rightEdge - btnW * 2, btnH + yOffset);
+    g_winControls.PinRect = D2D1::RectF(rightEdge - btnW * 4, yOffset, rightEdge - btnW * 3, btnH + yOffset);
 }
 
-static bool g_showControls = false; 
-
-// --- REFACTOR: DrawWindowControls with Segoe Fluent Icons ---
-void DrawWindowControls(HWND hwnd, ID2D1DeviceContext* context) {
-    if (g_config.AutoHideWindowControls && !g_showControls && g_winControls.HoverState == WindowHit::None) return;
-
-    // Backgrounds
-    if (g_winControls.HoverState == WindowHit::Close) {
-        ComPtr<ID2D1SolidColorBrush> pRed;
-        context->CreateSolidColorBrush(D2D1::ColorF(0.9f, 0.1f, 0.1f), &pRed);
-        context->FillRectangle(g_winControls.CloseRect, pRed.Get());
-    } else if (g_winControls.HoverState != WindowHit::None) {
-        ComPtr<ID2D1SolidColorBrush> pGray;
-        context->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), &pGray);
-        if (g_winControls.HoverState == WindowHit::Max) context->FillRectangle(g_winControls.MaxRect, pGray.Get());
-        if (g_winControls.HoverState == WindowHit::Min) context->FillRectangle(g_winControls.MinRect, pGray.Get());
-        if (g_winControls.HoverState == WindowHit::Pin) context->FillRectangle(g_winControls.PinRect, pGray.Get());
-    }
-    
-    // Brushes
-    ComPtr<ID2D1SolidColorBrush> pWhite, pOutline, pPinActive;
-    context->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &pWhite);
-    context->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.5f), &pOutline);
-    context->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f), &pPinActive); // Blue when active
-    
-    // Create text format for Segoe Fluent Icons
-    static ComPtr<IDWriteFactory> pDW;
-    static ComPtr<IDWriteTextFormat> iconFormat;
-    if (!pDW) DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(pDW.GetAddressOf()));
-    if (pDW && !iconFormat) {
-        pDW->CreateTextFormat(L"Segoe Fluent Icons", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us", &iconFormat);
-        if (iconFormat) {
-            iconFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            iconFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-    }
-
-    if (iconFormat) {
-        // Draw Icon Helper
-        auto DrawIcon = [&](wchar_t icon, D2D1_RECT_F r, ID2D1SolidColorBrush* brush) {
-             // Outline (Offsets)
-            float offsets[] = { -1.0f, 1.0f };
-            for (float ox : offsets) {
-                for (float oy : offsets) {
-                    D2D1_RECT_F rOut = D2D1::RectF(r.left + ox, r.top + oy, r.right + ox, r.bottom + oy);
-                    context->DrawText(&icon, 1, iconFormat.Get(), rOut, pOutline.Get());
-                }
-            }
-            context->DrawText(&icon, 1, iconFormat.Get(), r, brush);
-        };
-
-        // Pin
-        wchar_t pinIcon = g_config.AlwaysOnTop ? L'\uE77A' : L'\uE718'; 
-        DrawIcon(pinIcon, g_winControls.PinRect, g_config.AlwaysOnTop ? pPinActive.Get() : pWhite.Get());
-
-        // Min
-        DrawIcon(L'\uE921', g_winControls.MinRect, pWhite.Get()); 
-
-        // Max / Restore
-        // Max / Restore
-        // HWND is passed in
-        // Check IsZoomed using passed HWND
-        wchar_t maxIcon = IsZoomed(hwnd) ? L'\uE923' : L'\uE922'; // Restore : Maximize
-        DrawIcon(maxIcon, g_winControls.MaxRect, pWhite.Get());
-
-        // Close
-        DrawIcon(L'\uE8BB', g_winControls.CloseRect, pWhite.Get());
-    }
-
-    
-    // Tooltip for Pin button
-    if (g_winControls.HoverState == WindowHit::Pin) {
-        std::wstring tip = g_config.AlwaysOnTop ? L"Unpin (Ctrl+T)" : L"Always on Top (Ctrl+T)";
-        
-        static ComPtr<IDWriteTextFormat> tipFormat;
-        if (!tipFormat && pDW) {
-            pDW->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us", &tipFormat);
-        }
-        
-        if (tipFormat && pDW) {
-            ComPtr<IDWriteTextLayout> layout;
-            pDW->CreateTextLayout(tip.c_str(), (UINT32)tip.length(), tipFormat.Get(), 200.0f, 50.0f, &layout);
-            
-            if (layout) {
-                DWRITE_TEXT_METRICS metrics;
-                layout->GetMetrics(&metrics);
-                
-                float tipW = metrics.width + 12.0f;
-                float tipH = metrics.height + 8.0f;
-                
-                // Position below the button
-                D2D1_RECT_F btnRect = g_winControls.PinRect;
-                float tipX = btnRect.left + (btnRect.right - btnRect.left - tipW) / 2.0f;
-                float tipY = btnRect.bottom + 5.0f;
-                
-                // Tooltip Background
-                D2D1_RECT_F tipRect = D2D1::RectF(tipX, tipY, tipX + tipW, tipY + tipH);
-                ComPtr<ID2D1SolidColorBrush> bgBrush, textBrush, borderBrush;
-                context->CreateSolidColorBrush(D2D1::ColorF(0.15f, 0.15f, 0.15f), &bgBrush);
-                context->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &textBrush);
-                context->CreateSolidColorBrush(D2D1::ColorF(0.4f, 0.4f, 0.4f), &borderBrush);
-                
-                context->FillRoundedRectangle(D2D1::RoundedRect(tipRect, 4.0f, 4.0f), bgBrush.Get());
-                context->DrawRoundedRectangle(D2D1::RoundedRect(tipRect, 4.0f, 4.0f), borderBrush.Get(), 1.0f);
-                
-                context->DrawTextLayout(D2D1::Point2F(tipX + 6.0f, tipY + 4.0f), layout.Get(), textBrush.Get());
-            }
-        }
-    }
-}
+// --- REFACTOR: UI Rendering moved to UIRenderer.cpp (DComp implementation) ---
 
 void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
     if (!g_dialog.IsVisible || !context) return;
@@ -1705,6 +1609,11 @@ bool CheckExtensionMismatch(const std::wstring& path, const std::wstring& format
 }
 
 // --- Persistence ---
+void ApplyWindowCornerPreference(HWND hwnd, bool enable) {
+    DWM_WINDOW_CORNER_PREFERENCE preference = enable ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
+}
+
 void SaveConfig() {
     std::wstring iniPath;
     
@@ -1754,6 +1663,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"View", L"SettingsAlpha", std::to_wstring(g_config.SettingsAlpha).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"NavIndicator", std::to_wstring(g_config.NavIndicator).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"EnableCrossMonitor", g_config.EnableCrossMonitor ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"View", L"RoundedCorners", g_config.RoundedCorners ? L"1" : L"0", iniPath.c_str());
 
     // Control
     WritePrivateProfileStringW(L"Controls", L"InvertWheel", g_config.InvertWheel ? L"1" : L"0", iniPath.c_str());
@@ -1837,6 +1747,7 @@ void LoadConfig() {
     g_config.SettingsAlpha = (float)_wtof(buf);
     g_config.NavIndicator = GetPrivateProfileIntW(L"View", L"NavIndicator", 0, iniPath.c_str());
     g_config.EnableCrossMonitor = GetPrivateProfileIntW(L"View", L"EnableCrossMonitor", 0, iniPath.c_str()) != 0;
+    g_config.RoundedCorners = GetPrivateProfileIntW(L"View", L"RoundedCorners", 1, iniPath.c_str()) != 0;
 
     // Control
     g_config.InvertWheel = GetPrivateProfileIntW(L"Controls", L"InvertWheel", 0, iniPath.c_str()) != 0;
@@ -2409,6 +2320,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     HWND hwnd = CreateWindowExW(0, g_szClassName, g_szWindowTitle, WS_OVERLAPPEDWINDOW, xPos, yPos, winW, winH, nullptr, nullptr, hInstance, nullptr);
     if (!hwnd) return 0;
     
+    // Apply Window Corner Preference
+    ApplyWindowCornerPreference(hwnd, g_config.RoundedCorners);
+    
     // Set global hwnd for RequestRepaint system
     g_mainHwnd = hwnd;
     
@@ -2488,7 +2402,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     {
         RECT rc; GetClientRect(hwnd, &rc);
         g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
-        CalculateWindowControls(D2D1::SizeF((float)rc.right, (float)rc.bottom));
+        CalculateWindowControls(hwnd, D2D1::SizeF((float)rc.right, (float)rc.bottom));
         // Force initial render of all UI layers
         RequestRepaint(PaintLayer::All);
     }
@@ -2754,7 +2668,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         pMMI->ptMinTrackSize.x = 200; 
         pMMI->ptMinTrackSize.y = 200;
         
-
+        // [Fix] For borderless/custom title bar windows, correctly position maximized window.
+        // Without this, maximized window extends beyond screen edges (to hide resize borders),
+        // causing the top portion of client area to be clipped.
+        HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetMonitorInfoW(hMon, &mi)) {
+            // Use work area (excludes taskbar)
+            pMMI->ptMaxPosition.x = mi.rcWork.left - mi.rcMonitor.left;
+            pMMI->ptMaxPosition.y = mi.rcWork.top - mi.rcMonitor.top;
+            pMMI->ptMaxSize.x = mi.rcWork.right - mi.rcWork.left;
+            pMMI->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
+        }
 
         // [Phase 2] Cross-Monitor: Logic moved to WM_SYSCOMMAND (Fake Maximize) to avoid DWM clipping.
         return 0;
@@ -2813,9 +2738,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
 
     case WM_SIZE: 
+        if (wParam == SIZE_MAXIMIZED) {
+             // Force Square Corners when maximized (Standard Windows behavior)
+             ApplyWindowCornerPreference(hwnd, false);
+        } else if (wParam == SIZE_RESTORED) {
+             // Restore User Preference
+             ApplyWindowCornerPreference(hwnd, g_config.RoundedCorners);
+        }
+
         if (wParam != SIZE_MINIMIZED) {
             OnResize(hwnd, LOWORD(lParam), HIWORD(lParam));
-            CalculateWindowControls(D2D1::SizeF((float)LOWORD(lParam), (float)HIWORD(lParam)));
+            CalculateWindowControls(hwnd, D2D1::SizeF((float)LOWORD(lParam), (float)HIWORD(lParam)));
             
             // NOTE: Do not reset zoom/pan here. Window resize should not implicitly
             // reset user's manual zoom state.
@@ -4439,6 +4372,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 // Restore to Windowed
                 // [Fix] Set flag BEFORE SetWindowPos so WM_SIZE sees correct state
                 g_isFullScreen = false;
+                ApplyWindowCornerPreference(hwnd, g_config.RoundedCorners); // Restore user preference
                 
                 SetWindowLong(hwnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
                 SetWindowPlacement(hwnd, &g_savedWindowPlacement);
@@ -4473,6 +4407,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                  targetRect.right - targetRect.left,
                                  targetRect.bottom - targetRect.top,
                                  SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                    
+                    // [Fix] Apply AFTER SetWindowPos to ensure DWM attribute persists
+                    ApplyWindowCornerPreference(hwnd, false); // Force square corners in fullscreen
                 }
             }
             // Trigger repaint to center/resize image
@@ -5751,7 +5688,7 @@ void OnPaint(HWND hwnd) {
         // CalculateWindowControls(logicW, logicH); // Actually CalculateWindowControls takes size.
         // But logicW/logicH IS the size in DIPs.
         D2D1_SIZE_F logicSize = D2D1::SizeF(logicW, logicH);
-        CalculateWindowControls(logicSize);
+        CalculateWindowControls(hwnd, logicSize);
         // DrawWindowControls, OSD, InfoPanel, etc moved to UIRenderer (DComp Surface)
         // Legacy SwapChain rendering logic removed.
     }

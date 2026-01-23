@@ -162,6 +162,7 @@ namespace AppStrings {
     const wchar_t* Settings_Label_AlwaysOnTop = nullptr;
     const wchar_t* Settings_Label_ResizeOnZoom = nullptr;
     const wchar_t* Settings_Label_AutoHideTitle = nullptr;
+    const wchar_t* Settings_Label_RoundedCorners = nullptr;
     const wchar_t* Settings_Label_LockToolbar = nullptr;
     const wchar_t* Settings_Label_ExifMode = nullptr;
     const wchar_t* Settings_Label_ToolbarInfoDefault = nullptr;
@@ -379,6 +380,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"Always on Top";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"Resize on Zoom";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Auto-Hide Title Bar";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Rounded Corners";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Lock Bottom Toolbar";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF Panel Mode";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Toolbar Info Default";
@@ -518,6 +520,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"窗口置顶";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"缩放时调整窗口";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"自动隐藏标题栏";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"圆角窗口";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"锁定底部工具栏";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF 面板模式";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"工具栏信息默认值";
@@ -796,6 +799,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"視窗置頂";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"縮放時調整視窗";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"自動隱藏標題列";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"圓角視窗";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"鎖定底部工具列";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF 面板模式";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"工具列資訊預設值";
@@ -992,6 +996,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"常に手前";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"ズーム時にリサイズ";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"タイトルバー自動非表示";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"角丸ウィンドウ";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"下部ツールバー固定";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIFパネルモード";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"ツールバー情報デフォルト";
@@ -1188,6 +1193,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"Поверх всех окон";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"Изменять размер при масштабировании";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Автоскрытие заголовка";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Закругленные углы";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Закрепить нижнюю панель";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"Режим панели EXIF";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Инфо. в панели по умолчанию";
@@ -1384,6 +1390,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"Immer im Vordergrund";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"Größe bei Zoom ändern";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Titelleiste automatisch ausblenden";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Abgerundete Ecken";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Untere Symbolleiste sperren";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF-Panel-Modus";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Symbolleisten-Info Standard";
@@ -1580,6 +1587,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"Siempre visible";
         static constexpr const wchar_t* Settings_Label_ResizeOnZoom = L"Redimensionar al hacer zoom";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Ocultar barra de título";
+        static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Esquinas Redondeadas";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Bloquear barra inferior";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"Modo panel EXIF";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Info de barra por defecto";
@@ -1796,6 +1804,7 @@ namespace AppStrings {
         Settings_Label_AlwaysOnTop = T::Settings_Label_AlwaysOnTop;
         Settings_Label_ResizeOnZoom = T::Settings_Label_ResizeOnZoom;
         Settings_Label_AutoHideTitle = T::Settings_Label_AutoHideTitle;
+        Settings_Label_RoundedCorners = T::Settings_Label_RoundedCorners;
         Settings_Label_LockToolbar = T::Settings_Label_LockToolbar;
         Settings_Label_ExifMode = T::Settings_Label_ExifMode;
         Settings_Label_ToolbarInfoDefault = T::Settings_Label_ToolbarInfoDefault;

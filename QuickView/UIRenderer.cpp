@@ -611,10 +611,22 @@ void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
     float btnW = 46.0f;
     float btnH = 32.0f;
     
-    D2D1_RECT_F closeRect = D2D1::RectF((float)m_width - btnW, 0, (float)m_width, btnH);
-    D2D1_RECT_F maxRect = D2D1::RectF((float)m_width - btnW * 2, 0, (float)m_width - btnW, btnH);
-    D2D1_RECT_F minRect = D2D1::RectF((float)m_width - btnW * 3, 0, (float)m_width - btnW * 2, btnH);
-    D2D1_RECT_F pinRect = D2D1::RectF((float)m_width - btnW * 4, 0, (float)m_width - btnW * 3, btnH);
+    // [Fix] Offset buttons when maximized to avoid being clipped by screen edge
+    float xOffset = 0.0f;
+    float yOffset = 0.0f;
+    if (IsZoomed(hwnd)) {
+        int frameX = GetSystemMetrics(SM_CXSIZEFRAME);
+        int frameY = GetSystemMetrics(SM_CYSIZEFRAME);
+        int paddedBorder = GetSystemMetrics(SM_CXPADDEDBORDER);
+        xOffset = (float)(frameX + paddedBorder);
+        yOffset = (float)(frameY + paddedBorder);
+    }
+    
+    float rightEdge = (float)m_width - xOffset;
+    D2D1_RECT_F closeRect = D2D1::RectF(rightEdge - btnW, yOffset, rightEdge, btnH + yOffset);
+    D2D1_RECT_F maxRect = D2D1::RectF(rightEdge - btnW * 2, yOffset, rightEdge - btnW, btnH + yOffset);
+    D2D1_RECT_F minRect = D2D1::RectF(rightEdge - btnW * 3, yOffset, rightEdge - btnW * 2, btnH + yOffset);
+    D2D1_RECT_F pinRect = D2D1::RectF(rightEdge - btnW * 4, yOffset, rightEdge - btnW * 3, btnH + yOffset);
     
     // Hover backgrounds
     if (m_winCtrlHover == 0) {
