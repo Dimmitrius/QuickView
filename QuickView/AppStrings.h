@@ -222,6 +222,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_AddToOpenWith;
     extern const wchar_t* Settings_Action_Add;
     extern const wchar_t* Settings_Action_Added;
+    extern const wchar_t* Settings_Status_DisabledInPortable; // Hint for portable mode
 
     // Advanced
     extern const wchar_t* Settings_Header_Features;

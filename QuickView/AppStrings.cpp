@@ -180,6 +180,7 @@ namespace AppStrings {
     const wchar_t* Settings_Label_AddToOpenWith = nullptr;
     const wchar_t* Settings_Action_Add = nullptr;
     const wchar_t* Settings_Action_Added = nullptr;
+    const wchar_t* Settings_Status_DisabledInPortable = nullptr;
     const wchar_t* Settings_Label_DebugHUD = nullptr;
     const wchar_t* Settings_Label_Prefetch = nullptr;
     const wchar_t* Settings_Label_InfoPanelAlpha = nullptr;
@@ -397,6 +398,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"Add to Open With";
         static constexpr const wchar_t* Settings_Action_Add = L"Add";
         static constexpr const wchar_t* Settings_Action_Added = L"Added";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"Disabled in Portable Mode";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"Enable Debug HUD (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"Prefetch System";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"Info Panel";
@@ -534,6 +536,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"添加到打开方式";
         static constexpr const wchar_t* Settings_Action_Add = L"添加";
         static constexpr const wchar_t* Settings_Action_Added = L"已添加";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"便携模式下停用";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"启用调试 HUD (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"预加载系统";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"信息面板";
@@ -811,6 +814,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"新增至開啟方式";
         static constexpr const wchar_t* Settings_Action_Add = L"新增";
         static constexpr const wchar_t* Settings_Action_Added = L"已新增";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"可攜式模式下停用";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"啟用偵錯 HUD (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"預先載入系統";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"資訊面板";
@@ -1006,6 +1010,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"プログラムから開くに追加";
         static constexpr const wchar_t* Settings_Action_Add = L"追加";
         static constexpr const wchar_t* Settings_Action_Added = L"追加済み";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"ポータブルモードでは無効";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"デバッグHUD有効 (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"プリフェッチシステム";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"情報パネル";
@@ -1201,6 +1206,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"Добавить в Открыть с помощью";
         static constexpr const wchar_t* Settings_Action_Add = L"Добавить";
         static constexpr const wchar_t* Settings_Action_Added = L"Добавлено";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"Отключено в портативном режиме";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"Включить отладочный HUD (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"Система предзагрузки";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"Панель информации";
@@ -1396,6 +1402,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"Zu Öffnen mit hinzufügen";
         static constexpr const wchar_t* Settings_Action_Add = L"Hinzufügen";
         static constexpr const wchar_t* Settings_Action_Added = L"Hinzugefügt";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"Im portablen Modus deaktiviert";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"Debug-HUD aktivieren (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"Vorlade-System";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"Info-Panel";
@@ -1591,6 +1598,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AddToOpenWith = L"Añadir a Abrir con";
         static constexpr const wchar_t* Settings_Action_Add = L"Añadir";
         static constexpr const wchar_t* Settings_Action_Added = L"Añadido";
+        static constexpr const wchar_t* Settings_Status_DisabledInPortable = L"Deshabilitado en modo portátil";
         static constexpr const wchar_t* Settings_Label_DebugHUD = L"Habilitar HUD de depuración (F12)";
         static constexpr const wchar_t* Settings_Label_Prefetch = L"Sistema de precarga";
         static constexpr const wchar_t* Settings_Label_InfoPanelAlpha = L"Panel de información";
@@ -1806,6 +1814,7 @@ namespace AppStrings {
         Settings_Label_AddToOpenWith = T::Settings_Label_AddToOpenWith;
         Settings_Action_Add = T::Settings_Action_Add;
         Settings_Action_Added = T::Settings_Action_Added;
+        Settings_Status_DisabledInPortable = T::Settings_Status_DisabledInPortable;
         Settings_Label_DebugHUD = T::Settings_Label_DebugHUD;
         Settings_Label_Prefetch = T::Settings_Label_Prefetch;
         Settings_Label_InfoPanelAlpha = T::Settings_Label_InfoPanelAlpha;

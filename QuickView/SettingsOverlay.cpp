@@ -268,6 +268,46 @@ bool SettingsOverlay::RegisterAssociations() {
     return true;
 }
 
+// Unregister file associations (for portable mode - clean registry)
+void SettingsOverlay::UnregisterAssociations() {
+    // Delete ProgID: QuickView.Image
+    RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\QuickView.Image");
+    
+    // Delete Applications entry
+    RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickView.exe");
+    
+    // Delete per-extension ProgIDs and OpenWithProgids entries
+    const wchar_t* exts[] = {
+        L".jpg", L".jpeg", L".jpe", L".jfif", L".png", L".bmp", L".dib", L".gif", 
+        L".tif", L".tiff", L".ico", 
+        L".webp", L".avif", L".heic", L".heif", L".svg", L".svgz", L".jxl",
+        L".exr", L".hdr", L".pic", L".psd", L".tga", L".pcx", L".qoi", 
+        L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp",
+        L".arw", L".cr2", L".cr3", L".dng", L".nef", L".orf", L".raf", L".rw2", L".srw", L".x3f",
+        L".mrw", L".mos", L".kdc", L".dcr", L".sr2", L".pef", L".erf", L".3fr", L".mef", L".nrw", L".raw"
+    };
+    
+    for (const auto& ext : exts) {
+        std::wstring extStr = ext;
+        std::wstring progId = L"QuickView" + extStr;
+        
+        // Delete ProgID key (e.g. QuickView.jpg)
+        RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\" + progId).c_str());
+        
+        // Remove from OpenWithProgids - both QuickView.ext AND QuickView.Image
+        HKEY hKey;
+        std::wstring keyPath = L"Software\\Classes\\" + extStr + L"\\OpenWithProgids";
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+            RegDeleteValueW(hKey, progId.c_str());           // Remove QuickView.jpg
+            RegDeleteValueW(hKey, L"QuickView.Image");       // Remove QuickView.Image
+            RegCloseKey(hKey);
+        }
+    }
+    
+    // Refresh Shell
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+}
+
 // Manual repair (silent, no MessageBox)
 bool SettingsOverlay::IsRegistrationNeeded() {
     wchar_t currentExe[MAX_PATH];
@@ -745,25 +785,50 @@ void SettingsOverlay::BuildMenu() {
                 return;
             }
             
-            // Copy AppData config to ExeDir (if exists)
-            if (GetFileAttributesW(appDataIni.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Refined Logic for Portable Mode transition:
+            bool appDataExists = (GetFileAttributesW(appDataIni.c_str()) != INVALID_FILE_ATTRIBUTES);
+            bool exeExists = (GetFileAttributesW(exeIni.c_str()) != INVALID_FILE_ATTRIBUTES);
+
+            if (appDataExists) {
+                // 1. AppData exists: Copy to ExeDir (Overwrite), then delete AppData config
                 CopyFileW(appDataIni.c_str(), exeIni.c_str(), FALSE);
+                DeleteFileW(appDataIni.c_str());
+                SaveConfig(); // Update to ensure PortableMode=true is saved
+            } else if (!exeExists) {
+                // 2. Both missing: Generate default config in ExeDir
+                SaveConfig();
             }
-            // Save current config to ExeDir
-            SaveConfig();
+            // 3. AppData missing, ExeDir exists: Do NOT overwrite (preserve existing portable config)
+            
+            // Clean up registry entries (portable mode should not use registry)
+            UnregisterAssociations();
+            
+            // Use deferred rebuild to avoid crash (don't call RebuildMenu directly in onChange)
+            m_pendingRebuild = true;
+            
             SetItemStatus(AppStrings::Settings_Label_Portable, AppStrings::Settings_Status_Enabled, D2D1::ColorF(0.1f, 0.8f, 0.1f));
         } else {
             // User turned OFF: Move config from ExeDir to AppData
-            CreateDirectoryW(appDataDir.c_str(), nullptr);
+            // Ensure AppData directory exists
+            if (GetFileAttributesW(appDataDir.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                CreateDirectoryW(appDataDir.c_str(), nullptr);
+            }
             
-            // Copy ExeDir config to AppData (overwrite)
-            if (GetFileAttributesW(exeIni.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            bool exeExists = (GetFileAttributesW(exeIni.c_str()) != INVALID_FILE_ATTRIBUTES);
+            
+            if (exeExists) {
+                // Copy ExeDir config to AppData (Overwrite existing to preserve current settings)
                 CopyFileW(exeIni.c_str(), appDataIni.c_str(), FALSE);
                 DeleteFileW(exeIni.c_str()); // Remove ExeDir config
             }
-            // Save current config to AppData
+            
+            // Save current config to AppData (ensures PortableMode=false is correctly persisted)
             SaveConfig();
-            SetItemStatus(L"Portable Mode", L"", D2D1::ColorF(1,1,1));
+            
+            // Use deferred rebuild to update File Association button state
+            m_pendingRebuild = true;
+            
+            SetItemStatus(AppStrings::Settings_Label_Portable, L"", D2D1::ColorF(1,1,1));
         }
     };
     tabGeneral.items.push_back(itemPortable);
@@ -947,9 +1012,16 @@ void SettingsOverlay::BuildMenu() {
     SettingsItem itemFileAssoc = { AppStrings::Settings_Label_AddToOpenWith, OptionType::ActionButton };
     itemFileAssoc.buttonText = AppStrings::Settings_Action_Add;
     itemFileAssoc.buttonActivatedText = AppStrings::Settings_Action_Added;
-    itemFileAssoc.onChange = [&itemFileAssoc]() {
-        SettingsOverlay::RegisterAssociations();
-    };
+    
+    // Disable in Portable Mode (cannot write to registry)
+    if (g_config.PortableMode) {
+        itemFileAssoc.isDisabled = true;
+        itemFileAssoc.disabledText = AppStrings::Settings_Status_DisabledInPortable;
+    } else {
+        itemFileAssoc.onChange = []() {
+            SettingsOverlay::RegisterAssociations();
+        };
+    }
     tabImage.items.push_back(itemFileAssoc);
 
     m_tabs.push_back(tabImage);
@@ -1169,6 +1241,12 @@ void SettingsOverlay::SetVisible(bool visible) {
 void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     if (!m_visible && !m_showUpdateToast) return;
     if (!m_brushBg) CreateResources(pRT);
+    
+    // Check for deferred rebuild before rendering
+    if (m_pendingRebuild) {
+        BuildMenu();
+        m_pendingRebuild = false;
+    }
     
     // Use passed window dimensions (Pixels) converted to DIPs
     // This ensures we center based on the ACTUAL window size logic in main.cpp,
@@ -1652,9 +1730,31 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      float btnX = controlX + controlW - btnWidth; // Right-aligned
                      D2D1_RECT_F btnRect = D2D1::RectF(btnX, contentY + 7, btnX + btnWidth, contentY + rowHeight - 7);
                      
-                     // Button color: Blue (default) or Red (Destructive)
                      ComPtr<ID2D1SolidColorBrush> btnBrush;
                      
+                     // Handle disabled state
+                     if (item.isDisabled) {
+                         // Gray disabled button
+                         pRT->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f), &btnBrush);
+                         pRT->FillRoundedRectangle(D2D1::RoundedRect(btnRect, 4, 4), btnBrush.Get());
+                         
+                         // Show disabled text on the left
+                         if (!item.disabledText.empty()) {
+                             D2D1_RECT_F statusRect = D2D1::RectF(controlX, contentY, btnX - 16, contentY + rowHeight);
+                             pRT->DrawTextW(item.disabledText.c_str(), (UINT32)item.disabledText.length(), m_textFormatItem.Get(), statusRect, m_brushTextDim.Get());
+                         }
+                         
+                         // Gray button text
+                         std::wstring btnText = item.buttonText.empty() ? L"Add" : item.buttonText;
+                         ComPtr<IDWriteTextFormat> centerFormat;
+                         m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"", &centerFormat);
+                         centerFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                         centerFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                         pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), centerFormat.Get(), btnRect, m_brushTextDim.Get());
+                         break;
+                     }
+                     
+                     // Button color: Blue (default) or Red (Destructive)
                      if (item.isDestructive) {
                          // Red
                          if (isHovered) {
@@ -2187,6 +2287,8 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         }
         // Button
         if (m_pHoverItem->type == OptionType::ActionButton) {
+            // Ignore click if disabled (but still consume the click event)
+            if (m_pHoverItem->isDisabled) return SettingsAction::RepaintStatic;
             if (m_pHoverItem->onChange) m_pHoverItem->onChange();
             m_pHoverItem->isActivated = true; // Mark as activated for visual feedback
             return SettingsAction::RepaintAll;

@@ -2274,8 +2274,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
 
     
     // Smart Lazy Registration: Check and self-repair file associations
-    // Smart Lazy Registration: Check and self-repair file associations
-    if (SettingsOverlay::IsRegistrationNeeded()) {
+    // Skip in Portable Mode to avoid registry writes
+    if (!g_config.PortableMode && SettingsOverlay::IsRegistrationNeeded()) {
         SettingsOverlay::RegisterAssociations();
     }
     

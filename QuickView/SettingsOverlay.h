@@ -111,6 +111,7 @@ public:
 
     // File Associations
     static bool RegisterAssociations();
+    static void UnregisterAssociations(); // Clear registry entries (for portable mode)
     static bool IsRegistrationNeeded();
 
 private:
