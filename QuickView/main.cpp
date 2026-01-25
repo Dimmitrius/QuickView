@@ -429,6 +429,7 @@ void Navigate(HWND hwnd, int direction);
 void RebuildInfoGrid(); // Fwd decl
 void ProcessEngineEvents(HWND hwnd);
 void ReleaseImageResources();
+void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, bool forceWindowLock);
 void DiscardChanges();
 std::wstring ShowRenameDialog(HWND hParent, const std::wstring& oldName);
 
@@ -966,6 +967,9 @@ static D2D1_SIZE_F GetVisualImageSize() {
     
     return result;
 }
+
+
+
 
 // Inlined Logic to avoid dependency on local lambdas
 static void PerformZoom100(HWND hwnd) {
@@ -3843,187 +3847,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         // [v3.1.5] Unified Scaling Logic: Pre-calculate Target Window Size
         // We need 'targetW/targetH' early to determine if we should Auto-Lock or Auto-Unlock.
         
-        bool willResizeWindow = false;
-        int finalWinW = 0;
-        int finalWinH = 0;
+
         
-        // Conditions eligible for resize (if not locked)
-        bool canResizeConfig = g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_isFullScreen && !isCtrl;
-        
-        if (canResizeConfig) {
-             // Calculate Target Dimensions (Uncapped) based on Zoom
-             HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-             MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
-             int maxW = (mi.rcWork.right - mi.rcWork.left);
-             int maxH = (mi.rcWork.bottom - mi.rcWork.top);
-             
-             VisualState vs = GetVisualState();
-             
-             // Target matches Visual Aspect Ratio 1:1 at 100% Zoom logic
-             // Note: newTotalScale is the requested scale
-             int targetW = (int)(vs.VisualSize.width * newTotalScale);
-             int targetH = (int)(vs.VisualSize.height * newTotalScale);
-             
-             // --- Auto-Unlock Logic ---
-             // If we are currently Locked AND it was an Auto-Lock, check if we should Unlock
-             if (g_runtime.LockWindowSize && g_isAutoLocked) {
-                 if (targetW > 200 && targetH > 200) {
-                     g_runtime.LockWindowSize = false;
-                     g_isAutoLocked = false;
-                     // proceed to standard resize logic below
-                 }
-             }
 
-             // --- Auto-Lock Logic ---
-             // If we are NOT Locked, check if we should Lock due to small size
-             if (!g_runtime.LockWindowSize) {
-                 if (targetW < 200 || targetH < 200) {
-                     // [Fix] Auto-Lock: Clamp to Min(200), don't force square 200x200
-                     // Use max(200, target) to preserve aspect ratio as much as possible
-                     // while ensuring we don't go below 200.
-                     int clientW = std::max(200, targetW);
-                     int clientH = std::max(200, targetH);
-                     
-                     finalWinW = clientW;
-                     finalWinH = clientH;
-                     
-                     // Engage Lock
-                     g_runtime.LockWindowSize = true;
-                     g_isAutoLocked = true;
-                     
-                     // Apply the clamped size immediately
-                     RECT rcWin; GetWindowRect(hwnd, &rcWin);
-                     int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
-                     int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
-                     
-                     g_programmaticResize = true;
-                     SetWindowPos(hwnd, nullptr, cX - finalWinW/2, cY - finalWinH/2, finalWinW, finalWinH, 
-                                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
-                                  
-                     if (g_compEngine && g_compEngine->IsInitialized()) {
-                        // [Fix] Consistency: Always use GetClientRect for true drawing area
-                        RECT rc; GetClientRect(hwnd, &rc);
-                        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
-                        g_compEngine->Commit();
-                     }
-                 } else {
-                     // Normal Resize State ( > 200x200 )
-                     willResizeWindow = true; // Use the Resize Path
-                     
-                     bool capped = false;
-                     // Target is Content size
-                     finalWinW = targetW;
-                     finalWinH = targetH;
-                     
-                     if (!g_config.EnableCrossMonitor) {
-                        if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
-                        if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
-                     }
-                     
-                     // Standard clamp
-                     if (finalWinW < 200) finalWinW = 200;
-                     if (finalWinH < 200) finalWinH = 200;
-                     
-                     if (!capped) { g_viewState.PanX = 0; g_viewState.PanY = 0; }
-                 }
-             }
-        }
-
-        if (willResizeWindow) {
-             // --- Resize Window Path (Unlocked & Large Enough) ---
-             
-             // [Core Fix] PRE-CALCULATE state before window resize
-             // Use finalWinW (Content Size) for fit calculation
-             
-             float baseFit_next = std::min((float)finalWinW / imgW, (float)finalWinH / imgH);
-             if (imgW < 200.0f && imgH < 200.0f) {
-                 if (baseFit_next > 1.0f) baseFit_next = 1.0f;
-             }
-             
-             // Calculate required Zoom to match Target Total Scale
-             g_viewState.Zoom = newTotalScale / baseFit_next;
-
-             // Apply Window Resize
-             RECT rcWin; GetWindowRect(hwnd, &rcWin);
-             int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
-             int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
-             
-             g_programmaticResize = true;
-             SetWindowPos(hwnd, nullptr, cX - finalWinW/2, cY - finalWinH/2, finalWinW, finalWinH, 
-                          SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
-
-             if (g_compEngine && g_compEngine->IsInitialized()) {
-                 RECT rc; GetClientRect(hwnd, &rc);
-                 SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
-                 g_compEngine->Commit();
-             }
-             
+             // Use Centralized Helper
+             POINT mousePt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+             PerformSmartZoom(hwnd, newTotalScale, &mousePt, isCtrl);
              RequestRepaint(PaintLayer::Dynamic);
-             
-             // [SVG Two-Tier] Trigger upgrade in window-resize path
-             if (g_imageResource.isSvg && g_viewState.Zoom > 1.8f && g_svgRenderedScale < 4.0f) {
-                 SetTimer(hwnd, IDT_SVG_RERENDER, 300, nullptr);
-             }
-        } else {
-             // --- Standard Zoom Path (Window Locked OR Auto-Locked at 200) ---
-             
-             // [Fix] Use same approach as WM_SIZE: Top-Left Scaling + Centering Offset
-             RECT rcNew; GetClientRect(hwnd, &rcNew);
-             float winW = (float)rcNew.right;
-             float winH = (float)rcNew.bottom;
-             
-             // [Fix] Use Robust Visual Size (Logical) instead of Physical Surface Size
-             // This unifies the units with the 'newTotalScale' calculation above.
-             // Previous bug: 'imgW' was Physical pixels, but 'newTotalScale' implies Logical scale factor.
-             D2D1_SIZE_F effSize = GetVisualImageSize();
-             float imgW = effSize.width;
-             float imgH = effSize.height;
-             
-             if (imgW <= 0 || imgH <= 0) return 0; // Safety check
-             
-             // Calculate fit scale and new zoom
-             float fitScale = std::min(winW / imgW, winH / imgH);
-             
-             // [Fix] Match SyncDCompState Logic for Small Images
-             if (imgW < 200.0f && imgH < 200.0f) {
-                 if (fitScale > 1.0f) fitScale = 1.0f;
-             }
-             
-             float oldZoom = g_viewState.Zoom;
-             float newZoom = newTotalScale / fitScale;
-             
-             // [Center-Origin] Zoom-to-Point Logic
-             // Formula: P_new = P_old * ratio + (Mouse - Center) * (1 - ratio)
-             float zoomRatio = newZoom / oldZoom;
-             
-             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-             ScreenToClient(hwnd, &pt);
-             
-             float mouseX = (float)pt.x;
-             float mouseY = (float)pt.y;
-             float winCenterX = winW / 2.0f;
-             float winCenterY = winH / 2.0f;
-             
-             float dx = mouseX - winCenterX;
-             float dy = mouseY - winCenterY;
-             
-             g_viewState.PanX = g_viewState.PanX * zoomRatio + dx * (1.0f - zoomRatio);
-             g_viewState.PanY = g_viewState.PanY * zoomRatio + dy * (1.0f - zoomRatio);
-             
-             g_viewState.Zoom = newZoom;
-             
-             // [DComp] Apply using unified SyncDCompState path for consistency
-             if (g_compEngine && g_compEngine->IsInitialized()) {
-                  SyncDCompState(hwnd, winW, winH);
-             }
-             RequestRepaint(PaintLayer::Dynamic); // Only OSD update needed
+
              
              // [SVG Lossless Zoom] Trigger re-render timer if SVG and zoom exceeds current resolution
              // [SVG Two-Tier] Trigger upgrade if Zoom > 1.8x and still at Tier 1
              if (g_imageResource.isSvg && g_viewState.Zoom > 1.8f && g_svgRenderedScale < 4.0f) {
                  SetTimer(hwnd, IDT_SVG_RERENDER, 300, nullptr);
              }
-        }
+
         
         // Show Zoom OSD relative to Original Image Size
         float osdScale = newTotalScale;
@@ -4299,50 +4137,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (newTotalScale < 0.1f * fitScale) newTotalScale = 0.1f * fitScale;
             if (newTotalScale > 20.0f) newTotalScale = 20.0f;
             
-            // Apply zoom with window resize if enabled
-            // [Fix] Disable Resize logic if Fullscreen
-            if (g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_runtime.LockWindowSize && !g_isFullScreen) {
-                // Get Monitor Info
-                HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
-                int maxW = (mi.rcWork.right - mi.rcWork.left);
-                int maxH = (mi.rcWork.bottom - mi.rcWork.top);
-                
-                int targetW = (int)(calcW * newTotalScale);
-                int targetH = (int)(calcH * newTotalScale);
-                
-                // Clamp
-                bool capped = false;
-                if (targetW > maxW) { targetW = maxW; capped = true; }
-                if (targetH > maxH) { targetH = maxH; capped = true; }
-                if (targetW < 400) { targetW = 400; capped = true; }
-                if (targetH < 300) { targetH = 300; capped = true; }
-                
-                // Apply Window Resize (keep center)
-                RECT rcWin; GetWindowRect(hwnd, &rcWin);
-                int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
-                int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
-                
-                SetWindowPos(hwnd, nullptr, cX - targetW/2, cY - targetH/2, targetW, targetH, SWP_NOZORDER | SWP_NOACTIVATE);
-                
-                // Recalculate Zoom
-                float newFitScale = std::min((float)targetW / calcW, (float)targetH / calcH);
-                g_viewState.Zoom = newTotalScale / newFitScale;
-                
-                if (!capped) { g_viewState.PanX = 0; g_viewState.PanY = 0; }
-                RequestRepaint(PaintLayer::All);
-            } else {
-                // Standard Zoom (Window size fixed)
-                float newFitScale = std::min((float)rc.right / calcW, (float)rc.bottom / calcH);
-                float oldZoom = g_viewState.Zoom;
-                float newZoom = newTotalScale / newFitScale;
-                
-                float zoomRatio = newZoom / oldZoom;
-                g_viewState.PanX *= zoomRatio;
-                g_viewState.PanY *= zoomRatio;
-                g_viewState.Zoom = newZoom;
-                RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
-            }
+            // [Refactor] Use Centralized Smart Zoom
+            PerformSmartZoom(hwnd, newTotalScale, nullptr, false);
+
+
+
             
             // Show Zoom OSD relative to Original Image Size
             float osdScale = newTotalScale;
@@ -5993,5 +5792,169 @@ void OnPaint(HWND hwnd) {
     if (g_compEngine) g_compEngine->Commit();
 
     ValidateRect(hwnd, nullptr);
+}
+
+// [Refactor] Centralized Zoom Logic
+// Unifies behavior for Mouse Wheel and Keyboard Zoom
+void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, bool forceWindowLock) {
+    // Basic Eligibility Check
+    // [Fix] Decouple "Ctrl Key" from "Force Lock". Accept explicit parameter.
+    // Mouse Wheel passes 'isCtrl' (True). Keyboard Zoom passes 'False'.
+    bool canResizeConfig = g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_isFullScreen && !forceWindowLock;
+    
+    // Get Image Dimensions
+    VisualState vs = GetVisualState();
+    D2D1_SIZE_F effSize = GetVisualImageSize();
+    float imgW = effSize.width;
+    float imgH = effSize.height;
+    
+    if (imgW <= 0 || imgH <= 0) return;
+
+    int finalWinW = 0;
+    int finalWinH = 0;
+    bool willResizeWindow = false;
+
+    if (canResizeConfig) {
+         // Calculate Target Dimensions
+         HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+         MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
+         int maxW = (mi.rcWork.right - mi.rcWork.left);
+         int maxH = (mi.rcWork.bottom - mi.rcWork.top);
+         
+         // Logic 1:1 Scale Target
+         int targetW = (int)(vs.VisualSize.width * newTotalScale);
+         int targetH = (int)(vs.VisualSize.height * newTotalScale);
+         
+         // Auto-Unlock Logic
+         if (g_runtime.LockWindowSize && g_isAutoLocked) {
+             if (targetW > 200 && targetH > 200) {
+                 g_runtime.LockWindowSize = false;
+                 g_isAutoLocked = false;
+             }
+         }
+
+         // Auto-Lock Logic
+         if (!g_runtime.LockWindowSize) {
+             if (targetW < 200 || targetH < 200) {
+                 // Clamp to Min(200)
+                 int clientW = std::max(200, targetW);
+                 int clientH = std::max(200, targetH);
+                 
+                 finalWinW = clientW;
+                 finalWinH = clientH;
+                 
+                 // Engage Lock
+                 g_runtime.LockWindowSize = true;
+                 g_isAutoLocked = true;
+                 
+                 // Apply Lock Size Immediately
+                 RECT rcWin; GetWindowRect(hwnd, &rcWin);
+                 int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
+                 int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
+                 
+                 g_programmaticResize = true;
+                 SetWindowPos(hwnd, nullptr, cX - finalWinW/2, cY - finalWinH/2, finalWinW, finalWinH, 
+                              SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+                              
+                 if (g_compEngine && g_compEngine->IsInitialized()) {
+                    RECT rc; GetClientRect(hwnd, &rc);
+                    SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+                    g_compEngine->Commit();
+                 }
+             } else {
+                 // Normal Resize
+                 willResizeWindow = true;
+                 
+                 bool capped = false;
+                 finalWinW = targetW;
+                 finalWinH = targetH;
+                 
+                 if (!g_config.EnableCrossMonitor) {
+                    if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
+                    if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
+                 }
+                 
+                 if (finalWinW < 200) finalWinW = 200;
+                 if (finalWinH < 200) finalWinH = 200;
+                 
+                 if (!capped) { g_viewState.PanX = 0; g_viewState.PanY = 0; }
+             }
+         }
+    }
+    
+    if (willResizeWindow) {
+         // --- Resize Window Path ---
+         
+         float baseFit_next = std::min((float)finalWinW / imgW, (float)finalWinH / imgH);
+         if (imgW < 200.0f && imgH < 200.0f) {
+             if (baseFit_next > 1.0f) baseFit_next = 1.0f;
+         }
+         
+         g_viewState.Zoom = newTotalScale / baseFit_next;
+
+         // Apply Resize
+         RECT rcWin; GetWindowRect(hwnd, &rcWin);
+         int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
+         int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
+         
+         g_programmaticResize = true;
+         SetWindowPos(hwnd, nullptr, cX - finalWinW/2, cY - finalWinH/2, finalWinW, finalWinH, 
+                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+
+         if (g_compEngine && g_compEngine->IsInitialized()) {
+             RECT rc; GetClientRect(hwnd, &rc);
+             SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+             g_compEngine->Commit();
+         }
+         
+         RequestRepaint(PaintLayer::Dynamic);
+         
+         if (g_imageResource.isSvg && g_viewState.Zoom > 1.8f && g_svgRenderedScale < 4.0f) {
+             SetTimer(hwnd, IDT_SVG_RERENDER, 300, nullptr);
+         }
+    } else {
+         // --- Standard Zoom Path (Locked) ---
+         RECT rcNew; GetClientRect(hwnd, &rcNew);
+         float winW = (float)rcNew.right;
+         float winH = (float)rcNew.bottom;
+         
+         float fitScale = std::min(winW / imgW, winH / imgH);
+         if (imgW < 200.0f && imgH < 200.0f) {
+             if (fitScale > 1.0f) fitScale = 1.0f;
+         }
+         
+         float oldZoom = g_viewState.Zoom;
+         float newZoom = newTotalScale / fitScale;
+         
+         // Apply Zoom Ratio to Pan if Center Point Provided
+         if (centerPt) {
+             float zoomRatio = newZoom / oldZoom;
+             POINT pt = *centerPt;
+             ScreenToClient(hwnd, &pt);
+             
+             float mouseX = (float)pt.x;
+             float mouseY = (float)pt.y;
+             float winCenterX = winW / 2.0f;
+             float winCenterY = winH / 2.0f;
+             
+             float dx = mouseX - winCenterX;
+             float dy = mouseY - winCenterY;
+             
+             g_viewState.PanX = g_viewState.PanX * zoomRatio + dx * (1.0f - zoomRatio);
+             g_viewState.PanY = g_viewState.PanY * zoomRatio + dy * (1.0f - zoomRatio);
+         } else {
+             // Center Zoom (for Keyboard)
+             float zoomRatio = newZoom / oldZoom;
+             g_viewState.PanX *= zoomRatio;
+             g_viewState.PanY *= zoomRatio;
+         }
+         
+         g_viewState.Zoom = newZoom;
+         
+         if (g_compEngine && g_compEngine->IsInitialized()) {
+              SyncDCompState(hwnd, winW, winH);
+         }
+         RequestRepaint(PaintLayer::Dynamic | PaintLayer::Image); 
+    }
 }
 
