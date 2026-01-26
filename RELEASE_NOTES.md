@@ -1,24 +1,35 @@
-# QuickView v3.1.3 - Stability & Polish Update
-**Release Date**: 2026-01-20
+# QuickView v3.2.5 - Precision & Expansion Update
+**Release Date**: 2026-01-26
 
-### 🖥️ True Fullscreen Experience
-QuickView now features a robust "True Fullscreen" mode that completely eliminates distractions:
--   **No Borders**: The window now correctly covers the entire monitor, including the taskbar, without any leaking borders.
--   **Rock-Solid Stability**: 
-    -   **No Accidental Drags**: We've locked the window position in fullscreen, so you can't accidentally drag it away.
-    -   **No Resize Cursors**: Hovering over the edges no longer shows resize arrows, keeping the visuals clean.
-    -   **Zoom Stability**: Zooming in/out with the mouse wheel no longer causes the window frame to jitter or resize.
+This is a massive update focusing on **Precision UI**, **Multi-Monitor Capabilities**, and **Core robust-ness**.
 
-### 🖱️ Interaction Improvements
--   **Intuitive Exits**: Double-click anywhere to leave fullscreen. Clicking the Maximize button on the hover bar also exits cleanly.
--   **Edge Protection**: Window edges are now completely locked in fullscreen—no accidental resizing or cursor changes.
+### ✨ New Features
+-   **Span Displays (Video Wall)**: New "Span Across Monitors" feature (`Ctrl+F11`) allows the window to instantly stretch across all available displays, perfect for video walls or ultra-wide viewing.
+-   **Modern D2D Rename Dialog**: Replaced the legacy Windows GDI rename dialog with a fully hardware-accelerated Direct2D version that matches the application's dark theme.
+-   **Help Overlay**: Added a built-in keyboard shortcut guide (`F1`).
+-   **Window Rounded Corners**: New toggle in Settings -> View to enable/disable Windows 11-style rounded window corners.
+-   **AVX2 Detection**: Added start-up check for AVX2 instruction set support to ensure compatibility with optimized decoders.
 
-### 🐛 Bug Fixes & Stability
--   **Icon Font Fallbacks**: Resolved a critical issue where UI icons (toolbar, settings) could disappear on systems missing specific fonts. The engine now correctly falls back to system fonts (Segoe UI Symbol) to ensure icons are always visible.
--   **Toolbar Sync**: Fixed "Ghosting" artifacts on the toolbar button states. The Pin button now updates instantly, and the "Lock Toolbar" setting applies immediately.
+### 💎 Precision UI & Typography
+-   **Binary Search Text Truncation**: Completely rewrote the text shortening engine. Using a binary search algorithm, filenames in dialogs and the Info Panel now use *every available pixel*, eliminating wasted space and "..." artifacts for long filenames (especially CJK).
+-   **Pixel-Perfect 100% Zoom**: Fixed scaling logic to ensure images of ALL sizes (from 16px icons to 50MP RAWs) render crisp and accurate at 100% zoom.
+-   **Smart Double-Click**: Double-clicking now rationally adapts to context:
+    -   **Fullscreen**: Exits Fullscreen.
+    -   **Windowed**: Toggles between "Fit to Window" and "100% View".
+-   **Info Panel Zoom**: The Info Panel now displays the current Zoom percentage.
+-   **Zoom Snap Damping**: Added configurable damping mechanics for "Magnetic Zoom", making it feel more organic.
+-   **Robust Auto-Hide**: Optimized toolbars and navigation arrows to hide reliably (100% success rate) even when the mouse exits the window rapidly.
 
-### 🖼️ Window & Image Logic
--   **Smart Min-Sizing**: Window can now shrink down to **100x100** pixels (previously restricted to 500x400).
--   **Auto-Hide UI**: When the window becomes too small (< 400px width), the **Toolbar automatically hides** to prioritize your content.
--   **Pixel-Perfect Small Images**: Opening small images (e.g., 32x32 icons) now honors their original resolution. They are displayed at **100% scale** in the center of the window, rather than being blurry/stretched to fill the frame.
--   **Edge Nav Guard**: Edge click navigation is automatically disabled on very small windows to prevent accidental page turns.
+### 🛠 Core Architecture
+-   **Unified Window Controls**: Moved all window control rendering (Minimize/Maximize/Close) into the `UIRenderer` pipeline for consistent styling and correct behavior in Fullscreen/Maximized modes.
+-   **Unified Zoom Logic**: Decoupled zoom logic from window resizing, fixing "fighting" issues between user input and auto-fit logic.
+-   **Portable Mode Polish**: Improved logic for switching between Portable and Install modes, ensuring cleaner registry handling.
+
+### 🐛 Bug Fixes
+-   **Scaling Anomalies**: Fixed visual glitches when high-DPI scaling was active.
+-   **Gallery Tooltips**: Fixed issue where image dimensions would show as 0x0 in gallery tooltips.
+-   **RAW Toggle**: Fixed state persistence issue where the "Force RAW Decode" setting wasn't saving correctly.
+-   **Cursor Visibility**: Fixed Navigation Arrows remaining visible even when the cursor was set to hidden.
+-   **Settings UI**: Fixed layout displacement of the "Back" arrow in the General settings tab.
+
+---

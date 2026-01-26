@@ -366,11 +366,11 @@ void SettingsOverlay::ShowUpdateToast(const std::wstring& version, const std::ws
     BuildMenu(); // Refresh About tab state
 }
 
-// Struct to hold Toast layout
 struct ToastLayout {
     D2D1_RECT_F bg;
     D2D1_RECT_F btnRestart;
     D2D1_RECT_F btnLater;
+    D2D1_RECT_F btnStar;
     D2D1_RECT_F btnClose;
 };
 
@@ -398,9 +398,8 @@ static std::wstring CleanMarkdown(const std::wstring& md) {
 }
 
 static ToastLayout GetToastLayout(float winW, float winH) {
-    float w = 500.0f; // Wide for logs
-    float h = 300.0f; // Tall for scrolling
-    // Position: Centered on Window
+    float w = 540.0f; // Wider
+    float h = 420.0f; // Much taller for Love Message
     float cx = (winW - w) / 2.0f;
     float cy = (winH - h) / 2.0f;
     if (cx < 0) cx = 0;
@@ -409,21 +408,23 @@ static ToastLayout GetToastLayout(float winW, float winH) {
     ToastLayout l;
     l.bg = D2D1::RectF(cx, cy, cx + w, cy + h);
     
-    // Buttons
-    float by = l.bg.bottom - 40.0f;
-    float bx = l.bg.right - 20.0f;
+    float margin = 20.0f;
+    float btnY = l.bg.bottom - 45.0f;
+    float btnH = 32.0f;
     
-    // Later (Gray)
-    float btnW = 80.0f;
-    l.btnLater = D2D1::RectF(bx - btnW, by, bx, by + 28);
-    bx -= (btnW + 15.0f);
+    // Layout: [Star on GitHub] ... [Later] [Update Now]
+    float bx = l.bg.right - margin;
     
-    // Restart (Green) - wider
-    btnW = 110.0f;
-    l.btnRestart = D2D1::RectF(bx - btnW, by, bx, by + 28);
+    // Widen Star Button to 160.0f to prevent wrapping of "Star on GitHub" or localized variants
+    l.btnStar = D2D1::RectF(l.bg.left + margin, btnY, l.bg.left + margin + 160.0f, btnY + btnH);
     
-    // Close (Top Right)
-    l.btnClose = D2D1::RectF(l.bg.right - 25, l.bg.top + 5, l.bg.right - 5, l.bg.top + 25);
+    // Right side: [Later] [Update]
+    l.btnRestart = D2D1::RectF(bx - 110.0f, btnY, bx, btnY + btnH);
+    bx -= (110.0f + 10.0f);
+    
+    l.btnLater = D2D1::RectF(bx - 80.0f, btnY, bx, btnY + btnH);
+    
+    l.btnClose = D2D1::RectF(l.bg.right - 30, l.bg.top + 5, l.bg.right - 5, l.bg.top + 30);
     
     return l;
 }
@@ -436,39 +437,56 @@ void SettingsOverlay::RenderUpdateToast(ID2D1RenderTarget* pRT, float hudX, floa
     ToastLayout l = GetToastLayout(m_windowWidth, m_windowHeight);
     m_toastRect = l.bg; // Store for hit test
     
-    // Dimmer (if main menu hidden, dim window for modal focus)
+    // 1. Dimmer
     if (!m_visible) {
         pRT->FillRectangle(D2D1::RectF(0, 0, m_windowWidth, m_windowHeight), m_brushBg.Get());
     }
 
-    // Background
-    pRT->FillRoundedRectangle(D2D1::RoundedRect(l.bg, 8.0f, 8.0f), m_brushControlBg.Get()); // Dark Gray
-    pRT->DrawRoundedRectangle(D2D1::RoundedRect(l.bg, 8.0f, 8.0f), m_brushBorder.Get(), 1.0f); // White Border
+    // 2. Background
+    pRT->FillRoundedRectangle(D2D1::RoundedRect(l.bg, 8.0f, 8.0f), m_brushControlBg.Get()); 
+    pRT->DrawRoundedRectangle(D2D1::RoundedRect(l.bg, 8.0f, 8.0f), m_brushBorder.Get(), 1.0f); 
     
-    // Header Text
-    std::wstring title = L"New Version Available!";
-    D2D1_RECT_F titleR = D2D1::RectF(l.bg.left + 20, l.bg.top + 15, l.bg.right - 30, l.bg.top + 35);
-    
+    // 3. Header Text
+    D2D1_RECT_F titleR = D2D1::RectF(l.bg.left + 20, l.bg.top + 15, l.bg.right - 30, l.bg.top + 45);
     m_textFormatHeader->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     m_textFormatHeader->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-    pRT->DrawText(title.c_str(), (UINT32)title.length(), m_textFormatHeader.Get(), titleR, m_brushText.Get());
+    pRT->DrawText(AppStrings::Dialog_UpdateTitle, (UINT32)wcslen(AppStrings::Dialog_UpdateTitle), m_textFormatHeader.Get(), titleR, m_brushText.Get());
 
-    // Version Subheader
-    std::wstring verTxt = L"v" + m_updateVersion + L" is ready.";
-    D2D1_RECT_F verR = D2D1::RectF(l.bg.left + 20, l.bg.top + 40, l.bg.right - 20, l.bg.top + 60);
-    pRT->DrawText(verTxt.c_str(), (UINT32)verTxt.length(), m_textFormatItem.Get(), verR, m_brushSuccess.Get());
+    // 4. Version Subheader
+    wchar_t verBuf[128];
+    swprintf_s(verBuf, AppStrings::Dialog_UpdateContent, m_updateVersion.c_str());
+    D2D1_RECT_F verR = D2D1::RectF(l.bg.left + 20, l.bg.top + 45, l.bg.right - 20, l.bg.top + 65);
+    pRT->DrawText(verBuf, (UINT32)wcslen(verBuf), m_textFormatItem.Get(), verR, m_brushSuccess.Get());
     
-    // Changelog Body (Scrollable)
-    D2D1_RECT_F logR = D2D1::RectF(l.bg.left + 20, l.bg.top + 65, l.bg.right - 20, l.btnRestart.top - 10);
+    // Separator line
+    pRT->DrawLine(D2D1::Point2F(l.bg.left + 20, l.bg.top + 70), D2D1::Point2F(l.bg.right - 20, l.bg.top + 70), m_brushBorder.Get(), 1.0f);
+
+    // 5. Built with Love Message
+    // Reduce top margin
+    float loveY = l.bg.top + 75.0f; 
+    D2D1_RECT_F loveTitleR = D2D1::RectF(l.bg.left + 20, loveY, l.bg.right - 20, loveY + 25.0f);
+    pRT->DrawText(AppStrings::Dialog_Update_LoveTitle, (UINT32)wcslen(AppStrings::Dialog_Update_LoveTitle), m_textFormatItem.Get(), loveTitleR, m_brushAccent.Get());
     
-    // Draw Box for Log
-    pRT->FillRectangle(logR, m_brushBg.Get()); // Darker background for log
+    // Reduce Height Allocated for Message (Compress it)
+    D2D1_RECT_F loveMsgR = D2D1::RectF(l.bg.left + 20, loveY + 25.0f, l.bg.right - 20, loveY + 125.0f);
+    pRT->DrawText(AppStrings::Dialog_Update_LoveMessage, (UINT32)wcslen(AppStrings::Dialog_Update_LoveMessage), m_textFormatItem.Get(), loveMsgR, m_brushTextDim.Get());
+
+    // Separator line - Reduce Gap
+    pRT->DrawLine(D2D1::Point2F(l.bg.left + 20, loveMsgR.bottom + 5), D2D1::Point2F(l.bg.right - 20, loveMsgR.bottom + 5), m_brushBorder.Get(), 1.0f);
+
+    // 6. Changelog Header
+    float logY = loveMsgR.bottom + 10.0f;
+    D2D1_RECT_F logHeaderR = D2D1::RectF(l.bg.left + 20, logY, l.bg.right - 20, logY + 20.0f);
+    pRT->DrawText(AppStrings::Dialog_UpdateLogHeader, (UINT32)wcslen(AppStrings::Dialog_UpdateLogHeader), m_textFormatItem.Get(), logHeaderR, m_brushText.Get());
+
+    // 7. Changelog Body
+    // Increase Log Height by starting higher (logY adjusted) and ending near buttons
+    D2D1_RECT_F logR = D2D1::RectF(l.bg.left + 20, logY + 25.0f, l.bg.right - 20, l.btnRestart.top - 15.0f);
+    pRT->FillRectangle(logR, m_brushBg.Get()); 
     
     std::wstring cleanLog = CleanMarkdown(m_updateLog);
-    
-    // Measure Text Height
     ComPtr<IDWriteTextLayout> pLayout;
-    m_dwriteFactory->CreateTextLayout(cleanLog.c_str(), (UINT32)cleanLog.length(), m_textFormatItem.Get(), logR.right - logR.left - 25.0f, 10000.0f, &pLayout); // -25 for padding (Avoid scrollbar)
+    m_dwriteFactory->CreateTextLayout(cleanLog.c_str(), (UINT32)cleanLog.length(), m_textFormatItem.Get(), logR.right - logR.left - 25.0f, 10000.0f, &pLayout); 
     
     DWRITE_TEXT_METRICS metrics;
     pLayout->GetMetrics(&metrics);
@@ -476,53 +494,77 @@ void SettingsOverlay::RenderUpdateToast(ID2D1RenderTarget* pRT, float hudX, floa
     
     // Clamp Scroll
     float visibleH = logR.bottom - logR.top;
-    float maxScroll = std::max(0.0f, m_toastTotalHeight - visibleH + 20.0f); // +20 padding
+    float maxScroll = std::max(0.0f, m_toastTotalHeight - visibleH + 10.0f);
     if (m_toastScrollY < 0.0f) m_toastScrollY = 0.0f;
     if (m_toastScrollY > maxScroll) m_toastScrollY = maxScroll;
     
     pRT->PushAxisAlignedClip(logR, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    
-    // Draw Text with Offset
-    D2D1_POINT_2F origin = D2D1::Point2F(logR.left + 5, logR.top + 5 - m_toastScrollY);
-    pRT->DrawTextLayout(origin, pLayout.Get(), m_brushTextDim.Get());
-    
+    pRT->DrawTextLayout(D2D1::Point2F(logR.left + 5, logR.top + 5 - m_toastScrollY), pLayout.Get(), m_brushTextDim.Get());
     pRT->PopAxisAlignedClip();
     
     // Scrollbar
     if (maxScroll > 0) {
-        float ratio = visibleH / (m_toastTotalHeight + 20.0f);
-        float barH = visibleH * ratio;
-        if (barH < 30.0f) barH = 30.0f;
-        
-        float scrollRatio = m_toastScrollY / maxScroll; // 0..1
+        float ratio = visibleH / (m_toastTotalHeight + 10.0f);
+        float barH = std::max(20.0f, visibleH * ratio);
+        float scrollRatio = m_toastScrollY / maxScroll;
         float barY = logR.top + scrollRatio * (visibleH - barH);
-        
         D2D1_RECT_F barR = D2D1::RectF(logR.right - 6, barY, logR.right - 2, barY + barH);
         pRT->FillRoundedRectangle(D2D1::RoundedRect(barR, 2, 2), m_brushTextDim.Get());
     }
     
-    // Restart Button
-    D2D1_ROUNDED_RECT rRestart = D2D1::RoundedRect(l.btnRestart, 4.0f, 4.0f);
-    pRT->FillRoundedRectangle(rRestart, (m_toastHoverBtn == 1) ? m_brushSuccess.Get() : m_brushAccent.Get()); 
-    // Manual Center Text
-    m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    pRT->DrawText(L"Restart Now", 11, m_textFormatItem.Get(), l.btnRestart, m_brushText.Get());
-    
-    // Later Button
-    D2D1_ROUNDED_RECT rLater = D2D1::RoundedRect(l.btnLater, 4.0f, 4.0f);
-    pRT->FillRoundedRectangle(rLater, (m_toastHoverBtn == 2) ? m_brushControlBg.Get() : m_brushBg.Get());
-    pRT->DrawRoundedRectangle(rLater, m_brushTextDim.Get(), 1.0f);
-    pRT->DrawText(L"Later", 5, m_textFormatItem.Get(), l.btnLater, m_brushTextDim.Get());
+    // Buttons
+    auto drawBtn = [&](const D2D1_RECT_F& r, const wchar_t* text, int btnId, ComPtr<ID2D1SolidColorBrush> baseBrush, bool isStar = false) {
+        bool hover = (m_toastHoverBtn == btnId);
+        
+        if (isStar) {
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(r, 4, 4), m_brushSuccess.Get());
+            if (hover) {
+                 pRT->DrawRoundedRectangle(D2D1::RoundedRect(r, 4, 4), m_brushText.Get(), 2.0f);
+            }
+        } else {
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(r, 4, 4), hover ? baseBrush.Get() : m_brushBg.Get());
+            pRT->DrawRoundedRectangle(D2D1::RoundedRect(r, 4, 4), hover ? m_brushText.Get() : m_brushTextDim.Get(), 1.0f);
+        }
+
+        if (isStar) {
+            D2D1_RECT_F iconR = r;
+            iconR.right = r.left + 32.0f; 
+            D2D1_RECT_F textR = r;
+            textR.left = iconR.right;
+            
+            m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            pRT->DrawText(L"\xEB51", 1, m_textFormatIcon.Get(), iconR, m_brushText.Get());
+            
+            m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            
+            D2D1_RECT_F tAdj = textR;
+            tAdj.top += 2.0f; 
+            pRT->DrawText(text, (UINT32)wcslen(text), m_textFormatItem.Get(), tAdj, m_brushText.Get());
+            
+        } else {
+            m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            pRT->DrawText(text, (UINT32)wcslen(text), m_textFormatItem.Get(), r, m_brushText.Get());
+        }
+        
+        m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    };
+
+    drawBtn(l.btnRestart, AppStrings::Dialog_ButtonUpdate, 0, m_brushAccent);
+    drawBtn(l.btnLater, AppStrings::Dialog_ButtonLater, 1, m_brushControlBg);
+    drawBtn(l.btnStar, AppStrings::Dialog_ButtonStar, 3, m_brushSuccess, true);
 
     // Close X
-    m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
-    // Hit test visual feedback
-    if (m_toastHoverBtn == 3) pRT->FillRoundedRectangle(D2D1::RoundedRect(l.btnClose, 4,4), m_brushControlBg.Get());
-    pRT->DrawText(L"X", 1, m_textFormatItem.Get(), l.btnClose, m_brushTextDim.Get());
-    
-    // Restore Default Align
+    bool closeHover = (m_toastHoverBtn == 2);
+    if (closeHover) pRT->FillRoundedRectangle(D2D1::RoundedRect(l.btnClose, 4,4), m_brushControlBg.Get());
+    m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    pRT->DrawText(L"X", 1, m_textFormatItem.Get(), l.btnClose, closeHover ? m_brushText.Get() : m_brushTextDim.Get());
     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
 void SettingsOverlay::Init(ID2D1RenderTarget* pRT, HWND hwnd) {
@@ -737,7 +779,10 @@ void SettingsOverlay::BuildMenu() {
         AppStrings::SetLanguage((AppStrings::Language)g_config.Language);
         // Force resource recreation to apply new font size
         m_brushBg.Reset();
-        this->RebuildMenu(); // Rebuild UI with new language
+        
+        // Defer rebuild to avoid destroying the active item while executing its callback (Use-After-Free fix)
+        m_pendingRebuild = true;
+        
         if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE);
     };
     tabGeneral.items.push_back(itemLang);
@@ -2032,18 +2077,23 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
             // Inside Toast (Modal: Consume event)
             if (x >= l.btnRestart.left && x <= l.btnRestart.right && y >= l.btnRestart.top && y <= l.btnRestart.bottom) {
                 m_toastHoverBtn = 0;
-                ::SetCursor(::LoadCursor(NULL, IDC_HAND));
             }
             else if (x >= l.btnLater.left && x <= l.btnLater.right && y >= l.btnLater.top && y <= l.btnLater.bottom) {
                 m_toastHoverBtn = 1;
-                ::SetCursor(::LoadCursor(NULL, IDC_HAND));
             }
             else if (x >= l.btnClose.left && x <= l.btnClose.right && y >= l.btnClose.top && y <= l.btnClose.bottom) {
                 m_toastHoverBtn = 2;
-                ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+            } 
+            else if (x >= l.btnStar.left && x <= l.btnStar.right && y >= l.btnStar.top && y <= l.btnStar.bottom) {
+                m_toastHoverBtn = 3;
             } else {
-                 ::SetCursor(::LoadCursor(NULL, IDC_ARROW)); // Standard pointer over text
+                 ::SetCursor(::LoadCursor(NULL, IDC_ARROW)); 
             }
+
+            if (m_toastHoverBtn != -1) {
+                 ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+            }
+
             return SettingsAction::RepaintStatic; 
         }
         // If Modal, maybe block interaction with rest? 
@@ -2154,19 +2204,21 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         if (x >= l.bg.left && x <= l.bg.right && y >= l.bg.top && y <= l.bg.bottom) {
              if (x >= l.btnRestart.left && x <= l.btnRestart.right && y >= l.btnRestart.top && y <= l.btnRestart.bottom) {
                  UpdateManager::Get().OnUserRestart();
-                 // Assuming OnUserRestart might close app or something.
                  return SettingsAction::RepaintAll; 
              }
              else if (x >= l.btnLater.left && x <= l.btnLater.right && y >= l.btnLater.top && y <= l.btnLater.bottom) {
                  UpdateManager::Get().OnUserLater();
-                 m_dismissedVersion = m_updateVersion; // Don't show again this session
+                 m_dismissedVersion = m_updateVersion; 
                  m_showUpdateToast = false;
                  return SettingsAction::RepaintStatic;
              }
+             else if (x >= l.btnStar.left && x <= l.btnStar.right && y >= l.btnStar.top && y <= l.btnStar.bottom) {
+                 ShellExecuteW(NULL, L"open", L"https://github.com/justnullname/QuickView", NULL, NULL, SW_SHOWNORMAL);
+                 return SettingsAction::RepaintStatic;
+             }
              else if (x >= l.btnClose.left && x <= l.btnClose.right && y >= l.btnClose.top && y <= l.btnClose.bottom) {
-                 m_dismissedVersion = m_updateVersion; // Don't show again this session
+                 m_dismissedVersion = m_updateVersion; 
                  m_showUpdateToast = false; 
-                 // Just close notification, distinct from "Later" (which remembers preference?)
                  return SettingsAction::RepaintStatic;
              }
              return SettingsAction::RepaintStatic; // Consume click on bg
@@ -2476,5 +2528,4 @@ void SettingsOverlay::DrawComboDropdown(ID2D1RenderTarget* pRT) {
     
     pRT->PopAxisAlignedClip();
 }
-
 

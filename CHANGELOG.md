@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.2.5] - Precision & Expansion Update
+**Release Date**: 2026-01-26
+
+### ✨ New Features
+-   **Span Displays**: Added multi-monitor spanning support (Video Wall mode).
+-   **Rename Dialog**: Replaced system dialog with native Direct2D dark-themed input.
+-   **Help Overlay**: Added global `F1` shortcut overlay.
+-   **Visual Customization**: Added toggle for Window Rounded Corners.
+-   **System**: Added AVX2 CPU instruction set detection.
+
+### 💎 Precision & Interaction
+-   **Text Truncation**: Implemented **Binary Search** algorithm for pixel-perfect filename shortening in Info Panel/Dialogs.
+-   **Smart Double-Click**: Added context-aware double-click: Auto-Fits in Windowed mode, Exits in Fullscreen mode.
+-   **100% Zoom Fix**: Resolved scaling inaccuracies to ensure true 1-to-1 pixel rendering for all image sizes.
+-   **Auto-Hide**: Fixed `WM_MOUSELEAVE` logic to ensure UI elements hide 100% reliably on fast exit.
+-   **Zoom Experience**: Added Zoom Damping and Info Panel Zoom display.
+-   **Navigation**: Improved navigation arrow visibility logic and animation speed.
+
+### 🛠 Core & Architecture
+-   **Window Controls**: Unified Min/Max/Close buttons into `UIRenderer` pipeline.
+-   **Zoom Logic**: Refactored and decoupled zoom mechanics from window resizing.
+-   **Portable Mode**: Improved state transition logic.
+
+### 🐛 Bug Fixes
+-   **RAW Toggle**: Fixed setting persistence.
+-   **Gallery**: Fixed 0x0 tooltip dimensions.
+-   **DPI Scaling**: Fixed scaling artifacts at unusual factors.
+-   **Layout**: Fixed Settings UI back button displacement.
+
 ## [3.1.3] - Fullscreen & Interaction Polish
 **Release Date**: 2026-01-20
 

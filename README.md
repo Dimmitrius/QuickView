@@ -12,7 +12,7 @@
 <p>
     <strong>Direct2D Native</strong> • 
     <strong>Modern C++23</strong> • 
-    <strong>Quantum Stream Architecture</strong> • 
+    <strong>Dynamic Scheduling Architecture</strong> • 
     <strong>Portable</strong>
 </p>
 
@@ -67,11 +67,11 @@ QuickView supports almost all modern and professional image formats:
 
 ---
 
-# QuickView v3.0.4 - The Quantum Flow Update
-**Release Date**: 2026-01-16
+# QuickView v3.2.5 - The Dynamic Scheduling Update
+**Release Date**: 2026-01-26
 
-### ⚡ Core Architecture: "Quantum Flow"
-- **Unified Scheduling & Decoding (Quantum Flow)**: Introduced a "Fast/Slow Dual-Channel" architecture (`FastLane` + `HeavyLanePool`) that isolates instant interactions from heavy decoding tasks.
+### ⚡ Core Architecture: "Dynamic Scheduling"
+- **Unified Scheduling & Decoding (Dynamic Scheduling)**: Introduced a "Fast/Slow Dual-Channel" architecture (`FastLane` + `HeavyLanePool`) that isolates instant interactions from heavy decoding tasks.
 - **N+1 Hot-Spare Architecture**: Implemented a "Capped N+1" threading model where standby threads are kept warm for immediate response, maximizing CPU throughput without over-subscription.
 - **Deep Cancellation**: Granular "On-Demand" cancellation logic allowed for heavy formats (JXL/RAW/WebP), ensuring stale tasks (e.g., during rapid scrolling) are instantly terminated to save power.
 - **Direct D2D Passthrough**: Established a "Zero-Copy" pipeline where decoded `RawImageFrame` buffers are uploaded directly to GPU memory, bypassing GDI/GDI+ entirely.
@@ -105,7 +105,8 @@ QuickView supports almost all modern and professional image formats:
 
 QuickView leverages **Multi-Threaded Decoding** for modern formats like **JXL** and **AVIF**, delivering up to **6x faster** load times on 8-core CPUs compared to standard viewers.
 * **Zero-Latency Preview:** Smart extraction for massive RAW (ARW, CR2) and PSD files.
-* **Debug HUD:** Press `F12` to see real-time performance metrics (Decode time, Render time, Memory usage).
+* **Debug HUD:** Press `F12` to see real-time performance metrics (Decode time, Render time, Memory usage). *(First time use: Please enable Debug Mode in **Settings > Advanced**)*
+  <br><img src="ScreenShot/DebugHUD.png" alt="Debug HUD" width="100%" style="border-radius: 6px; margin-top: 10px;">
 
 ### 2. 🎛️ Visual Control Center
 > *No more manual .ini editing.*
@@ -117,7 +118,12 @@ A fully hardware-accelerated **Settings Dashboard**.
 * **Visual Personalization:** Adjust UI transparency and background grid in real-time.
 * **Portable Mode:** One-click toggle to switch config storage between AppData (System) and Program Folder (USB Stick).
 
-### 3. 📊 Geek Visualization
+### 3. 🔄 Seamless Updates
+> *Stay fresh, stay fast.*
+
+QuickView automatically checks for updates in the background. When a new version is available, a non-intrusive toast notification will appear. You can install the update with a single click—no browser needed.
+
+### 4. 📊 Geek Visualization
 > *Don't just view the image; understand the data.*
 
 <div align="center">
@@ -151,26 +157,13 @@ We don't use generic codecs. We use the **State-of-the-Art** libraries for each 
 
 ---
 
-## ⌨️ Shortcuts
+## ⌨️ Shortcuts & Help
 
-Master these to navigate at the speed of thought:
+> *Press `F1` at any time to view the interactive Shortcut Guide.*
 
-| Category | Key | Action |
-| :--- | :--- | :--- |
-| **Navigation** | `Space` / `PgDn` | Next Image |
-| | `Bksp` / `PgUp` | Previous Image |
-| | `T` | **Photo Wall (HUD)** |
-| **View** | `1` / `Z` | **100% Actual Size** |
-| | `0` / `F` | Fit to Screen |
-| | `Enter` / `F11` | Fullscreen |
-| **Info** | `I` | **Toggle Info/Histogram** |
-| | `Tab` | **Toggle Lite Info Panel** |
-| **Control** | `Ctrl + F11` | **Span Displays (Video Wall)** |
-| | `Ctrl + T` | Toggle "Always on Top" |
-| **Edit** | `R` | Rotate |
-| | `Del` | Delete File |
-
----
+<div align="center">
+  <img src="ScreenShot/help_ui.png" alt="Help Overlay" width="100%" style="border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+</div>
 
 🗺️ Roadmap
 We are constantly evolving. Here is what's currently in development:
@@ -179,7 +172,8 @@ We are constantly evolving. Here is what's currently in development:
 - **Frame Inspector:** Pause and analyze animations frame-by-frame.
 - **Color Management (CMS):** ICC Profile support.
 - **Dual-View Compare:** Side-by-side image comparison.
-- **Smart Background:** Auto-dimming / Acrylic effect.
+- **Tracing Mode:** Semi-transparent overlay mode, designed for designers to reference and trace over other windows.
+- **Tiling Architecture:** Native gigapixel support with on-demand tile rendering for massive datasets (NASA/Medical).
 
 ---
 
@@ -208,6 +202,11 @@ We are constantly evolving. Here is what's currently in development:
 ---
 
 ## ⚖️ Credits
+
+> [!NOTE]
+> **Developer Note**
+>
+> I maintain QuickView in my spare time because I believe Windows deserves a faster, cleaner viewer. I don't have a marketing budget or a team. If QuickView helps you, the biggest contribution you can make is to Star us on GitHub or share it with a friend.
 
 **QuickView** stands on the shoulders of giants.
 Licensed under **GPL-3.0**.

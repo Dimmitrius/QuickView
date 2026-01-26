@@ -250,6 +250,16 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_Version;
     extern const wchar_t* Settings_Label_Build;
 
+    // Update Dialog (Bilingual)
+    extern const wchar_t* Dialog_UpdateTitle;
+    extern const wchar_t* Dialog_UpdateContent;
+    extern const wchar_t* Dialog_UpdateLogHeader;
+    extern const wchar_t* Dialog_ButtonUpdate;
+    extern const wchar_t* Dialog_ButtonLater;
+    extern const wchar_t* Dialog_ButtonStar;
+    extern const wchar_t* Dialog_Update_LoveTitle;
+    extern const wchar_t* Dialog_Update_LoveMessage;
+
     // Help Overlay
     extern const wchar_t* Help_Header_Shortcuts;
     extern const wchar_t* Help_Header_Mouse;

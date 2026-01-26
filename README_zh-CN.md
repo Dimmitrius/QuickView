@@ -12,7 +12,7 @@
 <p>
     <strong>Direct2D Native</strong> • 
     <strong>Modern C++23</strong> • 
-    <strong>量子流架构 (Quantum Stream)</strong> • 
+    <strong>动态调度架构 (Dynamic Scheduling)</strong> • 
     <strong>绿色便携</strong>
 </p>
 
@@ -61,11 +61,11 @@ QuickView 支持几乎所有现代和专业图像格式：
 
 ---
 
-# QuickView v3.0.4 - 量子流更新 (The Quantum Flow Update)
-**发布日期**: 2026-01-16
+# QuickView v3.2.5 - 动态调度更新 (The Dynamic Scheduling Update)
+**发布日期**: 2026-01-26
 
-### ⚡ 核心架构："Quantum Flow"
-- **统一调度与解码 (Quantum Flow)**：引入了“快/慢双通道”架构 (`FastLane` + `HeavyLanePool`)，将即时交互与繁重的解码任务隔离。
+### ⚡ 核心架构："动态调度"
+- **统一调度与解码 (Dynamic Scheduling)**：引入了“快/慢双通道”架构 (`FastLane` + `HeavyLanePool`)，将即时交互与繁重的解码任务隔离。
 - **N+1 热备架构**：实现了“上限 N+1”线程模型，备用线程保持预热状态以立即响应，在不过度订阅的情况下最大化 CPU 吞吐量。
 - **深度取消 (Deep Cancellation)**：为重型格式 (JXL/RAW/WebP) 提供了细粒度的“按需”取消逻辑，确保过时的任务（例如在快速滚动期间）被立即终止以节省功耗。
 - **Direct D2D 直通**：建立了“零拷贝”管道，解码后的 `RawImageFrame` 缓冲区直接上传到 GPU 显存，完全绕过 GDI/GDI+。
@@ -99,7 +99,8 @@ QuickView 支持几乎所有现代和专业图像格式：
 
 QuickView 利用 **多线程解码** 技术处理 **JXL** 和 **AVIF** 等现代格式，在 8 核 CPU 上相比标准查看器加载速度提升高达 **6倍**。
 * **零延迟预览：** 针对巨型 RAW (ARW, CR2) 和 PSD 文件的智能提取技术。
-* **调试 HUD：** 按 `F12` 查看实时性能指标（解码时间、渲染时间、内存使用）。
+* **调试 HUD：** 按 `F12` 查看实时性能指标（解码时间、渲染时间、内存使用）。*(首次使用请在 **设置 > 高级** 中开启调试模式)*
+  <br><img src="ScreenShot/DebugHUD.png" alt="调试模式" width="100%" style="border-radius: 6px; margin-top: 10px;">
 
 ### 2. 🎛️ 可视化控制中心
 > *告别手动编辑 .ini 文件。*
@@ -111,7 +112,12 @@ QuickView 利用 **多线程解码** 技术处理 **JXL** 和 **AVIF** 等现代
 * **视觉个性化：** 实时调整 UI 透明度和背景网格。
 * **便携模式：** 一键切换配置存储位置（AppData/系统 还是 程序文件夹/USB）。
 
-### 3. 📊 极客可视化
+### 3. 🔄 智能更新
+> *让软件时刻保持最新。*
+
+QuickView 会自动检测新版本，并支持一键静默更新。无需打开浏览器，即刻体验最新功能。
+
+### 4. 📊 极客可视化
 > *不只是看图；更要洞察数据。*
 
 <div align="center">
@@ -145,26 +151,13 @@ QuickView 利用 **多线程解码** 技术处理 **JXL** 和 **AVIF** 等现代
 
 ---
 
-## ⌨️ 快捷键
+## ⌨️ 快捷键与帮助
 
-掌握这些即可随心所欲地浏览：
+> *随时按 `F1` 呼出交互式快捷键指南。*
 
-| 分类 | 按键 | 动作 |
-| :--- | :--- | :--- |
-| **导航** | `Space` / `PgDn` | 下一张图片 |
-| | `Bksp` / `PgUp` | 上一张图片 |
-| | `T` | **照片墙 (HUD)** |
-| **视图** | `1` / `Z` | **100% 原始尺寸** |
-| | `0` / `F` | 适应屏幕 |
-| | `Enter` / `F11` | 全屏 |
-| **信息** | `I` | **切换 信息/直方图** |
-| | `Tab` | **切换 精简信息面板** |
-| **控制** | `Ctrl + F11` | **跨屏（电视墙）模式** |
-| | `Ctrl + T` | 切换 "总在最前" |
-| **编辑** | `R` | 旋转 |
-| | `Del` | 删除文件 |
-
----
+<div align="center">
+  <img src="ScreenShot/help_ui.png" alt="帮助窗口" width="100%" style="border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+</div>
 
 🗺️ 开发计划 (Roadmap)
 我们因为持续进化而卓越。以下是当前正在开发的功能：
@@ -173,7 +166,8 @@ QuickView 利用 **多线程解码** 技术处理 **JXL** 和 **AVIF** 等现代
 - **帧查看器 (Frame Inspector):** 暂停并逐帧分析动画。
 - **色彩管理 (CMS):** 完整的 ICC 配置文件支持。
 - **双图比对 (Dual-View Compare):** 并排比较两张图片。
-- **智能背景 (Smart Background):** 自动变暗 / 亚克力模糊效果。
+- **临摹模式 (Tracing Mode):** 半透明的薄膜覆盖模式，适用于设计师参考图及临摹描绘。
+- **Tiling 架构 (Tiling Architecture):** 针对十亿像素级 (Gigapixel) 超级巨图的瓦片化支持，实现流畅的按需加载。
 
 ---
 
@@ -202,6 +196,12 @@ QuickView 利用 **多线程解码** 技术处理 **JXL** 和 **AVIF** 等现代
 ---
 
 ## ⚖️ 致谢
+
+> [!NOTE]
+> **开发者寄语**
+>
+> 我利用业余时间维护 QuickView，只因我相信 Windows 值得拥有一个更快、更纯粹的看图工具。
+> 我没有推广预算，也没有团队。如果 QuickView 对您有所帮助，在 GitHub 上点一颗星或分享给朋友，就是对我最大的支持。
 
 **QuickView** 站在巨人的肩膀上。
 基于 **GPL-3.0** 许可。
