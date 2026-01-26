@@ -974,30 +974,41 @@ static D2D1_SIZE_F GetVisualImageSize() {
 // Inlined Logic to avoid dependency on local lambdas
 static void PerformZoom100(HWND hwnd) {
     if (g_imageResource) {
-        // [Fix] Use Robust Visual Size
+        // [Fix] Use Robust Visual Size (This refers to current Surface Size, potentially downscaled)
         D2D1_SIZE_F effSize = GetVisualImageSize();
         float imgW = effSize.width;
         float imgH = effSize.height;
         
-        // [Inlined] Original Size Logic
-        // Original logic checked rotation to pick Metadata Width vs Height.
-        // We can just use imgW/imgH as "Original" if metadata is missing or mismatch.
-        // Assuming current rotation is desired "Original" shape.
-        float originalW = imgW; 
+        if (imgW <= 0 || imgH <= 0) return;
+
+        // [Fix] Use True Metadata Dimensions for "100%" Calculation
+        // Because imgW/imgH might be from a downscaled DComp surface (max 8192px),
+        // we must use the Actual Metadata dimensions to ensure proper 100% scale for huge images.
+        float originalW = imgW;
         float originalH = imgH;
-        
-        // If metadata available, ensure we respect its scale magnitude?
-        // Actually, imgW/imgH *is* the pixel resolution (unscaled).
-        if (imgW > 0 && imgH > 0) {
-            float renderScaleTarget = (imgW / imgW); // 1.0 (Logic simplification)
+
+        if (g_currentMetadata.Width > 0 && g_currentMetadata.Height > 0) {
+            originalW = (float)g_currentMetadata.Width;
+            originalH = (float)g_currentMetadata.Height;
             
-            // Logic to resize window to wrap image at 100% if allowed
-            if (g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_runtime.LockWindowSize) {
-                 int targetW = (int)imgW; // Target unscaled pixel width
-                 int targetH = (int)imgH;
-                 
-                 HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                 MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
+            // Apply Manual Rotation Swap (same logic as GetVisualImageSize)
+            bool manualSwap = (g_editState.TotalRotation % 180 != 0);
+            if (manualSwap) {
+                std::swap(originalW, originalH);
+            }
+        }
+        
+        // Calculate the Scale Factor required to make the Rendered Surface match the Original Size
+        // TargetScale = OriginalW / SurfaceW
+        float renderScaleTarget = (originalW / imgW);
+            
+        // Logic to resize window to wrap image at 100% if allowed
+        if (g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_runtime.LockWindowSize) {
+                int targetW = (int)originalW; // Target TRUE pixel width
+                int targetH = (int)originalH;
+                
+                HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
                  int maxW = (mi.rcWork.right - mi.rcWork.left);
                  int maxH = (mi.rcWork.bottom - mi.rcWork.top);
                  
@@ -1024,9 +1035,103 @@ static void PerformZoom100(HWND hwnd) {
             g_viewState.PanX = 0;
             g_viewState.PanY = 0;
             g_osd.Show(hwnd, AppStrings::OSD_Zoom100, false, false, D2D1::ColorF(0.4f, 1.0f, 0.4f));
-        }
     }
     RequestRepaint(PaintLayer::All);
+}
+
+// Forward Declaration
+static VisualState GetVisualState();
+
+// [Shared] Unified Zoom Calculation
+// Handles robust size retrieval, fit scale, small image protection, and magnetic snap
+static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = false) {
+    if (!g_imageResource) return g_viewState.Zoom;
+
+    // 1. Get Robust Visual Size
+    D2D1_SIZE_F visualSize = GetVisualImageSize();
+    float imageWidth = visualSize.width;
+    float imageHeight = visualSize.height;
+    if (imageWidth <= 0 || imageHeight <= 0) return g_viewState.Zoom;
+
+    // 2. Base Fit Scale
+    RECT rc; GetClientRect(hwnd, &rc);
+    float scaleW = (float)rc.right / imageWidth;
+    float scaleH = (float)rc.bottom / imageHeight;
+    float fitScale = (scaleW < scaleH) ? scaleW : scaleH;
+
+    // 3. [Logic] Small Image Protection
+    // If image < 200px, Fit Scale shouldn't blow it up to screen size by default.
+    // Base fit becomes 1.0 for small images.
+    if (imageWidth < 200.0f && imageHeight < 200.0f) {
+        if (fitScale > 1.0f) fitScale = 1.0f;
+    }
+
+    // 4. Current State
+    float currentTotalScale = fitScale * g_viewState.Zoom;
+
+    // 0. [Logic] Magnetic Snap Time Lock (Moved here to use valid currentTotalScale)
+    static DWORD s_lastSnapTime = 0;
+    if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 200)) {
+         return currentTotalScale; 
+    }
+
+    // 5. Calculate Zoom Factor
+    // Mouse: Delta is usually +/- 1.0 (after div 120). Factor 1.1 (= 10%)
+    // Keyboard: Delta is +/- 1.0. 
+    // Fine Interval (Ctrl): 1%
+    float step = isFineInterval ? 0.01f : 0.1f;
+    
+    // Support non-integer delta (e.g. precision touchpad)
+    // Formula: Scale * (1 + step * delta) 
+    // But legacy logic used division for zoom out: 1.0 / 1.1 = 0.90909
+    // To keep exact behavior:
+    float multiplier = 1.0f;
+    if (delta > 0) multiplier = (1.0f + step * delta);
+    else multiplier = 1.0f / (1.0f + step * abs(delta));
+    
+    float newTotalScale = currentTotalScale * multiplier;
+
+    // 6. [Logic] Magnetic Snap to 100%
+    float snapTarget = 1.0f;
+    // Calculate true 100% scale relative to current surface
+    if (g_currentMetadata.Width > 0 && imageWidth > 0) {
+            VisualState vsSnap = GetVisualState();
+            float origW = (float)(vsSnap.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
+            if (origW > 0) snapTarget = origW / imageWidth;
+    }
+
+    const float SNAP_THRESHOLD = 0.05f * snapTarget;
+    bool isAlreadyAt100 = (abs(currentTotalScale - snapTarget) < 0.001f);
+    
+    bool snapped = false;
+
+    // [Refinement] Disable Snap if Fine Interval is requested (allows precise 1% control)
+    if (!isAlreadyAt100 && !isFineInterval) {
+        // Check for crossing snapTarget
+        if ((currentTotalScale < snapTarget && newTotalScale > snapTarget) || 
+            (currentTotalScale > snapTarget && newTotalScale < snapTarget)) {
+            newTotalScale = snapTarget;
+            snapped = true;
+        }
+        // Check for proximity
+        else if (abs(newTotalScale - snapTarget) < SNAP_THRESHOLD) {
+            newTotalScale = snapTarget;
+            snapped = true;
+        }
+    }
+    
+    if (snapped) {
+        s_lastSnapTime = GetTickCount();
+    }
+    
+    // 7. Limits
+    float minScale = 0.1f * fitScale;
+    float maxScale = std::max(50.0f * fitScale, 50.0f);
+    
+    if (newTotalScale < minScale) newTotalScale = minScale;
+    if (newTotalScale > maxScale) newTotalScale = maxScale;
+
+    return newTotalScale;
 }
 
 static void PerformZoomFit(HWND hwnd) {
@@ -2936,6 +3041,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     
      // Mouse Interaction
      case WM_MOUSEMOVE: {
+          if (!isTracking) {
+             TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
+             TrackMouseEvent(&tme);
+             isTracking = true;
+          }
           POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
           
           SettingsAction action = g_settingsOverlay.OnMouseMove((float)pt.x, (float)pt.y);
@@ -3081,11 +3191,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
           }
 
           if (oldHoverIdx != g_winCtrlHoverState) {
-              if (!isTracking) {
-                 TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
-                 TrackMouseEvent(&tme);
-                 isTracking = true;
-              }
               if (g_uiRenderer) g_uiRenderer->SetWindowControlHover(g_winCtrlHoverState);
               MarkStaticLayerDirty();  // Window Controls hover change (includes InvalidateRect)
           }
@@ -3143,8 +3248,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_showControls = false; 
             if (g_uiRenderer) g_uiRenderer->SetControlsVisible(false);
         }
+        
+        // [Fix] Auto-hide Toolbar and Nav Arrows when mouse leaves window
+        if (!g_toolbar.IsPinned()) {
+            if (g_toolbar.IsVisible()) {
+                g_toolbar.SetVisible(false);
+                MarkStaticLayerDirty(); // Force Static Layer Update (Critical for Toolbar)
+            }
+        }
+        if (g_viewState.EdgeHoverState != 0) {
+            g_viewState.EdgeHoverState = 0;
+            MarkStaticLayerDirty();
+        }
+
         isTracking = false;
-        RequestRepaint(PaintLayer::Static);  // WinControls are on Static layer
+        RequestRepaint(PaintLayer::Static); 
         return 0;
         
 
@@ -3754,11 +3872,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         if (!g_imageResource) return 0;
         
-        // --- Magnetic Snap Time Lock ---
-        static DWORD s_lastSnapTime = 0;
-        if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 200)) {
-            return 0; // Ignore input briefly after snapping
-        }
+        // Magnetic Snap Time Lock is now handled inside CalculateTargetZoom
         
         // Enable interaction mode during zoom (use LINEAR interpolation)
         g_viewState.IsInteracting = true;
@@ -3767,86 +3881,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SetTimer(hwnd, INTERACTION_TIMER_ID, 150, nullptr);
         
         float delta = GET_WHEEL_DELTA_WPARAM(wParam) / 120.0f;
-        
-        // Invert Wheel direction if configured
         if (g_config.InvertWheel) delta = -delta;
         
-        // Calc Current Total Scale (Fit * Zoom)
-        RECT rc; GetClientRect(hwnd, &rc);
-        
-        // Use Surface size for consistency (same as WM_SIZE and Standard Zoom apply section)
-        // [Fix] Use Robust Visual Size (derived from rendered surface) instead of fragile calculations
-        D2D1_SIZE_F effSize = GetVisualImageSize();
-        float imgW = effSize.width;
-        float imgH = effSize.height;
-        if (imgW <= 0 || imgH <= 0) return 0;
-        
-        float scaleW = (float)rc.right / imgW;
-        float scaleH = (float)rc.bottom / imgH;
-        float fitScale = (scaleW < scaleH) ? scaleW : scaleH;
-        
-        // [Fix] Match SyncDCompState Logic for Small Images
-        if (imgW < 200.0f && imgH < 200.0f) {
-            if (fitScale > 1.0f) fitScale = 1.0f;
-        }
-        float currentTotalScale = fitScale * g_viewState.Zoom;
-        
-        float zoomFactor = (delta > 0) ? 1.1f : 0.90909f;
-        float newTotalScale = currentTotalScale * zoomFactor;
-        
-        // --- Magnetic Snap to 100% Original ---
-        float snapTarget = 1.0f;
-        // Calculate true 100% scale relative to current surface
-        if (g_currentMetadata.Width > 0 && imgW > 0) {
-             VisualState vsSnap = GetVisualState();
-             float origW = (float)(vsSnap.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
-             if (origW > 0) snapTarget = origW / imgW;
-        }
+        // [Shared Logic]
+        float newTotalScale = CalculateTargetZoom(hwnd, delta, false);
 
-        const float SNAP_THRESHOLD = 0.05f * snapTarget;
-        bool isAlreadyAt100 = (abs(currentTotalScale - snapTarget) < 0.001f);
-        
-        if (!isAlreadyAt100) {
-            bool snapped = false;
-            // Check for crossing snapTarget
-            if ((currentTotalScale < snapTarget && newTotalScale > snapTarget) || 
-                (currentTotalScale > snapTarget && newTotalScale < snapTarget)) {
-                newTotalScale = snapTarget;
-                snapped = true;
-            }
-            // Check for proximity
-            else if (abs(newTotalScale - snapTarget) < SNAP_THRESHOLD) {
-                newTotalScale = snapTarget;
-                snapped = true;
-            }
-            
-            if (snapped) {
-                s_lastSnapTime = GetTickCount(); // Engage Time Lock
-            }
-        }
-
-        // [v9.9] Limits - Handle tiny images where fitScale is already very large
-        // Min: 10% of FIT scale (prevents excessive zoom-out)
-        // Max: Larger of 50x fitScale OR absolute 50.0 (ensures tiny images can still zoom in)
-        float minScale = 0.1f * fitScale;
-        float maxScale = std::max(50.0f * fitScale, 50.0f);
-        
-        if (newTotalScale < minScale) newTotalScale = minScale;
-        if (newTotalScale > maxScale) newTotalScale = maxScale;
-
-        // [Feature] Ctrl+Wheel = Temporary Lock Window (Supersede Resize Config)
+        // [Feature] Ctrl+Wheel = Temporary Lock Window
         bool isCtrl = (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL);
 
-        // [v3.1.5] Unified Scaling Logic: Pre-calculate Target Window Size
-        // We need 'targetW/targetH' early to determine if we should Auto-Lock or Auto-Unlock.
-        
-
-        
-
-             // Use Centralized Helper
-             POINT mousePt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-             PerformSmartZoom(hwnd, newTotalScale, &mousePt, isCtrl);
-             RequestRepaint(PaintLayer::Dynamic);
+        // Use Centralized Helper
+        POINT mousePt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        PerformSmartZoom(hwnd, newTotalScale, &mousePt, isCtrl);
+        RequestRepaint(PaintLayer::Dynamic);
 
              
              // [SVG Lossless Zoom] Trigger re-render timer if SVG and zoom exceeds current resolution
@@ -3855,6 +3901,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                  SetTimer(hwnd, IDT_SVG_RERENDER, 300, nullptr);
              }
 
+        // [Fix] Re-fetch Size for OSD (CalculateTargetZoom consumed it internally)
+        D2D1_SIZE_F visualSize = GetVisualImageSize();
+
         
         // Show Zoom OSD relative to Original Image Size
         float osdScale = newTotalScale;
@@ -3862,7 +3911,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              VisualState vs = GetVisualState();
              float originalDim = (float)(vs.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
              if (originalDim > 0) {
-                 osdScale = newTotalScale * (effSize.width / originalDim);
+                 osdScale = newTotalScale * (visualSize.width / originalDim);
              }
         }
         
@@ -4107,28 +4156,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (!g_imageResource) break;
             
             bool isZoomIn = (wParam == VK_ADD || wParam == VK_OEM_PLUS);
-            // bool ctrl reused from usage at top of WndProc
+            bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000);
             
-            // Get image size
-            D2D1_SIZE_F imgSize = g_imageResource.GetSize();
-            
-            // [Fix] Use Effective Dimensions
-            D2D1_SIZE_F effSize = GetEffectiveImageSize();
-            float calcW = effSize.width;
-            float calcH = effSize.height;
-
-            RECT rc; GetClientRect(hwnd, &rc);
-            float fitScale = std::min((float)rc.right / calcW, (float)rc.bottom / calcH);
-            float currentTotalScale = fitScale * g_viewState.Zoom;
-            
-            // Calculate zoom step: Ctrl = 1%, otherwise 10%
-            float step = ctrl ? 0.01f : 0.1f;
-            float multiplier = isZoomIn ? (1.0f + step) : (1.0f / (1.0f + step));
-            float newTotalScale = currentTotalScale * multiplier;
-            
-            // Limits
-            if (newTotalScale < 0.1f * fitScale) newTotalScale = 0.1f * fitScale;
-            if (newTotalScale > 20.0f) newTotalScale = 20.0f;
+            float delta = isZoomIn ? 1.0f : -1.0f;
+            float newTotalScale = CalculateTargetZoom(hwnd, delta, isCtrl);
             
             // [Refactor] Use Centralized Smart Zoom
             PerformSmartZoom(hwnd, newTotalScale, nullptr, false);
@@ -4136,10 +4167,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 
             
-            // Show Zoom OSD relative to Original Image Size
+             // Show Zoom OSD relative to Original Image Size
             float osdScale = newTotalScale;
             if (g_currentMetadata.Width > 0 && g_currentMetadata.Height > 0) {
                  VisualState vs = GetVisualState();
+                 D2D1_SIZE_F effSize = GetVisualImageSize(); // [Fix] Define effSize
                  float originalDim = (float)(vs.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
                  if (originalDim > 0) {
                      osdScale = newTotalScale * (effSize.width / originalDim);
@@ -4933,6 +4965,14 @@ void ProcessEngineEvents(HWND hwnd) {
                     finalMetadata.Format = L"SVG";
                     finalMetadata.Width = (UINT)g_imageResource.svgW;
                     finalMetadata.Height = (UINT)g_imageResource.svgH;
+                } else if (g_imageResource.bitmap) {
+                    // [Fix] Robust Dimensions: If Metadata is missing or partial (e.g. 100x0), use actual Bitmap size
+                    // This ensures Info Panel always matches what user sees.
+                    D2D1_SIZE_U pixelSize = g_imageResource.bitmap->GetPixelSize();
+                    if (finalMetadata.Width == 0 || finalMetadata.Height == 0) {
+                        finalMetadata.Width = pixelSize.width;
+                        finalMetadata.Height = pixelSize.height;
+                    }
                 }
                 
                 // [v5.5] Robust Metadata Merge (First Principles)
@@ -5236,6 +5276,11 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, BrowseDirection
     // If reloading the same file (e.g. RAW Toggle), preserve g_runtime.ForceRawDecode.
     if (g_imagePath != path) {
         g_runtime.ForceRawDecode = g_config.ForceRawDecode;
+        
+        // [Fix] Window Lock Persistence: Reset Lock state to User Preference on navigation.
+        // This ensures that an "Auto-Lock" (from small image zoom) doesn't trap subsequent large images.
+        g_runtime.LockWindowSize = g_config.LockWindowSize;
+        g_isAutoLocked = false; 
     }
     
     g_imagePath = path; // Set target path immediately for UI consistency
