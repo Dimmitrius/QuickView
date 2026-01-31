@@ -83,7 +83,7 @@ HRESULT CompositionEngine::DrawTiles(ID2D1DeviceContext* pContext,
                     }
                 }
                 // Step up to parent
-                if (currentKey.level >= QuickView::MAX_LOD_LEVELS) break;
+                if (currentKey.level() >= QuickView::MAX_LOD_LEVELS) break;
                 currentKey = currentKey.GetParent();
             }
 
@@ -98,11 +98,11 @@ HRESULT CompositionEngine::DrawTiles(ID2D1DeviceContext* pContext,
                 D2D1_RECT_F destRect = D2D1::RectF(destX, destY, destX + destW, destY + destH);
 
                 // Source Rect (Bitmap Space)
-                int levelDiff = currentKey.level - key.level;
+                int levelDiff = currentKey.level() - key.level();
                 
                 int subTileSize = QuickView::TILE_SIZE >> levelDiff;
-                int relX = key.x - (currentKey.x << levelDiff);
-                int relY = key.y - (currentKey.y << levelDiff);
+                int relX = key.x() - (currentKey.x() << levelDiff);
+                int relY = key.y() - (currentKey.y() << levelDiff);
                 
                 float srcX = (float)relX * subTileSize;
                 float srcY = (float)relY * subTileSize;
@@ -176,6 +176,12 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
     HRESULT hr = S_OK;
     int updateCount = 0;
     
+    // [Debug] Log Entry
+    wchar_t logBuf[256];
+    swprintf_s(logBuf, L"[CompEngine] UpdateVirtualTiles: %zu tiles loaded. Titan=%d Surf=%p\n", 
+        tiles.size(), pLayer->isTitan, pLayer->virtualSurface.Get());
+    OutputDebugStringW(logBuf);
+    
     // Create Context if needed (reuse one context for batch)
     // Note: DComp BeginDraw returns A NEW SURFACE every time!
     // We can reuse the D2D DeviceContext object, but must reset Target.
@@ -191,11 +197,14 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         if (!tile || !tile->frame || !tile->frame->pixels) continue;
         
         // Calculate Rect on Virtual Surface (Image Space)
-        int subTileSize = QuickView::TILE_SIZE; // 512
-        int pixelX = key.x * subTileSize;
-        int pixelY = key.y * subTileSize;
+        int bitmapSize = QuickView::TILE_SIZE; // 512 (Physical Bitmap Size)
+        int scale = 1 << key.level();          // LOD Scale Factor (1, 2, 4...)
+        int virtualSize = bitmapSize * scale;  // Virtual Area covered by this tile
         
-        RECT updateRect = { pixelX, pixelY, pixelX + subTileSize, pixelY + subTileSize };
+        int pixelX = key.x() * virtualSize;
+        int pixelY = key.y() * virtualSize;
+        
+        RECT updateRect = { pixelX, pixelY, pixelX + virtualSize, pixelY + virtualSize };
         
         // [Optimization] Check if we actually NEED to draw?
         // Virtual Surface retains content. 
@@ -246,11 +255,11 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         );
         
         ComPtr<ID2D1Bitmap> srcBitmap;
-        m_pendingContext->CreateBitmap(D2D1::SizeU(subTileSize, subTileSize), 
+        m_pendingContext->CreateBitmap(D2D1::SizeU(bitmapSize, bitmapSize), 
             tile->frame->pixels, tile->frame->stride, &bmpProps, &srcBitmap);
             
-        // Draw
-        D2D1_RECT_F destRect = D2D1::RectF((float)pixelX, (float)pixelY, (float)(pixelX + subTileSize), (float)(pixelY + subTileSize));
+        // Draw to fill the Virtual Area (Scaling up if needed)
+        D2D1_RECT_F destRect = D2D1::RectF((float)pixelX, (float)pixelY, (float)(pixelX + virtualSize), (float)(pixelY + virtualSize));
         m_pendingContext->DrawBitmap(srcBitmap.Get(), destRect);
         
         // Debug Log (Requested by User)

@@ -156,10 +156,21 @@ namespace QuickView {
 
     void TileManager::OnTileReady(TileKey key, std::shared_ptr<RawImageFrame> frame) {
         std::lock_guard lock(m_mutex);
+        
+        // [Debug] Log Tile Key
+        // key.x, key.y, key.level are bitfields, might need explicit cast or access via key.key
+        wchar_t buf[256];
+        swprintf_s(buf, L"[TileManager] OnTileReady: Key=%llu (LOD=%d X=%d Y=%d) Frame=%p\n", 
+            key.key, key.level(), key.x(), key.y(), frame.get());
+        OutputDebugStringW(buf);
+
         auto it = m_tiles.find(key);
         if (it != m_tiles.end()) {
             it->second->state = TileStateCode::Ready;
             it->second->frame = frame;
+            OutputDebugStringW(L"[TileManager] -> State Updated to READY\n");
+        } else {
+            OutputDebugStringW(L"[TileManager] -> ERROR: Tile Key NOT FOUND in Map!\n");
         }
     }
 

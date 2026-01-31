@@ -27,20 +27,35 @@ namespace QuickView {
     
     // 64-bit Spatial Hash Key
     // Layout: [63-56: Level] [55-28: Y Index] [27-0: X Index]
+    // 64-bit Spatial Hash Key
+    // Layout: [63-56: Level] [55-28: Y Index] [27-0: X Index]
     struct TileKey {
-        union {
-            struct {
-                uint32_t x : 28;      // Col Index (Max 268M)
-                uint32_t y : 28;      // Row Index (Max 268M)
-                uint32_t level : 8;   // LOD Level (0..255)
-            };
-            uint64_t key;
-        };
+        uint64_t key;
 
         // Comparison for Map
         bool operator==(const TileKey& other) const { return key == other.key; }
         bool operator!=(const TileKey& other) const { return key != other.key; }
         
+        // Comparison for Sorting (std::map or consistency)
+        bool operator<(const TileKey& other) const { return key < other.key; }
+
+        // Element Accessors (Explicit Bitwise)
+        // X: Bits 0-27 (28 bits)
+        // Y: Bits 28-55 (28 bits)
+        // Level: Bits 56-63 (8 bits)
+        
+        uint32_t x() const {
+            return (uint32_t)(key & 0xFFFFFFF);
+        }
+        
+        uint32_t y() const {
+            return (uint32_t)((key >> 28) & 0xFFFFFFF);
+        }
+        
+        uint32_t level() const {
+            return (uint32_t)((key >> 56) & 0xFF);
+        }
+
         // Hashing
         struct Hash {
             std::size_t operator()(const TileKey& k) const {
@@ -51,13 +66,20 @@ namespace QuickView {
         // Helpers
         static TileKey From(int col, int row, int lod) {
             TileKey k;
-            k.x = col; k.y = row; k.level = lod;
+            // Ensure components fit
+            uint64_t x_part = (uint64_t)(col & 0xFFFFFFF);
+            uint64_t y_part = (uint64_t)(row & 0xFFFFFFF);
+            uint64_t l_part = (uint64_t)(lod & 0xFF);
+            
+            k.key = x_part | (y_part << 28) | (l_part << 56);
             return k;
         }
         
         TileKey GetParent() const {
-            if (level >= MAX_LOD_LEVELS) return *this;
-            return From(x >> 1, y >> 1, level + 1);
+            uint32_t l = level();
+            if (l >= MAX_LOD_LEVELS) return *this;
+            // Parent: x/2, y/2, l+1
+            return From(x() >> 1, y() >> 1, l + 1);
         }
     };
 

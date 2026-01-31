@@ -5312,6 +5312,13 @@ void ProcessEngineEvents(HWND hwnd) {
 
     case EventType::TileReady:
         if (evt.imageId == g_currentImageId.load() && evt.tileCoord.has_value() && evt.rawFrame) {
+            
+            // [Debug] Log Tile Arrival
+            wchar_t debugBuf[256];
+            swprintf_s(debugBuf, L"[Main] TileReady: LOD=%d (%d,%d) ID=%llu\n", 
+                evt.tileCoord->lod, evt.tileCoord->col, evt.tileCoord->row, evt.imageId);
+            OutputDebugStringW(debugBuf);
+
             if (g_imageEngine && g_imageEngine->GetTileManager()) {
                 // [Infinity Engine] Pass to Manager
                 // Legacy conversion: TileCoord -> TileKey
@@ -5319,6 +5326,11 @@ void ProcessEngineEvents(HWND hwnd) {
                 g_imageEngine->GetTileManager()->OnTileReady(key, evt.rawFrame);
                 needsRepaint = true;
             }
+        } else {
+             wchar_t debugBuf[256];
+             swprintf_s(debugBuf, L"[Main] TileReady IGNORED: MatchID=%d HasCoord=%d HasFrame=%d\n", 
+                (evt.imageId == g_currentImageId.load()), evt.tileCoord.has_value(), (bool)evt.rawFrame);
+             OutputDebugStringW(debugBuf);
         }
         break;
 

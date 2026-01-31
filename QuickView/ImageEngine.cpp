@@ -1547,15 +1547,15 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
     for (const auto& key : missing) {
         // Convert TileKey -> TileCoord (Legacy)
         QuickView::TileCoord coord;
-        coord.col = key.x;
-        coord.row = key.y;
-        coord.lod = key.level;
+        coord.col = key.x();
+        coord.row = key.y();
+        coord.lod = key.level();
         
         // Calculate Region (Image Space)
-        int tileSize = QuickView::TILE_SIZE << key.level;
+        int tileSize = QuickView::TILE_SIZE << key.level();
         QuickView::RegionRect srcRect;
-        srcRect.x = key.x * tileSize;
-        srcRect.y = key.y * tileSize;
+        srcRect.x = key.x() * tileSize;
+        srcRect.y = key.y() * tileSize;
         srcRect.w = tileSize;
         srcRect.h = tileSize;
         
@@ -1574,7 +1574,7 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
         // srcRect.w = TILE_SIZE << level.
         // scale = 512 / (512 * 2^level) = 1 / 2^level. Correct.
         
-        float tileScale = 1.0f / (1 << key.level);
+        float tileScale = 1.0f / (1 << key.level());
         
         req.dstWidth = QuickView::TILE_SIZE;
         req.dstHeight = QuickView::TILE_SIZE;
