@@ -114,12 +114,13 @@ void HeavyLanePool::SubmitFullDecode(const std::wstring& path, ImageID imageId) 
     m_poolCv.notify_one();
 }
 
-void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, TileCoord coord, RegionRequest region, int priority) {
+void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, TileCoord coord, RegionRequest region, int priority) {
     std::lock_guard lock(m_poolMutex);
     JobInfo job;
     job.type = JobType::Tile;
     job.path = path;
     job.imageId = imageId;
+    job.mmf = mmf; // [Optimization] Pass MMF
     job.tileCoord = coord;
     job.region = region;
     job.priority = priority; 
@@ -132,7 +133,7 @@ void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, TileCo
     m_poolCv.notify_one();
 }
 
-void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, const std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>>& batch, int priority) {
+void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<TilePriorityRequest>& batch) {
     if (batch.empty()) return;
     std::lock_guard lock(m_poolMutex);
     for (const auto& item : batch) {
@@ -140,6 +141,33 @@ void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, c
         job.type = JobType::Tile;
         job.path = path;
         job.imageId = imageId;
+        job.mmf = mmf;
+        job.tileCoord = item.coord;
+        job.region = item.region;
+        job.priority = item.priority;
+        m_pendingJobs.push_back(job);
+    }
+    // Sort entire queue to ensure highest priority is first (at front?)
+    // Wait, m_pendingJobs is processed front-to-back.
+    // Sort Descending Priority: [High, Med, Low]
+    // front() is High. Correct.
+    std::stable_sort(m_pendingJobs.begin(), m_pendingJobs.end(), [](const JobInfo& a, const JobInfo& b) {
+        return a.priority > b.priority;
+    });
+    TryExpand();
+    m_activeTileJobs.fetch_add((int)batch.size());
+    m_poolCv.notify_all();
+}
+
+void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>>& batch, int priority) {
+    if (batch.empty()) return;
+    std::lock_guard lock(m_poolMutex);
+    for (const auto& item : batch) {
+        JobInfo job;
+        job.type = JobType::Tile;
+        job.path = path;
+        job.imageId = imageId;
+        job.mmf = mmf; // [Optimization] Pass MMF
         job.tileCoord = item.first;
         job.region = item.second;
         job.priority = priority;
@@ -402,24 +430,41 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
               } 
               else {
                   // Cache Miss - Trigger Background Preload (if not already running)
-                  TriggerPreload(job.path);
+                  // [MMF Optimization]: Pass the MMF pointer to share the same file handle!
+                  TriggerPreload(job.path, job.mmf);
 
                   float scaleX = (float)job.region.dstWidth / job.region.srcRect.w;
                   float scaleY = (float)job.region.dstHeight / job.region.srcRect.h;
                   float scale = (scaleX < scaleY) ? scaleX : scaleY; 
                   
                   // Diagnostic: Start Decode
+                  /*
                   wchar_t startLog[256];
                   swprintf_s(startLog, L"[HeavyPool] Worker %d: Decode Tile (LOD %d, C%d R%d) Scale=%.3f\n", 
                      workerId, job.tileCoord.lod, job.tileCoord.col, job.tileCoord.row, scale);
                   OutputDebugStringW(startLog);
+                  */
     
                   // For Tile Loading, we use LoadRegionToFrame
                   QuickView::RegionRect rect = { job.region.srcRect.x, job.region.srcRect.y, job.region.srcRect.w, job.region.srcRect.h };
                   
-                  // [Titan] Use Shareable Slab Allocator
-                  hr = m_loader->LoadRegionToFrame(job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr /*arena*/, &loaderName,
-                     cancelPred);
+                  // [MMF Optimization] Zero-Copy Path
+                  if (job.mmf && job.mmf->IsValid()) {
+                      // Direct memory access - NO IO here!
+                      hr = CImageLoader::LoadTileFromMemory(
+                          job.mmf->data(), job.mmf->size(), 
+                          rect, scale, 
+                          &rawFrame, &m_tileMemory
+                      );
+                      if (FAILED(hr)) loaderName = L"MMF Decoder Failed";
+                      else loaderName = L"TurboJPEG (MMF)";
+                  }
+                  else {
+                      // Fallback: File IO Path (Slow)
+                      // [Titan] Use Shareable Slab Allocator
+                      hr = m_loader->LoadRegionToFrame(job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr /*arena*/, &loaderName,
+                         cancelPred);
+                  }
               }
          }
 
@@ -603,7 +648,8 @@ bool HeavyLanePool::IsIdle() const {
 // [Optimization] Full Image Cache Implementation
 // ============================================================================
 
-void HeavyLanePool::TriggerPreload(const std::wstring& path) {
+// [v9.5] Updated to support Zero-Copy MMF Preload
+void HeavyLanePool::TriggerPreload(const std::wstring& path, std::shared_ptr<QuickView::MappedFile> mmf) {
     bool expected = false;
     // Check global flag prevents spawning multiple threads for same image
     // (Optimization: could use a set of paths if we want multiple images preloaded, 
@@ -626,7 +672,10 @@ void HeavyLanePool::TriggerPreload(const std::wstring& path) {
 
         // Spawn detached thread for loading
         // We use std::thread because this is a long running I/O op independent of worker pool
-        std::thread([this, path]() {
+        std::thread([this, path, mmf]() {
+            // [Optimization] Lower priority for background preloader to avoid stealing CPU from Tile Workers
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
+
             // [Safety] Check file size to avoid OOM
             // 2GB limit for now (~500MP RGBA)
             // Implementation: Check file size. JPEG 10:1 ratio. 2GB RAM ~= 200MB File.
@@ -642,7 +691,14 @@ void HeavyLanePool::TriggerPreload(const std::wstring& path) {
             // Call LoadToFrame (Standard)
             // NO Scaling (full res) -> width=0, height=0
             
-            HRESULT hr = m_loader->LoadToFrame(path.c_str(), fullFrame, nullptr, 0, 0, &name, nullptr, nullptr);
+            // Priority: Low (Background)
+            // [Optimization] Use MMF if available to avoid Disk Contention and Seek Thrashing
+            HRESULT hr;
+            if (mmf && mmf->IsValid()) {
+                 hr = m_loader->LoadToFrameFromMemory(mmf->data(), mmf->size(), fullFrame, nullptr, &name);
+            } else {
+                 hr = m_loader->LoadToFrame(path.c_str(), fullFrame, nullptr, 0, 0, &name, nullptr, nullptr);
+            }
             
             if (SUCCEEDED(hr) && fullFrame->IsValid()) {
                 std::lock_guard lock(m_cacheMutex);

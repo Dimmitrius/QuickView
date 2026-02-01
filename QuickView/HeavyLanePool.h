@@ -54,10 +54,19 @@ public:
     void SubmitFullDecode(const std::wstring& path, ImageID imageId);
     
     // [Titan Engine] Submit a tile decode task
-    void SubmitTile(const std::wstring& path, ImageID imageId, QuickView::TileCoord coord, QuickView::RegionRequest region, int priority = 0);
+    void SubmitTile(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, QuickView::TileCoord coord, QuickView::RegionRequest region, int priority = 0);
     
+    struct TilePriorityRequest {
+        QuickView::TileCoord coord;
+        QuickView::RegionRequest region;
+        int priority;
+    };
+
+    // [Optimization] Submit multiple tiles with INDIVIDUAL priorities in one lock
+    void SubmitPriorityTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<TilePriorityRequest>& batch);
+
     // [Titan Engine] Batch Submission for MacroTiles (reduces locking overhead)
-    void SubmitTileBatch(const std::wstring& path, ImageID imageId, const std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>>& batch, int priority = 0);
+    void SubmitTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>>& batch, int priority = 0);
     
     // === Cancellation ===
     // [ImageID] Cancel tasks that don't match the current imageId
@@ -143,6 +152,8 @@ private:
         Tile
     };
     
+#include "MappedFile.h"
+
     struct JobInfo {
         JobType type = JobType::Standard;
         int priority = 0; // Higher = Earlier
@@ -150,6 +161,7 @@ private:
         // Common
         std::wstring path;
         ImageID imageId;
+        std::shared_ptr<QuickView::MappedFile> mmf; // [Optimization] Zero-Copy MMF Source
         
         // Standard
         bool isFullDecode = false;  // [Two-Stage] true = full resolution, false = scaled
@@ -207,7 +219,7 @@ private:
     std::atomic<bool> m_isPreloading = false; // Simple flag to avoid duplicate triggers for same image
     std::wstring m_preloadingPath; // Which path is currently being preloaded?
 
-    void TriggerPreload(const std::wstring& path);
+    void TriggerPreload(const std::wstring& path, std::shared_ptr<QuickView::MappedFile> mmf = nullptr);
     bool GetCachedRegion(const std::wstring& path, QuickView::RegionRequest region, QuickView::RawImageFrame* outFrame);
 
 public:

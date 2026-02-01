@@ -132,11 +132,18 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
     bool enableTitan = (sizeTrigger || pixelTrigger) && isSupportedFormat;
     
     if (enableTitan) {
+         // [Optimization] Create MMF for Zero-Copy Tile Access
+         // This handle stays open while we view the image.
+         m_mmf = std::make_shared<QuickView::MappedFile>(path);
+         
          m_tileManager->InvalidateAll(); // Reset generation
          wchar_t debugBuf[256];
-         swprintf_s(debugBuf, L"[Dispatch] Titan Mode ENABLED (%dx%d, %s)\n", info.width, info.height, fmtUpper.c_str());
+         swprintf_s(debugBuf, L"[Dispatch] Titan Mode ENABLED (%dx%d, %s) MMF=%s\n", 
+             info.width, info.height, fmtUpper.c_str(), 
+             (m_mmf && m_mmf->IsValid()) ? L"OK" : L"FAIL");
          OutputDebugStringW(debugBuf);
     } else {
+         m_mmf.reset(); // Release MMF for non-Titan images
          // m_tileManager->InvalidateAll(); // Optional
     }
 
@@ -1589,6 +1596,6 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
     }
     
     // Priority: 100 (Standard)
-    m_heavyPool->SubmitTileBatch(m_currentNavPath, m_currentImageId.load(), batch, 100);
+    m_heavyPool->SubmitTileBatch(m_currentNavPath, m_currentImageId.load(), m_mmf, batch, 100);
 }
 

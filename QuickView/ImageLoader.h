@@ -239,6 +239,14 @@ public:
                         CancelPredicate checkCancel = nullptr,
                         ImageMetadata* pMetadata = nullptr);
 
+    /// <summary>
+    /// [Optimization] Load full image from memory pointer (for MMF Preload)
+    /// </summary>
+    HRESULT LoadToFrameFromMemory(const uint8_t* data, size_t size, 
+                                 QuickView::RawImageFrame* outFrame,
+                                 class QuantumArena* arena = nullptr,
+                                 std::wstring* pLoaderName = nullptr);
+
     // ============================================================================
     // [Titan Engine] Region Decoding API
     // ============================================================================

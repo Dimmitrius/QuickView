@@ -9,12 +9,13 @@ namespace QuickView {
 TileScheduler::TileScheduler(HeavyLanePool* pool) : m_pool(pool) {
 }
 
-void TileScheduler::Reset(int w, int h, const std::wstring& path, size_t imageId) {
+void TileScheduler::Reset(int w, int h, const std::wstring& path, size_t imageId, std::shared_ptr<MappedFile> mmf) {
     std::lock_guard lock(m_mutex);
     m_imageW = w;
     m_imageH = h;
     m_currentPath = path;
     m_currentImageId = imageId;
+    m_mmf = mmf; // [Optimization] Store MMF
     m_tileStates.clear();
     m_lastViewport = {};
     m_lastScale = 1.0f;
@@ -104,32 +105,24 @@ void TileScheduler::UpdateViewport(QuickView::RegionRect viewport, float scale, 
         return (std::abs(dxA) + std::abs(dyA)) < (std::abs(dxB) + std::abs(dyB));
     });
 
-    // 3. Batch Dispatch
+    // 3. Dispatch Sorted Tiles Directly
+    // [Optimization] Use Batched Submission with Priorities to minimize lock contention
+    // and preserve exact center-out ordering in the job queue.
     if (!needed.empty()) {
-        const int MACRO_BLOCK_SIZE = 4;
-        std::map<std::pair<int, int>, std::vector<TileCoord>> batches;
-        
+        std::vector<HeavyLanePool::TilePriorityRequest> batch;
+        batch.reserve(needed.size());
+
         for (const auto& coord : needed) {
-            int mx = coord.col / MACRO_BLOCK_SIZE;
-            int my = coord.row / MACRO_BLOCK_SIZE;
-            batches[{mx, my}].push_back(coord);
+             m_tileStates[TileCoord::Hash()(coord)].dispatched = true;
+             
+             RegionRequest req;
+             GetRequestForTile(coord, req);
+             int priority = CalculatePriority(coord);
+             
+             batch.push_back({coord, req, priority});
         }
         
-        for (auto& entry : batches) {
-            std::vector<std::pair<TileCoord, RegionRequest>> reqBatch;
-            int maxPri = 0;
-            
-            for (const auto& coord : entry.second) {
-                m_tileStates[TileCoord::Hash()(coord)].dispatched = true;
-                
-                RegionRequest req;
-                GetRequestForTile(coord, req);
-                maxPri = std::max(maxPri, CalculatePriority(coord));
-                reqBatch.push_back({coord, req});
-            }
-            
-            m_pool->SubmitTileBatch(m_currentPath, m_currentImageId, reqBatch, maxPri);
-        }
+        m_pool->SubmitPriorityTileBatch(m_currentPath, m_currentImageId, m_mmf, batch);
     }
 }
 
@@ -166,7 +159,7 @@ void TileScheduler::DispatchTile(const TileCoord& coord) {
     RegionRequest req;
     GetRequestForTile(coord, req);
     int priority = CalculatePriority(coord);
-    m_pool->SubmitTile(m_currentPath, m_currentImageId, coord, req, priority);
+    m_pool->SubmitTile(m_currentPath, m_currentImageId, m_mmf, coord, req, priority);
 }
 
 void TileScheduler::OnTileComplete(TileCoord coord) {

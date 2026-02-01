@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "TileTypes.h"
+#include "MappedFile.h"
 #include <vector>
 #include <mutex>
 #include <optional>
@@ -21,7 +22,7 @@ public:
     /// <summary>
     /// Initialize for a new image.
     /// </summary>
-    void Reset(int originalWidth, int originalHeight, const std::wstring& path, size_t imageId);
+    void Reset(int originalWidth, int originalHeight, const std::wstring& path, size_t imageId, std::shared_ptr<MappedFile> mmf = nullptr);
 
     bool IsActive() const { return m_imageW > 0; }
     int GetWidth() const { return m_imageW; }
@@ -53,6 +54,7 @@ private:
     // Current Image Context
     std::wstring m_currentPath;
     size_t m_currentImageId = 0;
+    std::shared_ptr<MappedFile> m_mmf; // [Optimization] MMF State
     int m_imageW = 0;
     int m_imageH = 0;
 

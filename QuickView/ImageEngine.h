@@ -13,7 +13,9 @@
 #include <optional>
 #include "MemoryArena.h"
 #include "ImageLoader.h"
+#include "ImageLoader.h"
 #include "ImageTypes.h"    // [Direct D2D] RawImageFrame
+#include "MappedFile.h"    // [Optimization] MMF
 #include "EditState.h"
 #include "SystemInfo.h"  // [N+1] Hardware detection & auto-config
 #include "FileNavigator.h"  // [ImageID] For ImageID type and ComputePathHash
@@ -395,6 +397,9 @@ private:
     
     // [v9.0] Force Refresh Flag
     std::atomic<bool> m_forceRefresh{false};
+
+    // [Optimization] Zero-Copy Source
+    std::shared_ptr<QuickView::MappedFile> m_mmf;
 
 
 

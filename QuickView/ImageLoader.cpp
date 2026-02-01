@@ -15,6 +15,7 @@ static std::vector<uint8_t> ReadFileToVector(const std::wstring& path) {
 
 
 #include "ImageLoader.h"
+#include "MemoryArena.h" // [Fix] Include for QuantumArena definition
 #include "EditState.h" // For g_runtime
 #include "TileMemoryManager.h" // [Titan]
 // [Deep Cancel] Use low-level libjpeg API for scanline cancellation
@@ -235,6 +236,115 @@ static std::wstring DetectFormatFromContent(const uint8_t* magic, size_t size) {
     }
     
     return L"Unknown";
+}
+
+// [Optimization] Load full image from memory pointer (for MMF Preload)
+HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size, 
+                                            QuickView::RawImageFrame* outFrame,
+                                            class QuantumArena* arena,
+                                            std::wstring* pLoaderName) 
+{
+    if (!data || !size || !outFrame) return E_INVALIDARG;
+
+    // 1. Detect Format
+    std::wstring fmt = DetectFormatFromContent(data, size);
+
+    // 2. TurboJPEG Fast Path
+    if (fmt == L"JPEG") {
+        if (pLoaderName) *pLoaderName = L"TurboJPEG (MMF)";
+        
+        tjhandle handle = tj3Init(TJINIT_DECOMPRESS);
+        if (!handle) return E_FAIL;
+        
+        // [Fix] Use TurboJPEG v3 API correctly (Header -> Get)
+        if (tj3DecompressHeader(handle, data, size) != 0) {
+             tj3Destroy(handle);
+             return E_FAIL;
+        }
+
+        int width = tj3Get(handle, TJPARAM_JPEGWIDTH);
+        int height = tj3Get(handle, TJPARAM_JPEGHEIGHT);
+
+        // Allocate Pixel Buffer
+        outFrame->width = width;
+        outFrame->height = height;
+        outFrame->stride = QuickView::CalculateAlignedStride(width, 4);
+        outFrame->format = PixelFormat::BGRA8888;
+        outFrame->formatDetails = L"8-bit JPEG (MMF)";
+        
+        size_t bufSize = outFrame->GetBufferSize();
+        
+        if (arena) {
+            // [Fix] Use Allocate instead of Alloc
+            outFrame->pixels = (uint8_t*)arena->Allocate(bufSize, 64);
+            outFrame->memoryDeleter = nullptr; // Arena owned
+        } else {
+             outFrame->pixels = (uint8_t*)_aligned_malloc(bufSize, 64);
+             outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+        }
+        
+        if (!outFrame->pixels) {
+            tj3Destroy(handle);
+            return E_OUTOFMEMORY;
+        }
+        
+        // Decompress
+        // NOTE: This will trigger PAGE FAULTS for the entire file sequentially!
+        // This effectively "Warms Up" the OS Cache for random access later.
+        if (tj3Decompress8(handle, data, size, outFrame->pixels, outFrame->stride, TJPF_BGRA) != 0) {
+             tj3Destroy(handle);
+             return E_FAIL;
+        }
+        
+        tj3Destroy(handle);
+        return S_OK;
+    }
+    
+    // For other formats (WIC), we need a Stream.
+    // Create IStream from Memory
+    ComPtr<IStream> stream = SHCreateMemStream(data, (UINT)size);
+    if (!stream) return E_FAIL;
+    
+    // Use WIC
+    if (pLoaderName) *pLoaderName = L"WIC (MMF)";
+    
+    // Create Decoder
+    ComPtr<IWICBitmapDecoder> decoder;
+    if (!m_wicFactory) return E_FAIL;
+    
+    HRESULT hr = m_wicFactory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder);
+    if (FAILED(hr)) return hr;
+    
+    ComPtr<IWICBitmapFrameDecode> frame;
+    hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr)) return hr;
+    
+    // Convert to BitmapSource
+    ComPtr<IWICBitmapSource> source;
+    WICConvertBitmapSource(GUID_WICPixelFormat32bppPBGRA, frame.Get(), &source);
+    if (!source) source = frame; // Fallback
+    
+    UINT w, h;
+    source->GetSize(&w, &h);
+    outFrame->width = w;
+    outFrame->height = h;
+    outFrame->stride = QuickView::CalculateAlignedStride(w, 4);
+    outFrame->format = PixelFormat::BGRA8888;
+    outFrame->formatDetails = L"WIC Cache";
+    
+    size_t bufSize = outFrame->GetBufferSize();
+    if (arena) {
+        outFrame->pixels = (uint8_t*)arena->Allocate(bufSize, 64);
+        outFrame->memoryDeleter = nullptr; 
+    } else {
+            outFrame->pixels = (uint8_t*)_aligned_malloc(bufSize, 64);
+            outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+    }
+    
+    if (!outFrame->pixels) return E_OUTOFMEMORY;
+    
+    hr = source->CopyPixels(nullptr, outFrame->stride, (UINT)bufSize, outFrame->pixels);
+    return hr;
 }
 
 // [v9.2] Redesigned Format Detection: Extension-First for RAW
