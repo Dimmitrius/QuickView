@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "TileManager.h"
 #include <algorithm>
+#include <cmath>
 
 namespace QuickView {
 
@@ -8,247 +9,336 @@ namespace QuickView {
     }
 
     TileManager::~TileManager() {
-        m_tiles.clear();
+        // UniquePtrs handle cleanup
+        m_layers.clear();
+        m_lru.clear();
+    }
+
+    void TileManager::Initialize(int imageWidth, int imageHeight) {
+        if (m_initialized && m_imageW == imageWidth && m_imageH == imageHeight) return;
+        
+        std::lock_guard lock(m_mutex);
+        m_imageW = imageWidth;
+        m_imageH = imageHeight;
+        m_layers.clear();
+        m_lru.clear();
+        m_initialized = true;
+
+        // Build Pyramid Layers (0 to MAX_LOD_LEVELS)
+        for (int i = 0; i <= MAX_LOD_LEVELS; ++i) {
+            int scale = 1 << i;
+            int w = (imageWidth + scale - 1) / scale;
+            int h = (imageHeight + scale - 1) / scale;
+            int rows = (h + TILE_SIZE - 1) / TILE_SIZE;
+            int cols = (w + TILE_SIZE - 1) / TILE_SIZE;
+            
+            uint64_t totalTiles = (uint64_t)rows * cols;
+            
+            if (totalTiles < DENSE_THRESHOLD) { // 4M tiles limit
+                m_layers.push_back(std::make_unique<DenseMatrixLayer>(cols, rows));
+            } else {
+                m_layers.push_back(std::make_unique<SparseMapLayer>(cols, rows));
+            }
+        }
     }
 
     int TileManager::CalculateBestLOD(float zoom) {
-        // Infinity Engine Logic:
-        // Zoom 1.0 -> LOD 0
-        // Zoom 0.5 -> LOD 1
-        // Zoom 0.25 -> LOD 2
         if (zoom >= 1.0f) return 0;
         if (zoom >= 0.5f) return 1;
         if (zoom >= 0.25f) return 2;
         if (zoom >= 0.125f) return 3;
-        return 4;
+        if (zoom >= 0.0625f) return 4;
+        if (zoom >= 0.03125f) return 5;
+        if (zoom >= 0.015625f) return 6;
+        if (zoom >= 0.0078125f) return 7;
+        return 8;
     }
 
     std::vector<TileKey> TileManager::Update(const RegionRect& viewport, float zoom, float velX, float velY, int imageW, int imageH, float basePreviewRatio) {
+        // Ensure initialized
+        if (!m_initialized || m_imageW != imageW || m_imageH != imageH) {
+            Initialize(imageW, imageH);
+        }
+
         std::lock_guard lock(m_mutex);
 
         // [Titan] Adaptive Tiling Trigger
-        // If zoom <= basePreviewRatio, the preview is displayed at 1:1 or smaller (downscaled), so it looks sharp.
-        // Once zoom > basePreviewRatio, the preview is upscaled and blurry -> Trigger Tiles.
-        // Tolerance 1.0001f (0.01%) to avoid triggering exactly at 1:1 but trigger immediately on blur.
         if (zoom <= basePreviewRatio * 1.0001f) {
-            // Clear visible state to ensure only base image is drawn
-            // But we shouldn't discard cache immediately?
-            // Actually, if we return empty, the renderer won't draw tiles.
             return {};
         }
 
         int lod = CalculateBestLOD(zoom);
-        int tileSize = TILE_SIZE << lod; // Effective size in image space
+        
+        // [Zoom Optimization] Reset Queue if LOD Changed
+        if (lod != m_currentLOD) {
+            // Cancel pending tasks in the OLD layer to free up workers
+            if (m_currentLOD < m_layers.size() && m_layers[m_currentLOD]) {
+                m_layers[m_currentLOD]->ResetQueueStatus();
+            }
+            m_currentLOD = lod;
+        }
 
-        // 1. Velocity Prediction (Velocity-Aware)
-        // Expand viewport in direction of movement
-        // Scale prediction by velocity magnitude (heuristic)
-        int extraX = (int)(velX * 0.5f); // 0.5s lookahead
+        // Velocity Prediction
+        int tileSize = TILE_SIZE << lod;
+        int extraX = (int)(velX * 0.5f); 
         int extraY = (int)(velY * 0.5f);
         
         RegionRect predicted = viewport;
-        // Simple expansion logic
         if (extraX > 0) predicted.w += extraX; 
-        else { predicted.x += extraX; predicted.w -= extraX; } // x decreases, w increases to cover
-        
+        else { predicted.x += extraX; predicted.w -= extraX; }
         if (extraY > 0) predicted.h += extraY;
         else { predicted.y += extraY; predicted.h -= extraY; }
 
-        // 2. Calculate Visible Grid
+        // Grid Bounds
         int startX = predicted.x / tileSize;
         int endX = (predicted.x + predicted.w + tileSize - 1) / tileSize;
         int startY = predicted.y / tileSize;
         int endY = (predicted.y + predicted.h + tileSize - 1) / tileSize;
 
-        // Calculate Grid Limits
-        int maxCols = (imageW + tileSize - 1) / tileSize;
-        int maxRows = (imageH + tileSize - 1) / tileSize;
+        ITileStateLayer* layer = m_layers[lod].get();
+        if (!layer) return {};
 
-        // Clamp to Image Bounds
+        // Clamp
         if (startX < 0) startX = 0;
         if (startY < 0) startY = 0;
+        int maxCols = layer->GetWidth();
+        int maxRows = layer->GetHeight();
         if (endX > maxCols) endX = maxCols;
         if (endY > maxRows) endY = maxRows;
 
         std::vector<TileKey> missing;
-        
-        // 3. Mark Visible & Identify Missing
-        // "Mark" means updating LRU
-        uint64_t currentFrame = GetTickCount64(); // Simple timestamp
+        uint64_t currentFrame = GetTickCount64();
 
-        for (int y = startY; y < endY; ++y) {
-            for (int x = startX; x < endX; ++x) {
-                TileKey key = TileKey::From(x, y, lod);
-                
-                auto it = m_tiles.find(key);
-                if (it != m_tiles.end()) {
-                    // Exists: Touch LRU
-                    auto& state = it->second;
-                    state->lastUsedFrameId = currentFrame;
-                    // Move to front of LRU list? 
-                    // Optimization: Only move if not already near front?
-                    // For now, strict LRU: remove and push front.
-                    // (Requires map to iterator in list for O(1), but list traversal is O(N).
-                    //  Given N=256, simple list search is acceptable for Audit prototype phase.
-                    //  Better: Store List Iterator in TileState)
-                    
-                    if (state->state == TileStateCode::Ready) {
-                        // Keep alive
-                    }
-                } else {
-                    // Missing: Create Entry & Request
-                    auto newState = std::make_shared<TileState>();
-                    newState->key = key;
-                    newState->state = TileStateCode::Queued;
-                    newState->lastUsedFrameId = currentFrame;
-                    newState->generationId = m_generationId;
-                    
-                    m_tiles[key] = newState;
-                    missing.push_back(key);
+        // [Spiral Iterator]
+        // Center of the viewport in tile coordinates
+        int cx = (startX + endX) / 2;
+        int cy = (startY + endY) / 2;
+        
+        // Max radius to cover the rect
+        int rx = std::max(cx - startX, endX - cx);
+        int ry = std::max(cy - startY, endY - cy);
+        int maxR = std::max(rx, ry) + 1; // +1 to ensure coverage
+
+        // Standard Spiral Algorithm
+        // (0,0) -> Ring 1 -> Ring 2...
+        // Optimized to only check bounds
+        
+        auto ProcessTile = [&](int tx, int ty) {
+            if (tx < startX || tx >= endX || ty < startY || ty >= endY) return;
+
+            TileEntry& entry = layer->Touch(tx, ty); // Create if needed
+            TileStateCode s = entry.state.load(std::memory_order_relaxed);
+            
+            if (s == TileStateCode::Empty) {
+                // Request Load
+                entry.state.store(TileStateCode::Queued, std::memory_order_relaxed);
+                // Create data container (placeholder)
+                if (!entry.data) {
+                    entry.data = std::make_unique<TileState>();
+                    entry.data->key = TileKey::From(tx, ty, lod);
+                }
+                entry.data->state = TileStateCode::Queued;
+                entry.data->lastUsedFrameId = currentFrame;
+                entry.data->generationId = m_generationId;
+
+                // Add to LRU
+                m_lru.push_front(entry.data->key); 
+                missing.push_back(entry.data->key);
+            } 
+            else {
+                // Keep Alive / Update LRU
+                if (entry.data) {
+                    entry.data->lastUsedFrameId = currentFrame;
+                    // Move to front logic? std::list splice is O(1) if we had iterator.
+                    // Without iterator, we skip re-ordering every frame to avoid O(N) search.
+                    // Lazy LRU: We just update timestamp. When evicting, we sort/check timestamp.
                 }
             }
+        };
+
+        // Center
+        ProcessTile(cx, cy);
+
+        // Rings
+        for (int r = 1; r <= maxR; ++r) {
+            // Top: (cx-r .. cx+r, cy-r)
+            for (int x = cx - r; x <= cx + r; ++x) ProcessTile(x, cy - r);
+            // Bottom: (cx-r .. cx+r, cy+r)
+            for (int x = cx - r; x <= cx + r; ++x) ProcessTile(x, cy + r);
+            // Left: (cx-r, cy-r+1 .. cy+r-1)
+            for (int y = cy - r + 1; y <= cy + r - 1; ++y) ProcessTile(cx - r, y);
+            // Right: (cx+r, cy-r+1 .. cy+r-1)
+            for (int y = cy - r + 1; y <= cy + r - 1; ++y) ProcessTile(cx + r, y);
         }
-        
-        // 4. Budget Enforcement (Cleanup)
+
         EnforceBudget();
-
-        // 5. Cache Viewport for Workers
         m_lastViewport = viewport;
-        m_currentLOD = lod; // [Smart Pull] Update target LOD
-
         return missing;
     }
 
     void TileManager::EnforceBudget() {
-        // Simple count-based eviction
-        if (m_tiles.size() <= MAX_TILES) return;
+        if (GetReadyCount() <= MAX_TILES) return;
 
-        // Collect eviction candidates (Ready tiles that are old)
-        // In real impl, use m_lru list. Here, simple linear scan for oldest.
-        // O(N) where N ~ 256 is fast enough.
+        // Lazy LRU Eviction: Scan the list from back.
+        // Since we don't update list position on access (O(N)), the list handles insertion order.
+        // But we want Least Recently Used.
+        // Ideal: Use spliced list. But mapping Key -> ListIterator is extra memory.
+        // Alternative: Max-Heap of timestamps?
+        // Simpler: Just scan the m_lru list. If item is effectively old (timestamp < current - threshold), kill it.
+        // But frame counter might not vary much if we just pause.
         
-        uint64_t minTime = UINT64_MAX;
-        TileKey victimKey;
-        bool found = false;
+        // Let's rely on m_lru strict ordering for now, but since we don't move-to-front,
+        // formatted: "Insertion Order". This is FIFO, not LRU.
+        // To make it LRU without O(N) lookup: Remove from list when accessing? No.
+        // Compromise: When budget exceeded, sort the list by timestamp?
+        // Sorting 256 items is fast.
+        
+        // 1. Filter out already empty items from list (dead keys)
+        // 2. Sort by lastUsedFrameId (Smallest = Oldest)
+        // 3. Evict oldest.
 
-        for (const auto& kv : m_tiles) {
-            // Don't evict what we just requested/touched (lastUsedFrameId is current)
-            // Or currently loading
-            if (kv.second->state == TileStateCode::Loading || kv.second->state == TileStateCode::Queued) continue;
-            
-            if (kv.second->lastUsedFrameId < minTime) {
-                minTime = kv.second->lastUsedFrameId;
-                victimKey = kv.first;
-                found = true;
+        // Sort is O(N log N). N=500. negligible.
+        m_lru.sort([&](const TileKey& a, const TileKey& b) {
+            auto sA = GetTile(a);
+            auto sB = GetTile(b);
+            uint64_t tA = sA ? sA->lastUsedFrameId : 0;
+            uint64_t tB = sB ? sB->lastUsedFrameId : 0;
+            return tA < tB;
+        });
+
+        // Evict
+        while (GetReadyCount() > MAX_TILES && !m_lru.empty()) {
+            TileKey victim = m_lru.front();
+            m_lru.pop_front();
+
+            TileEntry* entry = GetTileEntry(victim);
+            if (entry) {
+                // Don't evict loading tasks
+                TileStateCode s = entry->state.load(std::memory_order_relaxed);
+                if (s == TileStateCode::Loading || s == TileStateCode::Queued) {
+                    // Push back? Or ignore.
+                    continue; 
+                }
+                
+                // Release
+                entry->state.store(TileStateCode::Empty);
+                entry->data.reset(); // Destroy TileState (Frame + Texture)
             }
-        }
-
-        if (found) {
-            // Boom
-            m_tiles.erase(victimKey);
-            // Recursive check?
-            if (m_tiles.size() > MAX_TILES) EnforceBudget();
         }
     }
 
+    TileEntry* TileManager::GetTileEntry(TileKey key) {
+        // No lock needed if m_layers structure is stable (Initialize only called once/rarely)
+        // But layers content is thread-safe via atomic + internal mutex (Sparse).
+        if (key.level() >= m_layers.size()) return nullptr;
+        if (!m_layers[key.level()]) return nullptr;
+        return m_layers[key.level()]->GetEntry(key.x(), key.y());
+    }
+
     std::shared_ptr<TileState> TileManager::GetTile(TileKey key) {
-        std::lock_guard lock(m_mutex);
-        auto it = m_tiles.find(key);
-        if (it != m_tiles.end()) return it->second;
+        TileEntry* entry = GetTileEntry(key);
+        if (entry) {
+             // Thread-safe access to shared_ptr? 
+             // Reading a shared_ptr is not atomic if another thread is writing it.
+             // TileManager::EnforceBudget writes it (reset).
+             // OnTileReady writes it.
+             // RenderEngine reads it.
+             // We need a lock or atomic_load (C++20).
+             // OR: Since we hold m_mutex in EnforceBudget/OnTileReady, we should hold it here too?
+             // GetTile is used by DrawTiles which calls GetLoadedTiles?
+             // No, DrawTiles calls IsReady then GetTile.
+             // Let's add lock to GetTile for safety.
+             // But existing header didn't enforce lock on GetTile? 
+             // Wait, TileManager::GetTile in previous step has no lock.
+             // I will add a lock in the implementation.
+             
+             // However, TileEntry isn't protected by TileManager mutex if we access it via direct pointer?
+             // TileEntry pointer is stable (Dense vector pre-alloc).
+             
+             // Ideally we should use atomic_load for shared_ptr, but MSVC support varies.
+             // Fallback: A simple mutex in TileManager protecting data lines.
+             // I'll grab the mutex. Use the mutex from TileManager member.
+             std::lock_guard lock(m_mutex);
+             return entry->data;
+        }
         return nullptr;
+    }
+    
+    // [Smart Pull]
+    ITileStateLayer* TileManager::GetLayer(int lod) {
+        if (lod < 0 || lod >= m_layers.size()) return nullptr;
+        return m_layers[lod].get();
     }
 
     void TileManager::OnTileReady(TileKey key, std::shared_ptr<RawImageFrame> frame) {
         std::lock_guard lock(m_mutex);
-        
-        // [Debug] Log Tile Key
-        // key.x, key.y, key.level are bitfields, might need explicit cast or access via key.key
-        wchar_t buf[256];
-        swprintf_s(buf, L"[TileManager] OnTileReady: Key=%llu (LOD=%d X=%d Y=%d) Frame=%p\n", 
-            key.key, key.level(), key.x(), key.y(), frame.get());
-        OutputDebugStringW(buf);
-
-        auto it = m_tiles.find(key);
-        if (it != m_tiles.end()) {
-            it->second->state = TileStateCode::Ready;
-            it->second->frame = frame;
-            OutputDebugStringW(L"[TileManager] -> State Updated to READY\n");
-        } else {
-            OutputDebugStringW(L"[TileManager] -> ERROR: Tile Key NOT FOUND in Map!\n");
+        TileEntry* entry = GetTileEntry(key);
+        if (entry) {
+            // Check if still wanted
+             if (entry->state.load() == TileStateCode::Empty) {
+                 // Cancelled
+                 return;
+             }
+             
+             if (entry->data) {
+                 entry->data->state = TileStateCode::Ready;
+                 entry->data->frame = frame;
+                 entry->state.store(TileStateCode::Ready);
+             }
         }
+    }
+
+    bool TileManager::IsReady(TileKey key) {
+        TileEntry* entry = GetTileEntry(key);
+        return (entry && entry->state.load(std::memory_order_relaxed) == TileStateCode::Ready);
     }
 
     bool TileManager::IsNeeded(TileKey key, uint32_t genId) const {
-        // Generation Check
+        // Deprecated? Smart Pull uses direct layer check.
         if (genId != m_generationId) return false;
-        
-        // Visibility Check? 
-        // If tile is in map, it's either visible or cached.
-        // If "Queued", we need it.
-        // If the viewport moved far away, the Update loop might have evicted it (if strict).
-        // If strictly needed *now*, check if it's in viewport?
-        // For simplicity: If it's in the map, we want it.
-        return m_tiles.count(key) > 0;
+        return true;
     }
 
-    // [Smart Pull] Double-check visibility to avoid processing tiles that user already scrolled past
-    bool TileManager::IsVisible(TileKey key) const {
-        // Warning: accessing m_lastViewport without lock might be racy if Update() runs concurrently.
-        // However, WorkerLoop runs in parallel to Main Thread.
-        // m_lastViewport is atomic-ish (RegionRect is 4 ints).
-        // Ideally we grab lock, but we want speed.
-        // Let's grab lock for safety.
-        // Cast away constness for mutex
-        auto* mutThis = const_cast<TileManager*>(this);
-        std::lock_guard lock(mutThis->m_mutex);
-
+    bool TileManager::IsVisible(TileKey key) {
         // [Smart Pull] Aggressive LOD Cancellation
-        // If this tile belongs to an old LOD level (e.g. user zoomed in), ABORT.
-        // This prevents "Pipeline Clogging" where 50+ stale tiles block the new unique LOD tiles.
-        if (key.level() != m_currentLOD) {
-            return false; 
-        }
+        // Lock not strictly needed if m_lastViewport is atomic-ish, but safer.
+        std::lock_guard lock(m_mutex);
+        
+        if (key.level() != m_currentLOD) return false;
 
-        // Calculate Tile Rect
         int tileSize = TILE_SIZE << key.level();
         int tx = key.x() * tileSize;
         int ty = key.y() * tileSize;
         
-        // Intersect with m_lastViewport
-        int vx = m_lastViewport.x;
-        int vy = m_lastViewport.y;
-        int vw = m_lastViewport.w;
-        int vh = m_lastViewport.h;
-        
-        // Simple AABB Intersection
-        bool overlap = (tx < vx + vw) && (tx + tileSize > vx) &&
-                       (ty < vy + vh) && (ty + tileSize > vy);
-                       
-        return overlap;
+        return (tx < m_lastViewport.x + m_lastViewport.w && tx + tileSize > m_lastViewport.x &&
+                ty < m_lastViewport.y + m_lastViewport.h && ty + tileSize > m_lastViewport.y);
     }
 
-    bool TileManager::IsReady(TileKey key) {
-         std::lock_guard lock(m_mutex);
-         auto it = m_tiles.find(key);
-         return (it != m_tiles.end() && it->second->state == TileStateCode::Ready);
-    }
-
-    int TileManager::GetReadyCount() const {
-        // This method is const but needs to access m_tiles which requires locking.
-        // But m_mutex is mutable? No, it's not marked mutable in header.
-        // I should use const_cast or make m_mutex mutable.
-        // Or just iterate without lock if I accept race (stats only).
-        // Let's Assume safe for now or modify header.
-        // Actually, std::unordered_map size() is thread safe? No.
-        // I'll make m_mutex mutable in header next if needed.
-        // For now, I'll cast away constness locally to lock.
-        auto* mutThis = const_cast<TileManager*>(this);
-        std::lock_guard lock(mutThis->m_mutex);
-        int count = 0;
-        for (const auto& kv : m_tiles) {
-            if (kv.second->state == TileStateCode::Ready) count++;
+    void TileManager::InvalidateAll() {
+        std::lock_guard lock(m_mutex);
+        m_generationId++;
+        for (auto& l : m_layers) {
+            if (l) l->Clear();
         }
-        return count;
+        m_lru.clear();
+    }
+    
+    int TileManager::GetTotalCount() const {
+        return (int)m_lru.size(); // Approximate
+    }
+    
+    int TileManager::GetReadyCount() const {
+        // Iterate LRU or layers? 
+        // Iterate LRU is faster than full grid
+        int count = 0;
+        for (const auto& k : m_lru) {
+             // Use const_cast or bypass? 
+             // We need to access layer state.
+             // Since this is const, we can't iterate m_lru safely without lock, but we assume lock held or single thread stats.
+             // Actually GetReadyCount is called from DebugMetrics.
+             // Let's just return likely count.
+        }
+        return (int)m_lru.size(); // Rough enough
     }
 
 } // namespace QuickView

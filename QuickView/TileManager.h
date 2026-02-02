@@ -1,9 +1,10 @@
 #pragma once
 #include "pch.h"
 #include "TileTypes.h"
+#include "TileLayer.h" // [Hybrid Pyramid]
 #include "MappedFile.h"
-#include <unordered_map>
-#include <list>
+#include <vector>
+#include <memory>
 #include <mutex>
 
 namespace QuickView {
@@ -12,62 +13,101 @@ namespace QuickView {
     // Handles Lifecycle: Visible -> Ready -> Cache -> Evicted
     class TileManager {
     public:
-        // Budget: 256MB VRAM (Texture Memory)
-        // 512x512x4 bytes = 1MB per tile.
-        // Max capacity ~256 tiles.
+        // Budget: 256MB VRAM
         static constexpr size_t VRAM_BUDGET_MB = 256;
         static constexpr size_t BYTES_PER_TILE = TILE_SIZE * TILE_SIZE * 4;
         static constexpr size_t MAX_TILES = (VRAM_BUDGET_MB * 1024 * 1024) / BYTES_PER_TILE;
+        static constexpr size_t DENSE_THRESHOLD = 4 * 1024 * 1024; // [Hybrid Pyramid]
 
         TileManager();
         ~TileManager();
 
-        // Core Update Loop (Call every frame)
-        // Returns list of keys that NEED to be loaded.
+        // [Hybrid Pyramid] Initialize layers based on image dimensions
+        void Initialize(int imageWidth, int imageHeight);
+
+        // Core Update Loop
         std::vector<TileKey> Update(const RegionRect& viewport, float zoom, float velX, float velY, int imageW, int imageH, float basePreviewRatio);
 
-        // Tile Access (for Renderer)
+        // Tile Access
+        // Returns loaded TileState if exists, otherwise nullptr
+        TileEntry* GetTileEntry(TileKey key); 
         std::shared_ptr<TileState> GetTile(TileKey key);
-        
-        // Completion Callback (Worker calls this)
+
+        // [Smart Pull] Access Layer directly for Worker checks
+        ITileStateLayer* GetLayer(int lod);
+
+        // Completion Callback
         void OnTileReady(TileKey key, std::shared_ptr<RawImageFrame> frame);
 
         // State Query
         bool IsReady(TileKey key);
         bool IsNeeded(TileKey key, uint32_t genId) const;
-        bool IsVisible(TileKey key) const; // [Smart Pull]
+        bool IsVisible(TileKey key); // [Smart Pull] Checks viewport intersection
 
-        // Current Generation (increments on jump/cut)
+        // Stats & Logic
         uint32_t GetGenerationID() const { return m_generationId; }
-        void InvalidateAll() { m_generationId++; m_tiles.clear(); m_lru.clear(); }
+        void InvalidateAll();
+        int CalculateBestLOD(float zoom);
+        
+        // [Refactor] Replacement for GetLoadedTiles
+        // Allows CompositionEngine to iterate potentially visible tiles without exposing internal structures
+        template<typename Func>
+        void ForEachReadyTile(const RegionRect& rect, Func func) {
+            std::lock_guard lock(m_mutex);
+            // Iterate all layers
+            for (int l = 0; l < (int)m_layers.size(); ++l) {
+                if (!m_layers[l]) continue;
+                
+                int tileSize = TILE_SIZE << l;
+                int startX = rect.x / tileSize;
+                int startY = rect.y / tileSize;
+                int endX = (rect.x + rect.w + tileSize - 1) / tileSize;
+                int endY = (rect.y + rect.h + tileSize - 1) / tileSize;
 
-        // Stats
-        int GetTotalCount() const { return (int)m_tiles.size(); }
+                // Clamp
+                if (startX < 0) startX = 0;
+                if (startY < 0) startY = 0;
+                int w = m_layers[l]->GetWidth();
+                int h = m_layers[l]->GetHeight();
+                if (endX > w) endX = w;
+                if (endY > h) endY = h;
+
+                for (int y = startY; y < endY; ++y) {
+                    for (int x = startX; x < endX; ++x) {
+                         TileEntry* entry = m_layers[l]->GetEntry(x, y);
+                         if (entry && entry->state.load(std::memory_order_relaxed) == TileStateCode::Ready) {
+                             if (entry->data) {
+                                 func(TileKey::From(x, y, l), entry->data.get());
+                             }
+                         }
+                    }
+                }
+            }
+        }
+        
+        // Helper to get total count
+        int GetTotalCount() const;
         int GetReadyCount() const;
 
-    public:
-        // Identify best LOD level for current zoom
-        int CalculateBestLOD(float zoom);
-
-        // [Access] Get loaded tiles map for rendering
-        const std::unordered_map<TileKey, std::shared_ptr<TileState>, TileKey::Hash>& GetLoadedTiles() const {
-             return m_tiles;
-        }
-
     private:
-        // Evict tiles if over budget
         void EnforceBudget();
 
-        // Data
-        std::unordered_map<TileKey, std::shared_ptr<TileState>, TileKey::Hash> m_tiles;
-        std::list<TileKey> m_lru; // Front = Newest, Back = Oldest
+        // [Hybrid Pyramid] Layers
+        std::vector<std::unique_ptr<ITileStateLayer>> m_layers;
+        
+        // LRU Tracking (Keep a separate list for eviction?)
+        // If we use DenseLayer, we don't have a map to iterate for LRU.
+        // We need a separate structure to track "Active/Loaded" tiles for LRU.
+        // Linked List of Key?
+        std::list<TileKey> m_lru; 
         std::mutex m_mutex;
         
         uint32_t m_generationId = 1;
-        
-        // Viewport caching for diffing
         RegionRect m_lastViewport = {};
-        int m_currentLOD = 0; // [Smart Pull] Target LOD for aggressive cancellation
+        int m_currentLOD = 0;
+        
+        bool m_initialized = false;
+        int m_imageW = 0, m_imageH = 0;
     };
 
 } // namespace QuickView

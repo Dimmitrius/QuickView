@@ -169,32 +169,35 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
     // Note: User interacts with m_imageA/B. Smart Dispatch sets 'isTitan'.
     ImageLayer* pLayer = (m_activeLayerIndex == 0) ? &m_imageA : &m_imageB;
 
-
     if (!pLayer->isTitan || !pLayer->virtualSurface) return S_FALSE; 
     
-    auto& tiles = tileManager->GetLoadedTiles();
     HRESULT hr = S_OK;
     int updateCount = 0;
     
-    // [Debug] Log Entry (Reduced Spam)
-    // wchar_t logBuf[256];
-    // swprintf_s(logBuf, L"[CompEngine] UpdateVirtualTiles: %zu tiles loaded. Titan=%d Surf=%p\n", 
-    //    tiles.size(), pLayer->isTitan, pLayer->virtualSurface.Get());
-    // OutputDebugStringW(logBuf);
-    
-    // Create Context if needed (reuse one context for batch)
-    // Note: DComp BeginDraw returns A NEW SURFACE every time!
-    // We can reuse the D2D DeviceContext object, but must reset Target.
+    // Define Iteration Area
+    QuickView::RegionRect scanArea;
+    if (visibleRect) {
+        // Expand slightly for smooth scrolling
+        int padding = QuickView::TILE_SIZE * 2;
+        scanArea.x = (int)visibleRect->left - padding;
+        scanArea.y = (int)visibleRect->top - padding;
+        scanArea.w = (int)(visibleRect->right - visibleRect->left) + padding * 2;
+        scanArea.h = (int)(visibleRect->bottom - visibleRect->top) + padding * 2;
+    } else {
+        // Full update (rare, likely on init) - iterate whole layer bounds?
+        // TileManager clamp handles max size, we just need start 0 and HUGE size.
+        scanArea = { 0, 0, 1000000, 1000000 }; 
+    }
+
+    // Create Context if needed
     if (!m_pendingContext) {
         m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_pendingContext);
     }
 
-    for (auto& pair : tiles) {
-        auto& key = pair.first;
-        auto& tile = pair.second;
+    tileManager->ForEachReadyTile(scanArea, [&](const QuickView::TileKey& key, QuickView::TileState* tile) {
         
         // Only draw available tiles
-        if (!tile || !tile->frame || !tile->frame->pixels) continue;
+        if (!tile || !tile->frame || !tile->frame->pixels) return;
         
         // Calculate Rect on Virtual Surface (Image Space)
         int bitmapSize = QuickView::TILE_SIZE; // 512 (Physical Bitmap Size)
@@ -206,60 +209,33 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         
         RECT updateRect = { pixelX, pixelY, pixelX + virtualSize, pixelY + virtualSize };
         
-    // [Fix] Clip against Surface Bounds to prevent E_INVALIDARG
+        // [Fix] Clip against Surface Bounds
         if (updateRect.right > (LONG)pLayer->width) updateRect.right = (LONG)pLayer->width;
         if (updateRect.bottom > (LONG)pLayer->height) updateRect.bottom = (LONG)pLayer->height;
         
-        // Skip if empty (fully clipped)
-        if (updateRect.left >= updateRect.right || updateRect.top >= updateRect.bottom) continue;
+        // Skip if empty
+        if (updateRect.left >= updateRect.right || updateRect.top >= updateRect.bottom) return;
 
-        // [Fix] Viewport Culling
-        // If a visibleRect is provided, skip tiles that do not intersect it.
-        // This is critical for 100% zoom performance where thousands of tiles might be loaded but not visible.
+        // [Fix] Viewport Culling (Double Check)
+        // ForEachReadyTile iterates the grid, but let's ensure intersection exact logic
         if (visibleRect) {
-            RECT visRectVal = {
-                (LONG)visibleRect->left, (LONG)visibleRect->top,
-                (LONG)visibleRect->right, (LONG)visibleRect->bottom
-            };
-            
-            // Allow slight padding for smooth scrolling (2 tile sizes for safety)
-            int padding = QuickView::TILE_SIZE * 2;
-            visRectVal.left -= padding; 
-            visRectVal.top -= padding;
-            visRectVal.right += padding;
-            visRectVal.bottom += padding;
-
-            RECT intersection;
-            bool intersects = IntersectRect(&intersection, &updateRect, &visRectVal);
-            
-
-
-            if (!intersects) {
-                continue; // Skip invisible tile
-            }
+             // Already culled by ForEachReadyTile roughly, but exact pixel-perfect intersection:
+             if (pixelX >= visibleRect->right || pixelX + virtualSize <= visibleRect->left ||
+                 pixelY >= visibleRect->bottom || pixelY + virtualSize <= visibleRect->top) {
+                 return;
+             }
         }
         
-        if (tile->state != QuickView::TileStateCode::Ready || tile->frame == nullptr) {
-            continue; 
-        }
+        if (tile->state != QuickView::TileStateCode::Ready) return;
 
         // [Optim] If already on Virtual Surface, don't redraw unless invalidated.
-        // This prevents infinite BeginDraw/EndDraw loops which overwhelm the DComp service.
-        if (tile->uploaded) {
-            continue;
-        }
+        if (tile->uploaded) return;
 
         ComPtr<IDXGISurface> dxgiSurf;
         POINT offset;
-        hr = pLayer->virtualSurface->BeginDraw(&updateRect, IID_PPV_ARGS(&dxgiSurf), &offset);
-        if (hr == DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED) continue; 
-        if (FAILED(hr)) {
-             // [Debug Targeted]
-             if (key.level() == 0 && key.x() == 21 && key.y() == 19) {
-                 wchar_t err[64]; swprintf_s(err, L"[TileDebug] (21,19) BeginDraw FAILED 0x%X\n", hr); OutputDebugStringW(err);
-             }
-             continue; 
-        } 
+        HRESULT hrDraw = pLayer->virtualSurface->BeginDraw(&updateRect, IID_PPV_ARGS(&dxgiSurf), &offset);
+        if (hrDraw == DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED) return; 
+        if (FAILED(hrDraw)) return; 
         
         // Setup D2D Target
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
@@ -272,24 +248,12 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         m_pendingContext->SetTarget(target.Get());
         m_pendingContext->BeginDraw();
         
-        // [Coordinate System Fix] 
-        // We are drawing into the DXGI Surface (Backing Store).
-        // 'offset' is where the updateRect in Virtual Space maps to in the Backing Store.
-        // We draw at (pixelX, pixelY) in Virtual Space coordinates (destRect in DrawBitmap).
-        // We need to shift these BACK to the Backing Store origin.
-        // Transform T:  pixelX + Tx = offset.x  =>  Tx = offset.x - pixelX
-        // [Fix] BeginDraw can modify updateRect (clipping). 
-        // We map our Logical Coordinates (pixelX, pixelY) to the Surface Local Coordinates (0,0).
-        // Since the Surface (0,0) corresponds to updateRect.topLeft, the transform is:
-        // Local = Logical - updateRect.topLeft
         m_pendingContext->SetTransform(D2D1::Matrix3x2F::Translation(
             (float)(offset.x - updateRect.left), 
             (float)(offset.y - updateRect.top)
         ));
         
         // Upload Pixels
-        // CreateBitmap (v1.0) uses old properties
-        // [Fix] Use IGNORE alpha mode. TurboJPEG/Titan decoding might leave Alpha byte 0 or undefined.
         D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
              D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
         );
@@ -303,33 +267,20 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         
         m_pendingContext->DrawBitmap(srcBitmap.Get(), destRect);
         
-        // [Fix] Only mark as uploaded if we drew the FULL tile.
-        // If BeginDraw returned a smaller surface (clipped), we must redraw later when the rest is visible.
         DXGI_SURFACE_DESC surfDesc;
         dxgiSurf->GetDesc(&surfDesc);
         int reqW = updateRect.right - updateRect.left;
         int reqH = updateRect.bottom - updateRect.top;
         
-        // Allow for minor mismatches? No, exact match expected for full update.
         if (surfDesc.Width >= (UINT)reqW && surfDesc.Height >= (UINT)reqH) {
              tile->uploaded = true;
         }
-        // Debug Log (Requested by User)
-        /*
-        {
-            wchar_t buf[256];
-            swprintf_s(buf, L"[TileDebug] DrawTile: Virt(%d,%d) -> Phys(%ld,%ld)\n", pixelX, pixelY, offset.x, offset.y);
-            OutputDebugStringW(buf);
-        }
-        */
 
         if (showDebugGrid) {
              ComPtr<ID2D1SolidColorBrush> brush;
-             // Tint Green to allow verification of "Titan Layer" vs "Base Layer"
              m_pendingContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Green, 0.2f), &brush);
              m_pendingContext->FillRectangle(destRect, brush.Get());
              
-             // Border
              ComPtr<ID2D1SolidColorBrush> border;
              m_pendingContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Lime, 1.0f), &border);
              m_pendingContext->DrawRectangle(destRect, border.Get(), 4.0f);
@@ -339,7 +290,7 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         pLayer->virtualSurface->EndDraw();
         
         updateCount++;
-    }
+    });
     
     return (updateCount > 0) ? S_OK : S_FALSE;
 }

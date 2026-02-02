@@ -337,16 +337,28 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
             m_busyCount.fetch_add(1);
         }
 
-        // [Smart Pull] Check 2: Visibility (Only for Tiles)
-        // Check if tile is still visible before burning CPU/IO
+        // [Smart Pull] Check 2: Visibility & State (Only for Tiles)
+        // Check if tile is still valid (not reset by Zoom or scrolled away)
         if (job.type == JobType::Tile) {
              if (auto tm = m_parent->GetTileManager()) {
-                 // Convert TileCoord to TileKey
+                 // 1. Check Layer State (Zoom Cancellation)
+                 // Use direct layer access for speed and atomic check
+                 if (auto layer = tm->GetLayer(job.tileCoord.lod)) {
+                     // If state is Empty (UNLOADED), it means it was evicted or reset. Abort.
+                     if (layer->GetState(job.tileCoord.col, job.tileCoord.row) == QuickView::TileStateCode::Empty) {
+                         m_busyCount.fetch_sub(1);
+                         m_activeTileJobs.fetch_sub(1);
+                         self.state = WorkerState::STANDBY;
+                         continue;
+                     }
+                 }
+
+                 // 2. Check Visibility (Viewport Intersection)
                  auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
                  if (!tm->IsVisible(key)) {
                      // Not visible anymore
                      m_busyCount.fetch_sub(1);
-                     m_activeTileJobs.fetch_sub(1); // [Fix] Decrement actve count to prevent Shutdown Timeout
+                     m_activeTileJobs.fetch_sub(1); 
                      self.state = WorkerState::STANDBY;
                      continue;
                  }
@@ -365,8 +377,17 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         bool stillValid = !st.stop_requested();
         if (stillValid && job.type == JobType::Tile) {
              if (auto tm = m_parent->GetTileManager()) {
-                 auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
-                 if (!tm->IsVisible(key)) stillValid = false;
+                 // 1. Check Layer State (Zoom Cancellation)
+                 if (auto layer = tm->GetLayer(job.tileCoord.lod)) {
+                     if (layer->GetState(job.tileCoord.col, job.tileCoord.row) == QuickView::TileStateCode::Empty) {
+                         stillValid = false;
+                     }
+                 }
+                 // 2. Check Visibility (Viewport Intersection)
+                 if (stillValid) {
+                     auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
+                     if (!tm->IsVisible(key)) stillValid = false;
+                 }
              }
         }
 
