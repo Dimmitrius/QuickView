@@ -15,6 +15,7 @@
 #include <condition_variable>
 #include <semaphore>
 #include <algorithm>
+#include <limits>
 
 #include "TileTypes.h" // [Titan]
 
@@ -146,8 +147,8 @@ private:
     
     // [Titan] Mode Flag & IO Control
     std::atomic<bool> m_isTitanMode = false;
-    std::counting_semaphore<16> m_ioSemaphore{ 16 }; // Will be re-initialized/limited in logic
-    int m_ioLimit = 2; // Dynamic limit based on HDD/SSD
+    std::counting_semaphore<std::numeric_limits<std::ptrdiff_t>::max()> m_ioSemaphore{ 0 }; // Initialized in constructor
+    int m_ioLimit = 0; // Dynamic limit based on HDD/SSD
 
     // [Titan] Generation ID for Lock-Free Invalidation
     std::atomic<uint32_t> m_generationID{ 0 };

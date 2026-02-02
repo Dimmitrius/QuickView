@@ -114,6 +114,7 @@ namespace QuickView {
 
         // 5. Cache Viewport for Workers
         m_lastViewport = viewport;
+        m_currentLOD = lod; // [Smart Pull] Update target LOD
 
         return missing;
     }
@@ -200,6 +201,13 @@ namespace QuickView {
         // Cast away constness for mutex
         auto* mutThis = const_cast<TileManager*>(this);
         std::lock_guard lock(mutThis->m_mutex);
+
+        // [Smart Pull] Aggressive LOD Cancellation
+        // If this tile belongs to an old LOD level (e.g. user zoomed in), ABORT.
+        // This prevents "Pipeline Clogging" where 50+ stale tiles block the new unique LOD tiles.
+        if (key.level() != m_currentLOD) {
+            return false; 
+        }
 
         // Calculate Tile Rect
         int tileSize = TILE_SIZE << key.level();

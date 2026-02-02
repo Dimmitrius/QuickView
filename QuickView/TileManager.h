@@ -67,6 +67,7 @@ namespace QuickView {
         
         // Viewport caching for diffing
         RegionRect m_lastViewport = {};
+        int m_currentLOD = 0; // [Smart Pull] Target LOD for aggressive cancellation
     };
 
 } // namespace QuickView

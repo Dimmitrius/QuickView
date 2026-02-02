@@ -20,8 +20,8 @@ HeavyLanePool::HeavyLanePool(ImageEngine* parent, CImageLoader* loader,
     , m_pool(pool)
     , m_config(config)
     , m_cap(config.maxHeavyWorkers)
-    , m_ioSemaphore(2) // Default to HDD/Safe limit initially
-    , m_ioLimit(2)
+    , m_ioSemaphore(config.maxHeavyWorkers) // Dynamic Initial Limit (Full Concurrency)
+    , m_ioLimit(config.maxHeavyWorkers)
 {
     // Pre-allocate worker slots
     m_workers.resize(m_cap);
@@ -110,6 +110,10 @@ HeavyLanePool::~HeavyLanePool() {
     }
     m_poolCv.notify_all();
     
+    // [Safety] Release IO Semaphore to wake up any workers blocked on acquire()
+    // We release enough tokens to cover all potential workers.
+    m_ioSemaphore.release(m_cap);
+
     for (auto& w : m_workers) {
         if (w.thread.joinable()) {
             w.thread.join();
@@ -124,7 +128,7 @@ HeavyLanePool::~HeavyLanePool() {
 void HeavyLanePool::Submit(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf) {
     // [Hardware] Update IO throttling based on target drive
     bool isSSD = SystemInfo::IsSolidStateDrive(path);
-    UpdateIOLimit(isSSD ? 8 : 2);
+    UpdateIOLimit(isSSD ? m_cap : 2);
 
     std::lock_guard lock(m_poolMutex);
     
@@ -191,7 +195,7 @@ void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID im
     
     // Update Limit once per batch
     bool isSSD = SystemInfo::IsSolidStateDrive(path);
-    UpdateIOLimit(isSSD ? 8 : 2);
+    UpdateIOLimit(isSSD ? m_cap : 2);
     
     std::lock_guard lock(m_poolMutex);
     uint32_t currentGen = m_generationID.load();
@@ -223,7 +227,7 @@ void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, s
 
     // Update Limit once per batch
     bool isSSD = SystemInfo::IsSolidStateDrive(path);
-    UpdateIOLimit(isSSD ? 8 : 2);
+    UpdateIOLimit(isSSD ? m_cap : 2);
 
     std::lock_guard lock(m_poolMutex);
     uint32_t currentGen = m_generationID.load();
@@ -342,6 +346,7 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
                  if (!tm->IsVisible(key)) {
                      // Not visible anymore
                      m_busyCount.fetch_sub(1);
+                     m_activeTileJobs.fetch_sub(1); // [Fix] Decrement actve count to prevent Shutdown Timeout
                      self.state = WorkerState::STANDBY;
                      continue;
                  }
@@ -354,6 +359,24 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         // [IO Throttling] Acquire IO Budget
         // Note: verify m_ioSemaphore is available.
         m_ioSemaphore.acquire();
+
+        // [Safety] Post-Acquire Check
+        // We might have waited 1-2 seconds to get here. Check if still needed.
+        bool stillValid = !st.stop_requested();
+        if (stillValid && job.type == JobType::Tile) {
+             if (auto tm = m_parent->GetTileManager()) {
+                 auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
+                 if (!tm->IsVisible(key)) stillValid = false;
+             }
+        }
+
+        if (!stillValid) {
+            m_ioSemaphore.release();
+            m_busyCount.fetch_sub(1);
+            m_activeTileJobs.fetch_sub(1); 
+            self.state = WorkerState::STANDBY;
+            continue;
+        }
 
         // Pass the whole job info
         PerformDecode(workerId, job, st, &self.loaderName);
