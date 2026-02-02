@@ -199,10 +199,14 @@ namespace QuickView {
 
         // Sort is O(N log N). N=500. negligible.
         m_lru.sort([&](const TileKey& a, const TileKey& b) {
-            auto sA = GetTile(a);
-            auto sB = GetTile(b);
-            uint64_t tA = sA ? sA->lastUsedFrameId : 0;
-            uint64_t tB = sB ? sB->lastUsedFrameId : 0;
+            // [Fix Recursive Lock] GetTile acquires mutex, but EnforceBudget already holds it!
+            // Use GetTileEntry (Lock-Free / internal) instead.
+            auto entryA = GetTileEntry(a);
+            auto entryB = GetTileEntry(b);
+            
+            // Check existence and data validity
+            uint64_t tA = (entryA && entryA->data) ? entryA->data->lastUsedFrameId : 0;
+            uint64_t tB = (entryB && entryB->data) ? entryB->data->lastUsedFrameId : 0;
             return tA < tB;
         });
 
@@ -284,6 +288,24 @@ namespace QuickView {
                  entry->data->state = TileStateCode::Ready;
                  entry->data->frame = frame;
                  entry->state.store(TileStateCode::Ready);
+             }
+        }
+    }
+
+    void TileManager::OnTileCancelled(TileKey key) {
+        // [Fix Gaps] Called by HeavyLanePool when a job is dropped (scrolled away).
+        // We must reset state to Empty so it can be re-queued if the user scrolls back.
+        // If we leave it as QUEUED/LOADING, the scheduler ignores it forever.
+        TileEntry* entry = GetTileEntry(key);
+        if (entry) {
+             // Only reset if it's not already ready (race condition check)
+             auto current = entry->state.load(std::memory_order_relaxed);
+             if (current == TileStateCode::Queued || current == TileStateCode::Loading) {
+                 entry->state.store(TileStateCode::Empty, std::memory_order_relaxed);
+                 // We don't need to destroy data immediately, but for consistency:
+                 // kept data might be stale? No, data is just a placeholder until Ready.
+                 // Actually, if we reset to Empty, the Scheduler will re-allocate data if null.
+                 // But we can keep the pointer to avoid alloc churn, just reset state.
              }
         }
     }

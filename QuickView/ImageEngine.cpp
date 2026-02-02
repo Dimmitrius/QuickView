@@ -24,6 +24,15 @@ ImageEngine::ImageEngine(CImageLoader* loader)
     SystemInfo sysInfo = SystemInfo::Detect();
     m_engineConfig = EngineConfig::FromHardware(sysInfo);
     
+    // [Fix Lag] Limit Concurrency for Tiles
+    // Allow UI thread + Render thread + OS to breathe.
+    // 1.2s latency observed with full core saturation.
+    int safeLimit = sysInfo.logicalCores / 2;
+    if (safeLimit < 2) safeLimit = 2; // Minimum floor
+    if (m_engineConfig.maxHeavyWorkers > safeLimit) {
+        m_engineConfig.maxHeavyWorkers = safeLimit;
+    }
+    
     // [Unified Architecture] Initialize 3-Arena System
     m_pool.Initialize(ArenaConfig::Detect());
     
@@ -1560,18 +1569,8 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
     if (missing.empty()) return;
     
     // Batch Submit
-    std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>> batch;
-    
-    // Need Image Dimensions to clip?
-    // We don't have them easily accessible here (stored in m_loader stats? or we need to store them in ImageEngine)
-    // Quick fix: m_tileManager doesn't know image size, so it might generate out-of-bound keys if we didn't clamp in Update?
-    // TileManager::Update clamped to provided viewport, but not max image size if not set.
-    // Assuming TileManager logic handles clamping if we pass max size?
-    // Actually TileManager::Update logic in previous step relied on "viewport" being valid.
-    
-    // Let's iterate and build requests.
-    // We assume the viewport passed by UI is valid/clamped.
-    
+    std::vector<HeavyLanePool::TilePriorityRequest> batch;
+
     for (const auto& key : missing) {
         // Convert TileKey -> TileCoord (Legacy)
         QuickView::TileCoord coord;
@@ -1586,37 +1585,32 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
         srcRect.y = key.y() * tileSize;
         srcRect.w = tileSize;
         srcRect.h = tileSize;
-        
+
         // Setup Request
         QuickView::RegionRequest req;
         req.srcRect = srcRect;
-        // dstWidth/Height for "Scale on Load"
-        // If we want JIT Zoom, we might scale? 
-        // Infinity Engine philosophy: Load NATIVE or LOD.
-        // If we load LOD1 (Half), srcRect covers 1024x1024, we want 512x512 output.
-        // Scale = 1.0 / (1 << level) ?
-        // TileManager::Update calculates LOD.
-        // If LOD=1, it means we are zoomed out.
-        // We want the resulting tile to be TILE_SIZE (512).
-        // So scale = TILE_SIZE / srcRect.w.
-        // srcRect.w = TILE_SIZE << level.
-        // scale = 512 / (512 * 2^level) = 1 / 2^level. Correct.
-        
-        float tileScale = 1.0f / (1 << key.level());
-        
         req.dstWidth = QuickView::TILE_SIZE;
         req.dstHeight = QuickView::TILE_SIZE;
         
-        // TODO: Clip against Image Size (m_currentImageWidth/Height?)
-        // ImageEngine doesn't seem to store W/H persistently in a member accessible here.
-        // m_tileScheduler had Reset(w, h). 
-        // For now, rely on robust loader to handle out-of-bounds (LoadTileFromMemory handles it?)
-        // Actually LoadJpegRegion does clipping.
+        // [Fix Spiral Priority] Calculate -Distance priority
+        // Prioritize Center -> Outwards
+        float cx = viewport.x + viewport.w * 0.5f;
+        float cy = viewport.y + viewport.h * 0.5f;
+        float tcx = srcRect.x + srcRect.w * 0.5f;
+        float tcy = srcRect.y + srcRect.h * 0.5f;
+        float distSq = (cx - tcx)*(cx - tcx) + (cy - tcy)*(cy - tcy);
         
-        batch.push_back({coord, req});
+        // Invert distance so closest (smallest dist) has highest (least negative) priority
+        // Use squared distance to avoid sqrt, it preserves order.
+        // Scale down to fit in int range if needed, but 8k image squared is 64M, fits in int32.
+        int priority = -(int)distSq;
+
+        batch.push_back({ coord, req, priority });
     }
     
-    // Priority: 100 (Standard)
-    m_heavyPool->SubmitTileBatch(m_currentNavPath, m_currentImageId.load(), m_mmf, batch, 100);
+    // Use Priority Batch Submission
+    if (!batch.empty()) {
+        m_heavyPool->SubmitPriorityTileBatch(m_currentNavPath, m_currentImageId.load(), m_mmf, batch);
+    }
 }
 

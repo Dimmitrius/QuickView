@@ -38,6 +38,9 @@ namespace QuickView {
 
         // Completion Callback
         void OnTileReady(TileKey key, std::shared_ptr<RawImageFrame> frame);
+        
+        // [Fix Gaps] Reset status to Empty so scheduler can retry
+        void OnTileCancelled(TileKey key);
 
         // State Query
         bool IsReady(TileKey key);

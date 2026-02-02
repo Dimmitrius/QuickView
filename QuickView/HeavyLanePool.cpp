@@ -112,7 +112,12 @@ HeavyLanePool::~HeavyLanePool() {
     
     // [Safety] Release IO Semaphore to wake up any workers blocked on acquire()
     // We release enough tokens to cover all potential workers.
-    m_ioSemaphore.release(m_cap);
+    int releaseCount = m_cap;
+    if (releaseCount > 0) {
+        // Ensure we don't overflow (though max is huge for ptrdiff_t)
+        // Just release m_cap is strictly safe because we acquire 1 per worker max.
+        m_ioSemaphore.release(releaseCount);
+    }
 
     for (auto& w : m_workers) {
         if (w.thread.joinable()) {
@@ -356,7 +361,9 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
                  // 2. Check Visibility (Viewport Intersection)
                  auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
                  if (!tm->IsVisible(key)) {
-                     // Not visible anymore
+                     // Not visible anymore -> Must notify Manager to reset state!
+                     tm->OnTileCancelled(key);
+                     
                      m_busyCount.fetch_sub(1);
                      m_activeTileJobs.fetch_sub(1); 
                      self.state = WorkerState::STANDBY;
@@ -386,7 +393,10 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
                  // 2. Check Visibility (Viewport Intersection)
                  if (stillValid) {
                      auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
-                     if (!tm->IsVisible(key)) stillValid = false;
+                     if (!tm->IsVisible(key)) {
+                         stillValid = false;
+                         tm->OnTileCancelled(key); // [Fix Gaps] Reset status
+                     }
                  }
              }
         }
