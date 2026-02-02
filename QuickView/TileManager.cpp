@@ -29,8 +29,8 @@ namespace QuickView {
         // [Titan] Adaptive Tiling Trigger
         // If zoom <= basePreviewRatio, the preview is displayed at 1:1 or smaller (downscaled), so it looks sharp.
         // Once zoom > basePreviewRatio, the preview is upscaled and blurry -> Trigger Tiles.
-        // Tolerance 1.01f (1%) to avoid triggering exactly at 1:1.
-        if (zoom <= basePreviewRatio * 1.01f) {
+        // Tolerance 1.0001f (0.01%) to avoid triggering exactly at 1:1 but trigger immediately on blur.
+        if (zoom <= basePreviewRatio * 1.0001f) {
             // Clear visible state to ensure only base image is drawn
             // But we shouldn't discard cache immediately?
             // Actually, if we return empty, the renderer won't draw tiles.

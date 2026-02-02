@@ -161,6 +161,7 @@ private:
         // Common
         std::wstring path;
         ImageID imageId;
+        std::chrono::steady_clock::time_point submitTime; // [Metrics] Track queue time
         std::shared_ptr<QuickView::MappedFile> mmf; // [Optimization] Zero-Copy MMF Source
         
         // Standard
@@ -214,14 +215,10 @@ private:
     // 2. Tiles use "Slow Path" (Disk) until preload finishes.
     // 3. Once Preload ready, Tiles switch to "Fast Path" (memcpy/resize from RAM).
     
-    std::mutex m_cacheMutex;
-    std::map<std::wstring, std::shared_ptr<QuickView::RawImageFrame>> m_fullImageCache; 
-    std::atomic<bool> m_isPreloading = false; // Simple flag to avoid duplicate triggers for same image
-    std::wstring m_preloadingPath; // Which path is currently being preloaded?
-    
     void TriggerPrefetch(std::shared_ptr<QuickView::MappedFile> mmf);
-    void TriggerPreload(const std::wstring& path, std::shared_ptr<QuickView::MappedFile> mmf = nullptr);
-    bool GetCachedRegion(const std::wstring& path, QuickView::RegionRequest region, QuickView::RawImageFrame* outFrame);
+    // [Optimization] Full Image Cache REMOVED to prevent OOM/Double Decoding
+    // void TriggerPreload(...);
+    // bool GetCachedRegion(...);
 
 public:
     void WaitForTileJobs(); // Spin-wait for active tile jobs to finish

@@ -42,8 +42,8 @@ void TileScheduler::UpdateViewport(QuickView::RegionRect viewport, float scale, 
     // [User Requirement] Start tile decoding ONLY when zooming beyond 100% of the BASE IMAGE (Preview).
     // If scale <= basePreviewRatio, the preview is displayed at 1:1 or smaller (downscaled), so it looks sharp.
     // Once scale > basePreviewRatio, the preview is upscaled and blurry -> Trigger Tiles.
-    // Tolerance 1.01f (1%) to avoid triggering exactly at 1:1.
-    if (scale <= basePreviewRatio * 1.01f) {
+    // Tolerance 1.0001f (0.01%) to avoid triggering exactly at 1:1 but trigger immediately on blur.
+    if (scale <= basePreviewRatio * 1.0001f) {
         // [Debug] Log occasionally or via flag
         // Clear visible state to ensure only base image is drawn
         m_lastViewport = { 0, 0, 0, 0 }; 

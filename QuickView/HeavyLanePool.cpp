@@ -83,6 +83,7 @@ void HeavyLanePool::Submit(const std::wstring& path, ImageID imageId, std::share
     job.type = JobType::Standard;
     job.path = path;
     job.imageId = imageId;
+    job.submitTime = std::chrono::steady_clock::now(); // [Metrics] Fix: Init timestamp
     job.mmf = mmf; // [Optimization] Pass MMF
     job.isFullDecode = false; 
     job.priority = 200; // Higher than tiles
@@ -103,6 +104,7 @@ void HeavyLanePool::SubmitFullDecode(const std::wstring& path, ImageID imageId, 
     job.type = JobType::Standard;
     job.path = path;
     job.imageId = imageId;
+    job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
     job.mmf = mmf; // [Optimization] Pass MMF
     job.isFullDecode = true; 
     job.priority = 150; 
@@ -122,6 +124,7 @@ void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::s
     job.type = JobType::Tile;
     job.path = path;
     job.imageId = imageId;
+    job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
     job.mmf = mmf; // [Optimization] Pass MMF
     job.tileCoord = coord;
     job.region = region;
@@ -144,6 +147,7 @@ void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID im
         job.path = path;
         job.imageId = imageId;
         job.mmf = mmf;
+        job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
         job.tileCoord = item.coord;
         job.region = item.region;
         job.priority = item.priority;
@@ -169,6 +173,7 @@ void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, s
         job.type = JobType::Tile;
         job.path = path;
         job.imageId = imageId;
+        job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
         job.mmf = mmf; // [Optimization] Pass MMF
         job.tileCoord = item.first;
         job.region = item.second;
@@ -305,8 +310,19 @@ void HeavyLanePool::TryExpand() {
     // Actually, simpler logic:
     // If (idle < pending + 1), try to spawn more.
     
+    // If (idle < pending + 1), try to spawn more.
+    
+    // [Optimization] Concurrency Throttling
+    // Too many threads thrash the cache/bandwidth for tile decoding.
+    // Limit active workers to physical cores (approx 8-12) or a tuned constant.
+    // 15 threads -> 1.2s latency (Saturation).
+    // 12 threads -> 1.2s latency (Still Saturated).
+    // Try 8 threads to reduce memory bus contention.
+    int effectiveCap = m_cap;
+    if (effectiveCap > 8) effectiveCap = 8; // Hardcap to 8 for smoother tiles
+
     // Iterate and fill slots until satisfied or full
-    for (int i = 0; i < m_cap; ++i) {
+    for (int i = 0; i < effectiveCap; ++i) {
         if (idle >= pending + targetIdle) break; // Have enough coverage
         
         if (m_workers[i].state == WorkerState::SLEEPING) {
@@ -437,15 +453,10 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
          else if (job.type == JobType::Tile) {
               // --- Tile Decode ---
               
-              // [Optimization] Fast Path: Check RAM Cache
-              if (GetCachedRegion(job.path, job.region, &rawFrame)) {
-                   loaderName = L"RAM Cache";
-                   hr = S_OK;
-              } 
-              else {
-                  // Cache Miss - Trigger Background Preload (if not already running)
-                  // [MMF Optimization]: Pass the MMF pointer to share the same file handle!
-                  TriggerPreload(job.path, job.mmf);
+              // --- Tile Decode ---
+              {
+                  // Direct Decode Logic (No Background Preload)
+
 
                   float scaleX = (float)job.region.dstWidth / job.region.srcRect.w;
                   float scaleY = (float)job.region.dstHeight / job.region.srcRect.h;
@@ -458,8 +469,12 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                      workerId, job.tileCoord.lod, job.tileCoord.col, job.tileCoord.row, scale);
                   OutputDebugStringW(startLog);
                   */
+                     // Diagnostic: Start Decode / Metrics
+                  // auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(start - job.submitTime).count(); // Moved below
+                  // int activeWorkers = m_busyCount.load(); // Moved below
     
                   // For Tile Loading, we use LoadRegionToFrame
+
                   QuickView::RegionRect rect = { job.region.srcRect.x, job.region.srcRect.y, job.region.srcRect.w, job.region.srcRect.h };
                   
                   // [MMF Optimization] Zero-Copy Path
@@ -487,14 +502,16 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
               }
          }
 
-         auto decodeEnd = std::chrono::high_resolution_clock::now();
-         int decodeMs = (int)std::chrono::duration_cast<std::chrono::milliseconds>(decodeEnd - decodeStart).count();
-         
-         // Diagnostic: Result
-         wchar_t resultLog[256];
-         swprintf_s(resultLog, L"[HeavyPool] Worker %d: %s %s in %d ms (Loader: %s)\n", 
-             workerId, SUCCEEDED(hr) ? L"DONE" : L"FAIL", (job.type == JobType::Tile ? L"Tile" : L"Std"), decodeMs, loaderName.c_str());
-         OutputDebugStringW(resultLog);
+          auto decodeEnd = std::chrono::high_resolution_clock::now();
+          int decodeMs = (int)std::chrono::duration_cast<std::chrono::milliseconds>(decodeEnd - decodeStart).count();
+          auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeStart - job.submitTime).count();
+          int activeWorkers = m_busyCount.load();
+          
+          // Diagnostic: Result
+          wchar_t resultLog[256];
+          swprintf_s(resultLog, L"[HeavyPool] Worker %d: %s %s in %d ms (Wait: %lld ms, Concurrency: %d, Loader: %s)\n", 
+              workerId, SUCCEEDED(hr) ? L"DONE" : L"FAIL", (job.type == JobType::Tile ? L"Tile" : L"Std"), decodeMs, waitMs, activeWorkers, loaderName.c_str());
+          OutputDebugStringW(resultLog);
         
         if (cancelPred() || hr == E_ABORT) {
             m_cancelCount++;
@@ -679,156 +696,7 @@ void HeavyLanePool::TriggerPrefetch(std::shared_ptr<QuickView::MappedFile> mmf) 
          // Windows manages the specific pages.
          mmf->Prefetch(0, mmf->size());
          
-         // Diagnostic
-         // OutputDebugStringW(L"[HeavyPool] Touch-Up Prefetch Triggered\n");
     }).detach();
-}
-
-// [v9.5] Updated to support Zero-Copy MMF Preload
-void HeavyLanePool::TriggerPreload(const std::wstring& path, std::shared_ptr<QuickView::MappedFile> mmf) {
-    bool expected = false;
-    // Check global flag prevents spawning multiple threads for same image
-    // (Optimization: could use a set of paths if we want multiple images preloaded, 
-    // but typically user focuses on one Titan image at a time)
-    if (m_isPreloading.compare_exchange_strong(expected, true)) {
-        
-        // Check if already in cache
-        {
-            std::lock_guard lock(m_cacheMutex);
-            if (m_fullImageCache.find(path) != m_fullImageCache.end()) {
-                m_isPreloading = false;
-                return;
-            }
-            if (m_preloadingPath == path) {
-                // Another thread is handling this exact path but flag was reset?
-                // Should not happen with atomic flag logic unless complete.
-            }
-            m_preloadingPath = path; 
-        }
-
-        // Spawn detached thread for loading
-        // We use std::thread because this is a long running I/O op independent of worker pool
-        std::thread([this, path, mmf]() {
-            // [Optimization] Lower priority for background preloader to avoid stealing CPU from Tile Workers
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
-
-            // [Safety] Check file size to avoid OOM
-            // 2GB limit for now (~500MP RGBA)
-            // Implementation: Check file size. JPEG 10:1 ratio. 2GB RAM ~= 200MB File.
-            // Actually JPEGs can be high quality. Let's say 4GB RAM limit.
-            // User has 8GB+ (Pro). 
-            // Let's rely on ImageLoader internal alloc failure if OOM.
-            
-            QuickView::RawImageFrame* fullFrame = new QuickView::RawImageFrame();
-            std::wstring name;
-            
-            // Priority: Low (Background)
-            // But we want it to finish reasonably fast.
-            // Call LoadToFrame (Standard)
-            // NO Scaling (full res) -> width=0, height=0
-            
-            // Priority: Low (Background)
-            // [Optimization] Use MMF if available to avoid Disk Contention and Seek Thrashing
-            HRESULT hr;
-            if (mmf && mmf->IsValid()) {
-                 hr = m_loader->LoadToFrameFromMemory(mmf->data(), mmf->size(), fullFrame, nullptr, 0, 0, &name, nullptr);
-            } else {
-                 hr = m_loader->LoadToFrame(path.c_str(), fullFrame, nullptr, 0, 0, &name, nullptr, nullptr);
-            }
-            
-            if (SUCCEEDED(hr) && fullFrame->IsValid()) {
-                std::lock_guard lock(m_cacheMutex);
-                
-                // Clear old cache to free memory?
-                // Strategy: Keep 1 active Titan image.
-                if (m_fullImageCache.size() > 0) {
-                     m_fullImageCache.clear();
-                }
-                
-                m_fullImageCache[path] = std::shared_ptr<QuickView::RawImageFrame>(fullFrame);
-                
-                wchar_t buf[256];
-                swprintf_s(buf, L"[HeavyPool] Preload Complete: %s (%.1f MB)\n", path.c_str(), fullFrame->GetBufferSize() / 1024.0 / 1024.0);
-                OutputDebugStringW(buf);
-            } else {
-                delete fullFrame;
-                OutputDebugStringW(L"[HeavyPool] Preload Failed or OOM.\n");
-            }
-            
-            m_isPreloading = false;
-        }).detach();
-    }
-}
-
-bool HeavyLanePool::GetCachedRegion(const std::wstring& path, QuickView::RegionRequest region, QuickView::RawImageFrame* outFrame) {
-    std::lock_guard lock(m_cacheMutex);
-    
-    auto it = m_fullImageCache.find(path);
-    if (it == m_fullImageCache.end()) return false;
-    
-    auto& srcFrame = it->second;
-    if (!srcFrame || !srcFrame->pixels) return false;
-    
-    // Perform Blit / Resize from RAM
-    int tilesize = 512; // Typical
-    
-    // Calculate Target Dimensions
-    // RegionRequest has srcRect and dstWidth/Height
-    // Scale = dst / src
-    float scaleX = (float)region.dstWidth / region.srcRect.w;
-    float scaleY = (float)region.dstHeight / region.srcRect.h;
-    
-    // Bounds Check Source
-    int sx = std::max(0, region.srcRect.x);
-    int sy = std::max(0, region.srcRect.y);
-    int sw = region.srcRect.w;
-    int sh = region.srcRect.h;
-    
-    // Clip to image
-    if (sx >= srcFrame->width || sy >= srcFrame->height) return false; // Out of bounds
-    if (sx + sw > srcFrame->width) sw = srcFrame->width - sx;
-    if (sy + sh > srcFrame->height) sh = srcFrame->height - sy;
-    
-    if (sw <= 0 || sh <= 0) return false;
-    
-    // Recalculate Dst based on clipped Src
-    int dw = (int)(sw * scaleX);
-    int dh = (int)(sh * scaleY);
-    
-    if (dw <= 0 || dh <= 0) return false;
-
-    // Allocate Output
-    outFrame->width = dw;
-    outFrame->height = dh;
-    outFrame->stride = QuickView::CalculateAlignedStride(dw, 4);
-    outFrame->format = PixelFormat::BGRA8888;
-    outFrame->formatDetails = L"RAM Cache";
-    
-    size_t outSize = outFrame->GetBufferSize();
-    
-    // Use Slab Allocator
-    if (outSize <= TILE_SLAB_SIZE) {
-        outFrame->pixels = (uint8_t*)m_tileMemory.Allocate();
-        if (outFrame->pixels) {
-            outFrame->memoryDeleter = [this](uint8_t* p) { m_tileMemory.Free(p); };
-        }
-    }
-    
-    if (!outFrame->pixels) {
-        // Fallback
-         outFrame->pixels = (uint8_t*)_aligned_malloc(outSize, 64);
-         outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
-    }
-    
-    if (!outFrame->pixels) return false; // OOM?
-    
-    // Execute Resize/Copy
-    // Src Pointer: pixels + sy * stride + sx * 4
-    const uint8_t* pSrc = srcFrame->pixels + (size_t)sy * srcFrame->stride + (size_t)sx * 4;
-    
-    SIMDUtils::ResizeBilinear(pSrc, sw, sh, srcFrame->stride, outFrame->pixels, dw, dh);
-    
-    return true;
 }
 
 // ============================================================================

@@ -40,6 +40,7 @@ using namespace QuickView;
 #include "SIMDUtils.h"
 #include <thread>
 #include "PreviewExtractor.h"
+#include "MappedFile.h" // [Opt]
 
 // Forward declaration
 static bool ReadFileToVector(LPCWSTR filePath, std::vector<uint8_t>& buffer);
@@ -843,93 +844,8 @@ static HRESULT SafeLoadJpegRegion(
     }
 }
 
-// [Optimization] Shared/Persistent File Mapping
-// Designed to be held by a Cache, thread-safe.
-class SharedFileMapping {
-public:
-    SharedFileMapping(LPCWSTR path) {
-        hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE) return;
+// [Optimization] FileMappingCache REMOVED - using MappedFile locally or pass-through
 
-        hMapping = CreateFileMappingW(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        if (!hMapping) return;
-
-        pData = MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
-        
-        LARGE_INTEGER size;
-        if (GetFileSizeEx(hFile, &size)) {
-            dataSize = (size_t)size.QuadPart;
-        }
-    }
-
-    ~SharedFileMapping() {
-        if (pData) UnmapViewOfFile(pData);
-        if (hMapping) CloseHandle(hMapping);
-        if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
-    }
-
-    // Disable copy
-    SharedFileMapping(const SharedFileMapping&) = delete;
-    SharedFileMapping& operator=(const SharedFileMapping&) = delete;
-
-    bool IsValid() const { return pData != nullptr; }
-    const uint8_t* GetData() const { return (const uint8_t*)pData; }
-    size_t GetSize() const { return dataSize; }
-
-private:
-    HANDLE hFile = INVALID_HANDLE_VALUE;
-    HANDLE hMapping = nullptr;
-    void* pData = nullptr;
-    size_t dataSize = 0;
-};
-
-// [Optimization] Simple Thread-Safe LRU Cache for File Mappings
-// Reuse mapping for Titan Tiles to avoid Open/Close overhead per tile.
-class FileMappingCache {
-public:
-    static std::shared_ptr<SharedFileMapping> Get(const std::wstring& path) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        // Hit?
-        for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
-            if (it->path == path) {
-                // Move to front (LRU)
-                auto item = *it;
-                m_cache.erase(it);
-                m_cache.push_front(item);
-                return item.mapping;
-            }
-        }
-
-        // Miss - Create new
-        auto mapping = std::make_shared<SharedFileMapping>(path.c_str());
-        if (!mapping->IsValid()) return nullptr;
-
-        // Insert
-        m_cache.push_front({ path, mapping });
-
-        // Prune
-        if (m_cache.size() > 4) { // Keep last 4 heavy files mapped
-             m_cache.pop_back();
-        }
-
-        return mapping;
-    }
-
-private:
-    struct Entry {
-        std::wstring path;
-        std::shared_ptr<SharedFileMapping> mapping;
-    };
-    
-    // Static members need definition in cpp
-    static std::list<Entry> m_cache;
-    static std::mutex m_mutex;
-};
-
-// Define statics
-std::list<FileMappingCache::Entry> FileMappingCache::m_cache;
-std::mutex FileMappingCache::m_mutex;
 
 // [Infinity Engine] Zero-Copy Tile Loader Implementation
 HRESULT CImageLoader::LoadTileFromMemory(
@@ -1047,11 +963,11 @@ HRESULT CImageLoader::LoadRegionToFrame(LPCWSTR filePath, QuickView::RegionRect 
     if (format == L"JPEG") {
         if (pLoaderName) *pLoaderName = L"TurboJPEG Region";
         
-        auto mapping = FileMappingCache::Get(filePath);
-        if (!mapping || !mapping->IsValid()) return E_FAIL;
+        QuickView::MappedFile mapping(filePath); // [Opt] Local map (OS handles caching)
+        if (!mapping.IsValid()) return E_FAIL;
         
         if (checkCancel && checkCancel()) return E_ABORT;
-        return SafeLoadJpegRegion(mapping->GetData(), mapping->GetSize(), srcRect, scale, outFrame, tileManager, arena);
+        return SafeLoadJpegRegion(mapping.data(), mapping.size(), srcRect, scale, outFrame, tileManager, arena);
     }
 
     // --- Strategy 2: Strategy B (Load Full & Crop/Resize) ---
