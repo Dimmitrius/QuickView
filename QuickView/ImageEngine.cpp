@@ -1602,8 +1602,22 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
         
         // Invert distance so closest (smallest dist) has highest (least negative) priority
         // Use squared distance to avoid sqrt, it preserves order.
-        // Scale down to fit in int range if needed, but 8k image squared is 64M, fits in int32.
         int priority = -(int)distSq;
+        
+        // [Aggressive Caching] Penalty for Off-Screen Tiles
+        // Ensure Preloading Ring handles Lower Priority than visible tiles.
+        // Check intersection
+        bool isInside = (srcRect.x < viewport.x + viewport.w && srcRect.x + srcRect.w > viewport.x &&
+                         srcRect.y < viewport.y + viewport.h && srcRect.y + srcRect.h > viewport.y);
+        
+        if (!isInside) {
+            // Apply massive penalty (100M) to ensure strictly lower than any visible tile.
+            // Visible tiles will be e.g. -0 to -64M (8K image).
+            // So -100M puts it safely behind.
+            // Ensure we don't underflow int32.
+            // 8K sq = 64,000,000. -2B is min int. We have room.
+            priority -= 100000000;
+        }
 
         batch.push_back({ coord, req, priority });
     }

@@ -111,6 +111,9 @@ namespace QuickView {
         
         bool m_initialized = false;
         int m_imageW = 0, m_imageH = 0;
+        
+        // [Aggressive Caching] Dynamic Budget
+        int m_maxTiles = 256;
     };
 
 } // namespace QuickView

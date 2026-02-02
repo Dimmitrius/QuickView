@@ -1,11 +1,40 @@
 #include "pch.h"
 #include "TileManager.h"
+#include "SystemInfo.h"
 #include <algorithm>
 #include <cmath>
 
 namespace QuickView {
 
     TileManager::TileManager() {
+        // [Aggressive Caching] Dynamic Budget Calculation
+        // Use 40% of Total System RAM, capped at 8GB (for 32GB systems).
+        // 16GB System -> 6.4GB Cache.
+        // 8GB System -> 3.2GB Cache.
+        // Tile Size = 512x512 * 4 bytes = 1MB.
+        // So 1GB = 1024 Tiles.
+        
+        SystemInfo sys = SystemInfo::Detect();
+        size_t totalRam = sys.totalRAM;
+        
+        // Target: 40%
+        size_t budget = (size_t)(totalRam * 0.40);
+        
+        // Cap at 8GB to avoid hoarding too much
+        size_t cap = 8ULL * 1024 * 1024 * 1024;
+        if (budget > cap) budget = cap;
+        
+        // Minimum: 512MB
+        size_t minBudget = 512 * 1024 * 1024;
+        if (budget < minBudget) budget = minBudget;
+        
+        // Convert to Tile Count (Approx 1MB per tile)
+        // 1 Tile = 1048576 bytes
+        m_maxTiles = (int)(budget / (1024 * 1024));
+        
+        wchar_t log[128];
+        swprintf_s(log, L"[TileManager] Aggressive Caching Enabled. Budget: %llu MB (%d tiles)\n", budget / (1024*1024), m_maxTiles);
+        OutputDebugStringW(log);
     }
 
     TileManager::~TileManager() {
@@ -90,10 +119,16 @@ namespace QuickView {
         else { predicted.y += extraY; predicted.h -= extraY; }
 
         // Grid Bounds
-        int startX = predicted.x / tileSize;
-        int endX = (predicted.x + predicted.w + tileSize - 1) / tileSize;
-        int startY = predicted.y / tileSize;
-        int endY = (predicted.y + predicted.h + tileSize - 1) / tileSize;
+        // [Aggressive Caching] Padding Ring (1.5x Viewport)
+        // Inflate viewport to preload surrounding tiles.
+        // HeavyLanePool priority ensures visible tiles load first.
+        float padX = predicted.w * 0.25f; // Add 25% each side = 50% total = 1.5x
+        float padY = predicted.h * 0.25f;
+        
+        int startX = (int)((predicted.x - padX) / tileSize);
+        int endX = (int)((predicted.x + predicted.w + padX + tileSize - 1) / tileSize);
+        int startY = (int)((predicted.y - padY) / tileSize);
+        int endY = (int)((predicted.y + predicted.h + padY + tileSize - 1) / tileSize);
 
         ITileStateLayer* layer = m_layers[lod].get();
         if (!layer) return {};
@@ -177,7 +212,7 @@ namespace QuickView {
     }
 
     void TileManager::EnforceBudget() {
-        if (GetReadyCount() <= MAX_TILES) return;
+        if (GetReadyCount() <= m_maxTiles) return;
 
         // Lazy LRU Eviction: Scan the list from back.
         // Since we don't update list position on access (O(N)), the list handles insertion order.
