@@ -13,6 +13,8 @@
 #include <optional>
 #include <chrono>
 #include <condition_variable>
+#include <semaphore>
+#include <algorithm>
 
 #include "TileTypes.h" // [Titan]
 
@@ -44,6 +46,12 @@ public:
     HeavyLanePool(ImageEngine* parent, CImageLoader* loader, 
                   TripleArenaPool* pool, const EngineConfig& config);
     ~HeavyLanePool();
+    
+    // [Titan Mode] Persistence Control
+    // Enabled: Threads act as persistent pull-workers (no shrinking)
+    // Disabled: Threads act as elastic hot-spares (auto-shrink)
+    void SetTitanMode(bool enabled);
+    void Flush(); // Clears queue and increments GenID
     
     // === Task Submission ===
     // Thread-safe. Will auto-expand if needed.
@@ -136,6 +144,14 @@ private:
     std::vector<Worker> m_workers;
     int m_cap;  // Hard cap on workers (logicalCores - 1)
     
+    // [Titan] Mode Flag & IO Control
+    std::atomic<bool> m_isTitanMode = false;
+    std::counting_semaphore<16> m_ioSemaphore{ 16 }; // Will be re-initialized/limited in logic
+    int m_ioLimit = 2; // Dynamic limit based on HDD/SSD
+
+    // [Titan] Generation ID for Lock-Free Invalidation
+    std::atomic<uint32_t> m_generationID{ 0 };
+
     std::atomic<int> m_activeCount = 0;  // STANDBY + BUSY
     std::atomic<int> m_busyCount = 0;    // Only BUSY
     std::atomic<int> m_cancelCount = 0;
@@ -158,6 +174,9 @@ private:
         JobType type = JobType::Standard;
         int priority = 0; // Higher = Earlier
         
+        // [Titan] Generation Check
+        uint32_t genID = 0; // Capture of m_generationID at submission
+
         // Common
         std::wstring path;
         ImageID imageId;
@@ -170,8 +189,14 @@ private:
         // Tile
         QuickView::RegionRequest region; // [Titan] Rect + Scale
         QuickView::TileCoord tileCoord;  // [Titan] For result indentification
+        
+        // Heap Comparator (Max-Heap: Highest Priority First)
+        bool operator<(const JobInfo& other) const {
+            return priority < other.priority;
+        }
     };
-    std::deque<JobInfo> m_pendingJobs;
+    // [Titan] Using Vector + Heap for O(1) Clear and Priority
+    std::vector<JobInfo> m_pendingJobs;
     
     // Results queue
     mutable std::mutex m_resultMutex;
@@ -191,6 +216,9 @@ private:
     // Expansion/Shrink logic
     void TryExpand();  // Called when job submitted
     void ShrinkWorker(int workerId);  // Called by shrinker
+
+    // [Hardware] Dynamic IO Throttling
+    void UpdateIOLimit(int newLimit);
     
     // [User Feedback] Decision logic after decode completes
     // Returns true if worker should become STANDBY, false if should be destroyed

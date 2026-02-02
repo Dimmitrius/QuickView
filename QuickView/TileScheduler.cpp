@@ -33,9 +33,6 @@ void TileScheduler::UpdateViewport(QuickView::RegionRect viewport, float scale, 
     std::lock_guard lock(m_mutex);
     if (m_currentPath.empty()) return;
 
-    m_lastViewport = viewport;
-    m_lastScale = scale;
-
     // [Titan] Adaptive Tiling Trigger
     // "Scale" is ScreenPixels / OriginalPixels.
     // "BasePreviewRatio" is PreviewPixels / OriginalPixels.
@@ -49,6 +46,33 @@ void TileScheduler::UpdateViewport(QuickView::RegionRect viewport, float scale, 
         m_lastViewport = { 0, 0, 0, 0 }; 
         return;
     }
+
+    // [Smart Flush] Detect "Teleportation" / Rapid Scrolling
+    if (m_lastViewport.w > 0) { // Only if we had a valid previous viewport
+        float oldCX = m_lastViewport.x + m_lastViewport.w * 0.5f;
+        float oldCY = m_lastViewport.y + m_lastViewport.h * 0.5f;
+        float newCX = viewport.x + viewport.w * 0.5f;
+        float newCY = viewport.y + viewport.h * 0.5f;
+        
+        float distSq = (oldCX - newCX)*(oldCX - newCX) + (oldCY - newCY)*(oldCY - newCY);
+        // Threshold: If moved more than half screen width
+        float threshold = std::max(viewport.w, viewport.h) * 0.5f;
+        
+        if (distSq > threshold * threshold) {
+             if (m_pool) m_pool->Flush();
+             
+             // [Critical] Reset tile states because Flush() kills the jobs
+             // If we don't reset, Scheduler thinks they are still "dispatched" and won't re-submit.
+             for (auto& [hash, state] : m_tileStates) {
+                 if (state.dispatched && !state.ready) {
+                     state.dispatched = false;
+                 }
+             }
+        }
+    }
+
+    m_lastViewport = viewport;
+    m_lastScale = scale;
 
     // 1. Calculate Grid Coverage
     int lod = CalculateLOD(scale);

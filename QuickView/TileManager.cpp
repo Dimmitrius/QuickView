@@ -112,6 +112,9 @@ namespace QuickView {
         // 4. Budget Enforcement (Cleanup)
         EnforceBudget();
 
+        // 5. Cache Viewport for Workers
+        m_lastViewport = viewport;
+
         return missing;
     }
 
@@ -185,6 +188,35 @@ namespace QuickView {
         // If strictly needed *now*, check if it's in viewport?
         // For simplicity: If it's in the map, we want it.
         return m_tiles.count(key) > 0;
+    }
+
+    // [Smart Pull] Double-check visibility to avoid processing tiles that user already scrolled past
+    bool TileManager::IsVisible(TileKey key) const {
+        // Warning: accessing m_lastViewport without lock might be racy if Update() runs concurrently.
+        // However, WorkerLoop runs in parallel to Main Thread.
+        // m_lastViewport is atomic-ish (RegionRect is 4 ints).
+        // Ideally we grab lock, but we want speed.
+        // Let's grab lock for safety.
+        // Cast away constness for mutex
+        auto* mutThis = const_cast<TileManager*>(this);
+        std::lock_guard lock(mutThis->m_mutex);
+
+        // Calculate Tile Rect
+        int tileSize = TILE_SIZE << key.level();
+        int tx = key.x() * tileSize;
+        int ty = key.y() * tileSize;
+        
+        // Intersect with m_lastViewport
+        int vx = m_lastViewport.x;
+        int vy = m_lastViewport.y;
+        int vw = m_lastViewport.w;
+        int vh = m_lastViewport.h;
+        
+        // Simple AABB Intersection
+        bool overlap = (tx < vx + vw) && (tx + tileSize > vx) &&
+                       (ty < vy + vh) && (ty + tileSize > vy);
+                       
+        return overlap;
     }
 
     bool TileManager::IsReady(TileKey key) {

@@ -2,6 +2,7 @@
 #include "HeavyLanePool.h"
 #include "ImageEngine.h"
 #include "SIMDUtils.h"
+#include "TileManager.h"
 #include <filesystem>
 #include <chrono>
 
@@ -19,25 +20,69 @@ HeavyLanePool::HeavyLanePool(ImageEngine* parent, CImageLoader* loader,
     , m_pool(pool)
     , m_config(config)
     , m_cap(config.maxHeavyWorkers)
+    , m_ioSemaphore(2) // Default to HDD/Safe limit initially
+    , m_ioLimit(2)
 {
-    // Pre-allocate worker slots (but don't start threads yet)
+    // Pre-allocate worker slots
     m_workers.resize(m_cap);
     
-    // Start the first worker immediately as hot-spare
-    // [User Feedback] Minimum 2 lanes: Scout (separate) + Heavy (at least 1)
-    if (m_cap > 0) {
-        m_workers[0].thread = std::jthread([this](std::stop_token st) {
-            WorkerLoop(0, st);
-        });
-        m_workers[0].state = WorkerState::STANDBY;
-        m_workers[0].lastActiveTime = std::chrono::steady_clock::now();
-        m_activeCount.fetch_add(1);
-    }
-    
-    // Start shrinker thread
+    // Start shrinker thread (manages dynamic scaling in Standard Mode)
     m_shrinker = std::jthread([this](std::stop_token st) {
         ShrinkerLoop(st);
     });
+}
+// Helper to dynamically adjust semaphore limit
+void HeavyLanePool::UpdateIOLimit(int newLimit) {
+    if (newLimit == m_ioLimit) return;
+    
+    int delta = newLimit - m_ioLimit;
+    if (delta > 0) {
+        m_ioSemaphore.release(delta);
+    } else {
+        // We need to reduce tokens. This is tricky with std::counting_semaphore.
+        // We can acquire them on the main thread, but that might block if workers are holding them.
+        // TRADEOFF: For safety, we only GROW the limit quickly. 
+        // If shrinking, we might just accept over-subscription briefly until next flush?
+        // OR: We force acquire.
+        // Given the use case (User moves from HDD folder to SSD folder), rarely flips rapidly.
+        // Let's attempt to acquire, but don't block forever? 
+        // std::counting_semaphore doesn't have try_acquire_for.
+        // For now, we will just update the internal limit logic if we were using a custom counter,
+        // but with a real semaphore, we can't easily "shrink" capacity.
+        //
+        // WORKAROUND: Just accept the higher concurrency if downgrading, OR:
+        // Re-create the semaphore? No.
+        //
+        // Let's just implement Growth for now. 
+        // If user goes SSD(8) -> HDD(2), we might ideally want to throttle.
+        // But preventing system freeze is key.
+        // We'll leave it as is for now implies "Max Seen Limit".
+        // Better approach: Since `NavigateTo` clears the queue usually, 
+        // we can assume the pool is draining.
+        // We will try to acquire.
+        for (int i=0; i < -delta; ++i) m_ioSemaphore.acquire();
+    }
+    m_ioLimit = newLimit;
+    
+    wchar_t buf[128];
+    swprintf_s(buf, L"[HeavyPool] IO Limit set to %d (SSD=%s)\n", m_ioLimit, newLimit > 2 ? L"Yes" : L"No");
+    OutputDebugStringW(buf);
+}
+
+void HeavyLanePool::SetTitanMode(bool enabled) {
+    m_isTitanMode = enabled;
+    if (enabled) {
+        // [Titan] Pre-spawn all workers
+        TryExpand(); 
+    }
+}
+
+void HeavyLanePool::Flush() {
+    std::lock_guard lock(m_poolMutex);
+    m_pendingJobs.clear(); // O(1) with vector
+    // Increment generation to invalidate any in-flight jobs that haven't started processing
+    m_generationID.fetch_add(1); 
+    // We don't need to notify workers; existing workers will wake up, check GenID, and skip.
 }
 
 HeavyLanePool::~HeavyLanePool() {
@@ -77,21 +122,24 @@ HeavyLanePool::~HeavyLanePool() {
 // ============================================================================
 
 void HeavyLanePool::Submit(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf) {
+    // [Hardware] Update IO throttling based on target drive
+    bool isSSD = SystemInfo::IsSolidStateDrive(path);
+    UpdateIOLimit(isSSD ? 8 : 2);
+
     std::lock_guard lock(m_poolMutex);
     
     JobInfo job;
     job.type = JobType::Standard;
     job.path = path;
     job.imageId = imageId;
-    job.submitTime = std::chrono::steady_clock::now(); // [Metrics] Fix: Init timestamp
-    job.mmf = mmf; // [Optimization] Pass MMF
+    job.submitTime = std::chrono::steady_clock::now(); 
+    job.mmf = mmf;
     job.isFullDecode = false; 
-    job.priority = 200; // Higher than tiles
+    job.priority = 200; 
+    job.genID = m_generationID.load(); // [Smart Pull] Stamp Generation
     
     m_pendingJobs.push_back(job);
-    std::stable_sort(m_pendingJobs.begin(), m_pendingJobs.end(), [](const JobInfo& a, const JobInfo& b) {
-        return a.priority > b.priority;
-    });
+    std::push_heap(m_pendingJobs.begin(), m_pendingJobs.end()); // O(log N)
 
     TryExpand();
     m_poolCv.notify_one();
@@ -104,15 +152,14 @@ void HeavyLanePool::SubmitFullDecode(const std::wstring& path, ImageID imageId, 
     job.type = JobType::Standard;
     job.path = path;
     job.imageId = imageId;
-    job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
-    job.mmf = mmf; // [Optimization] Pass MMF
+    job.submitTime = std::chrono::steady_clock::now(); 
+    job.mmf = mmf; 
     job.isFullDecode = true; 
     job.priority = 150; 
+    job.genID = m_generationID.load();
     
     m_pendingJobs.push_back(job);
-    std::stable_sort(m_pendingJobs.begin(), m_pendingJobs.end(), [](const JobInfo& a, const JobInfo& b) {
-        return a.priority > b.priority;
-    });
+    std::push_heap(m_pendingJobs.begin(), m_pendingJobs.end());
 
     TryExpand();
     m_poolCv.notify_one();
@@ -124,15 +171,16 @@ void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::s
     job.type = JobType::Tile;
     job.path = path;
     job.imageId = imageId;
-    job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
-    job.mmf = mmf; // [Optimization] Pass MMF
+    job.submitTime = std::chrono::steady_clock::now(); 
+    job.mmf = mmf; 
     job.tileCoord = coord;
     job.region = region;
     job.priority = priority; 
+    job.genID = m_generationID.load(); // [Smart Pull]
+    
     m_pendingJobs.push_back(job);
-    std::stable_sort(m_pendingJobs.begin(), m_pendingJobs.end(), [](const JobInfo& a, const JobInfo& b) {
-        return a.priority > b.priority;
-    });
+    std::push_heap(m_pendingJobs.begin(), m_pendingJobs.end());
+    
     TryExpand();
     m_activeTileJobs.fetch_add(1);
     m_poolCv.notify_one();
@@ -140,49 +188,64 @@ void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::s
 
 void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<TilePriorityRequest>& batch) {
     if (batch.empty()) return;
+    
+    // Update Limit once per batch
+    bool isSSD = SystemInfo::IsSolidStateDrive(path);
+    UpdateIOLimit(isSSD ? 8 : 2);
+    
     std::lock_guard lock(m_poolMutex);
+    uint32_t currentGen = m_generationID.load();
+    
     for (const auto& item : batch) {
         JobInfo job;
         job.type = JobType::Tile;
         job.path = path;
         job.imageId = imageId;
         job.mmf = mmf;
-        job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
+        job.submitTime = std::chrono::steady_clock::now();
         job.tileCoord = item.coord;
         job.region = item.region;
         job.priority = item.priority;
+        job.genID = currentGen;
         m_pendingJobs.push_back(job);
     }
-    // Sort entire queue to ensure highest priority is first (at front?)
-    // Wait, m_pendingJobs is processed front-to-back.
-    // Sort Descending Priority: [High, Med, Low]
-    // front() is High. Correct.
-    std::stable_sort(m_pendingJobs.begin(), m_pendingJobs.end(), [](const JobInfo& a, const JobInfo& b) {
-        return a.priority > b.priority;
-    });
+    // Bulk re-heapify (faster than individual push_heap)
+    std::make_heap(m_pendingJobs.begin(), m_pendingJobs.end());
+    
     TryExpand();
     m_activeTileJobs.fetch_add((int)batch.size());
     m_poolCv.notify_all();
 }
 
+// [Titan Engine] Batch Submission for MacroTiles
 void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>>& batch, int priority) {
     if (batch.empty()) return;
+
+    // Update Limit once per batch
+    bool isSSD = SystemInfo::IsSolidStateDrive(path);
+    UpdateIOLimit(isSSD ? 8 : 2);
+
     std::lock_guard lock(m_poolMutex);
+    uint32_t currentGen = m_generationID.load();
+
     for (const auto& item : batch) {
         JobInfo job;
         job.type = JobType::Tile;
         job.path = path;
         job.imageId = imageId;
-        job.submitTime = std::chrono::steady_clock::now(); // [Metrics]
-        job.mmf = mmf; // [Optimization] Pass MMF
+        job.submitTime = std::chrono::steady_clock::now();
+        job.mmf = mmf;
+        
         job.tileCoord = item.first;
         job.region = item.second;
-        job.priority = priority;
+        job.priority = priority; // All share same priority
+        
+        job.genID = currentGen;
         m_pendingJobs.push_back(job);
     }
-    std::stable_sort(m_pendingJobs.begin(), m_pendingJobs.end(), [](const JobInfo& a, const JobInfo& b) {
-        return a.priority > b.priority;
-    });
+    // Bulk re-heapify
+    std::make_heap(m_pendingJobs.begin(), m_pendingJobs.end());
+
     TryExpand();
     m_activeTileJobs.fetch_add((int)batch.size());
     m_poolCv.notify_all();
@@ -235,34 +298,68 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
     
     while (!st.stop_requested()) {
         JobInfo job;
-        
+        bool taken = false;
+
         // Wait for job
         {
             std::unique_lock lock(m_poolMutex);
             m_poolCv.wait(lock, [&] {
+                // In Titan Mode, we persist even if empty (until stop_requested)
+                // But generally we wait until there IS a job or stop is requested.
                 return st.stop_requested() || !m_pendingJobs.empty();
             });
             
             if (st.stop_requested()) break;
-            if (m_pendingJobs.empty()) continue;
+            if (m_pendingJobs.empty()) continue; // Spurious wake
             
-            // Take job
-            job = m_pendingJobs.front();
-            m_pendingJobs.pop_front();
+            // Take job (Heap Pop)
+            std::pop_heap(m_pendingJobs.begin(), m_pendingJobs.end());
+            job = m_pendingJobs.back();
+            m_pendingJobs.pop_back();
             
+            taken = true;
+            
+            // [Smart Pull] Check 1: Generation ID
+            // If job is from an old generation (before Flush), assert it's dead.
+            if (job.genID != m_generationID.load()) {
+                // Drop and loop again
+                continue;
+            }
+
             self.currentPath = job.path;
             self.currentId = job.imageId;  // [ImageID]
             self.stopSource = std::stop_source();  // Fresh stop source for this job
             self.state = WorkerState::BUSY;
             m_busyCount.fetch_add(1);
         }
+
+        // [Smart Pull] Check 2: Visibility (Only for Tiles)
+        // Check if tile is still visible before burning CPU/IO
+        if (job.type == JobType::Tile) {
+             if (auto tm = m_parent->GetTileManager()) {
+                 // Convert TileCoord to TileKey
+                 auto key = TileKey::From(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod);
+                 if (!tm->IsVisible(key)) {
+                     // Not visible anymore
+                     m_busyCount.fetch_sub(1);
+                     self.state = WorkerState::STANDBY;
+                     continue;
+                 }
+             }
+        }
         
         // Perform decode
         auto t0 = std::chrono::steady_clock::now();
         
+        // [IO Throttling] Acquire IO Budget
+        // Note: verify m_ioSemaphore is available.
+        m_ioSemaphore.acquire();
+
         // Pass the whole job info
         PerformDecode(workerId, job, st, &self.loaderName);
         
+        m_ioSemaphore.release();
+
         auto t1 = std::chrono::steady_clock::now();
         
         // Decode complete
@@ -291,7 +388,23 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
 
 void HeavyLanePool::TryExpand() {
     // [Optimization] Aggressive Expansion Strategy
-    // Goal: Maintain (Active Workers == Pending Jobs + 1 Hot Spare)
+    
+    // [Titan Mode] Logic: Fill to Capacity
+    if (m_isTitanMode) {
+        for (int i = 0; i < m_cap; ++i) {
+             if (m_workers[i].state == WorkerState::SLEEPING) {
+                m_workers[i].thread = std::jthread([this, i](std::stop_token st) {
+                    WorkerLoop(i, st);
+                });
+                m_workers[i].state = WorkerState::STANDBY;
+                m_workers[i].lastActiveTime = std::chrono::steady_clock::now();
+                m_activeCount.fetch_add(1);
+             }
+        }
+        return;
+    }
+
+    // Maintain (Active Workers == Pending Jobs + 1 Hot Spare)
     // Limits: Cannot exceed m_cap.
     
     int pending = (int)m_pendingJobs.size();
@@ -305,10 +418,6 @@ void HeavyLanePool::TryExpand() {
     // We want enough workers to cover all pending jobs, PLUS one extra for immediate response
     // if a new high-priority job comes in during this batch.
     int targetIdle = 1; 
-    
-    // If we have 10 jobs and 0 idle, we need 11 workers total (implied).
-    // Actually, simpler logic:
-    // If (idle < pending + 1), try to spawn more.
     
     // If (idle < pending + 1), try to spawn more.
     
@@ -335,11 +444,6 @@ void HeavyLanePool::TryExpand() {
             
             m_activeCount.fetch_add(1);
             idle++; // Now we have one more idle worker
-            
-            // Debug logging (throttled or batched usually, but here fine)
-            // wchar_t buf[128];
-            // swprintf_s(buf, L"[HeavyPool] Expanded: Worker %d started. Active: %d, Pending: %d\n", i, m_activeCount.load(), pending);
-            // OutputDebugStringW(buf);
         }
     }
 }
@@ -350,6 +454,9 @@ void HeavyLanePool::ShrinkerLoop(std::stop_token st) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         if (st.stop_requested()) break;
         
+        // [Titan Mode] Disable shrinking. Threads are persistent.
+        if (m_isTitanMode) continue;
+
         std::lock_guard lock(m_poolMutex);
         auto now = std::chrono::steady_clock::now();
         

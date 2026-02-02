@@ -35,6 +35,7 @@ namespace QuickView {
         // State Query
         bool IsReady(TileKey key);
         bool IsNeeded(TileKey key, uint32_t genId) const;
+        bool IsVisible(TileKey key) const; // [Smart Pull]
 
         // Current Generation (increments on jump/cut)
         uint32_t GetGenerationID() const { return m_generationId; }

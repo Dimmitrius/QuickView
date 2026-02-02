@@ -157,8 +157,14 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
              info.width, info.height, fmtUpper.c_str(), 
              (m_mmf && m_mmf->IsValid()) ? L"OK" : L"FAIL");
          OutputDebugStringW(debugBuf);
+         
+         // [Fix] Activate Titan Mode in Pool (Persistence)
+         m_heavyPool->SetTitanMode(true);
     } else {
          m_mmf.reset(); // Release Member MMF (but primaryMMF still exists for this scope/job)
+         
+         // [Fix] Deactivate Titan Mode (Elastic)
+         m_heavyPool->SetTitanMode(false);
     }
 
     // [Prefetch System] Cache Check ...

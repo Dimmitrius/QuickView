@@ -4,6 +4,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <winioctl.h>
 #endif
 
 // ============================================================================
@@ -18,6 +19,66 @@ struct SystemInfo {
     
     bool hasAVX2 = false;
     bool hasAVX512F = false;
+
+    static bool IsSolidStateDrive(const std::wstring& path) {
+#ifdef _WIN32
+        // Get Volume Path (e.g. "C:\\") from file path
+        wchar_t volumePath[MAX_PATH];
+        if (!GetVolumePathNameW(path.c_str(), volumePath, MAX_PATH)) {
+            return false; // Safest default to HDD-like behavior if failed
+        }
+
+        // Create handle to the volume
+        // Remove trailing backslash for CreateFile if it's a root drive? 
+        // No, GetVolumePathName returns "C:\" usually.
+        // For CreateFile with specific volume, we need "\\.\C:" format usually, 
+        // OR we can open the directory if we have rights?
+        // Actually, IOCTL_STORAGE_QUERY_PROPERTY works on a handle to a physical drive or a volume.
+        // Opening the volume root "C:\" works but requires admin sometimes?
+        // "Filesystem" queries usually work with just GENERIC_READ on the directory.
+        // But STORAGE queries might need volume handle.
+        // Let's try opening the volume.
+        
+        std::wstring volStr = volumePath;
+        if (volStr.back() == L'\\') volStr.pop_back(); // "C:"
+        
+        // Format: "\\.\C:" to open volume
+        std::wstring devicePath = L"\\\\.\\" + volStr;
+        
+        HANDLE hDevice = CreateFileW(devicePath.c_str(), 
+                                     0, // No access rights needed for query usually, or GENERIC_READ
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE, 
+                                     NULL, 
+                                     OPEN_EXISTING, 
+                                     0, 
+                                     NULL);
+
+        if (hDevice == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+
+        STORAGE_PROPERTY_QUERY query = {};
+        query.PropertyId = StorageDeviceSeekPenaltyProperty;
+        query.QueryType = PropertyStandardQuery;
+
+        DEVICE_SEEK_PENALTY_DESCRIPTOR result = {};
+        DWORD bytesReturned = 0;
+
+        bool isSSD = false;
+        if (DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY, 
+                            &query, sizeof(query), 
+                            &result, sizeof(result), 
+                            &bytesReturned, NULL)) {
+            // IncursSeekPenalty = false means SSD (Random access is cheap)
+            isSSD = !result.IncursSeekPenalty;
+        }
+
+        CloseHandle(hDevice);
+        return isSSD;
+#else
+        return true; // Assume fast storage on non-Windows for now
+#endif
+    }
 
     static SystemInfo Detect() {
         SystemInfo info;
