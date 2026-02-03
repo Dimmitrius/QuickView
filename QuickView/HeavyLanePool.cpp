@@ -664,54 +664,49 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                   // Direct Decode Logic (No Background Preload)
 
 
-                  float scaleX = (float)job.region.dstWidth / job.region.srcRect.w;
-                  float scaleY = (float)job.region.dstHeight / job.region.srcRect.h;
-                  float scale = (scaleX < scaleY) ? scaleX : scaleY; 
-                  
-                  // Diagnostic: Start Decode
-                  /*
-                  wchar_t startLog[256];
-                  swprintf_s(startLog, L"[HeavyPool] Worker %d: Decode Tile (LOD %d, C%d R%d) Scale=%.3f\n", 
-                     workerId, job.tileCoord.lod, job.tileCoord.col, job.tileCoord.row, scale);
-                  OutputDebugStringW(startLog);
-                  */
-                     // Diagnostic: Start Decode / Metrics
+                  // Direct Decode Logic (No Background Preload)
+
+                  // [Fix] Calculate Scale from LOD (Precise)
+                  // Edge tiles have clipped srcRect, so dst/src ratio is WRONG (causes upscaling).
+                  // LOD implies power-of-2 scale: 0=1.0, 1=0.5, 2=0.25...
+                  int lod = job.tileCoord.lod;
+                  float scale = 1.0f / (float)(1 << lod);
+
+                  // Diagnostic: Start Decode / Metrics
                   // auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(start - job.submitTime).count(); // Moved below
                   // int activeWorkers = m_busyCount.load(); // Moved below
     
                   // For Tile Loading, we use LoadRegionToFrame
-
                   QuickView::RegionRect rect = { job.region.srcRect.x, job.region.srcRect.y, job.region.srcRect.w, job.region.srcRect.h };
                   
                   // [MMF Optimization] Zero-Copy Path
-                  // [MMF Optimization] Zero-Copy Path
-                  // [Fix] Reverted to LoadRegionToFrame for robustness (LoadTileFromMemory caused stride artifacts on Titan)
-                  /*
                   if (job.mmf && job.mmf->IsValid()) {
                       // Direct memory access - NO IO here!
+                      // [Titan] Robust Zero-Copy Loader with Padding
+                      // [Fix] FORCE target size to be Full Tile (512x512) to prevent stretching.
+                      // Even if the job.region (clipped) says 512x20, we want a 512x512 buffer 
+                      // with the bottom 492 pixels transparent.
+                      // RenderEngine will then draw a 512x512 quad.
                       hr = CImageLoader::LoadTileFromMemory(
                           job.mmf->data(), job.mmf->size(), 
                           rect, scale, 
-                          &rawFrame, &m_tileMemory
+                          &rawFrame, &m_tileMemory,
+                          512, 512 // [Fix] HARDCODED TILE_SIZE (matches TileManager.h)
                       );
+                      
                       if (FAILED(hr)) {
                           loaderName = L"MMF Failed -> Fallback";
-                          // Fallback to File
-                          hr = m_loader->LoadRegionToFrame(job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr, &loaderName, cancelPred);
+                          // Fallback to File (Slow Path)
+                          hr = m_loader->LoadRegionToFrame(job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr /*arena*/, &loaderName, cancelPred, 512, 512);
                       } else {
                           loaderName = L"TurboJPEG (MMF)";
                       }
-                  }
-                  else 
-                  */
-                  {
+                  } else {
                       // Fallback: File IO Path (Slow)
                       // [Titan] Use Shareable Slab Allocator
-                      // Note: LoadRegionToFrame internally uses SafeLoadJpegRegion which handles MMF if used via MappedFile locally,
-                      // but here we pass path. 
-                      // actually LoadRegionToFrame creates MappedFile internally for JPEG! So it IS Zero-Copy compatible.
+                      // [Fix] Pass 512, 512 to force padding internally
                       hr = m_loader->LoadRegionToFrame(job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr /*arena*/, &loaderName,
-                         cancelPred);
+                         cancelPred, 512, 512);
                   }
               }
          }

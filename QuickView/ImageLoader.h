@@ -208,13 +208,12 @@ public:
 
     // [Infinity Engine] Zero-Copy Tile Loader
     // Decodes a region directly from a memory pointer (MMF) into a slab.
-    // REQUIRES: tj3Decompress8 (TurboJPEG 3)
     static HRESULT LoadTileFromMemory(
         const uint8_t* sourceData, size_t sourceSize,
         QuickView::RegionRect region, float scale,
         QuickView::RawImageFrame* outFrame,
-        QuickView::TileMemoryManager* tileManager
-    );
+        QuickView::TileMemoryManager* tileManager,
+        int targetWidth = 0, int targetHeight = 0); // [Fix] Explicit Target Size for padding
 
     // ============================================================================
     // [Direct D2D] Zero-Copy Loading API
@@ -268,13 +267,15 @@ public:
                               QuickView::TileMemoryManager* tileManager,
                               class QuantumArena* arena,
                               std::wstring* pLoaderName,
-                              CancelPredicate checkCancel);
+                              CancelPredicate checkCancel,
+                              int targetWidth = 0, int targetHeight = 0);
 
     HRESULT LoadRegionGeneric_StrategyB(LPCWSTR filePath, QuickView::RegionRect srcRect, float scale, 
                                        QuickView::RawImageFrame* outFrame, 
                                        QuickView::TileMemoryManager* tileManager, 
                                        class QuantumArena* arena, 
-                                       CancelPredicate checkCancel);
+                                       CancelPredicate checkCancel,
+                                       int targetWidth = 0, int targetHeight = 0);
 
     HRESULT LoadJPEG(LPCWSTR filePath, IWICBitmap** ppBitmap);  // libjpeg-turbo
 
