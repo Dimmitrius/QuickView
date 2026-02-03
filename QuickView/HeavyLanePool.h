@@ -160,6 +160,20 @@ private:
     std::atomic<bool> m_useThreadLocalHandle = true; // [Titan]
     std::atomic<int> m_concurrencyLimit = 0; // 0 = Unlimited (or bounded by m_cap)
 
+    // [Scientific 2.0] Scout Phase for Dynamic Concurrency
+    enum class ScoutPhase {
+        IDLE,       // Not in Titan mode or already decided
+        SCOUTING,   // First N tiles are being measured
+        DECIDED     // Concurrency has been set
+    };
+    std::atomic<ScoutPhase> m_scoutPhase = ScoutPhase::IDLE;
+    static constexpr int SCOUT_SAMPLE_COUNT = 2; // Measure first 2 tiles
+    std::atomic<double> m_scoutSamples[SCOUT_SAMPLE_COUNT] = {}; // MP/s scores
+    std::atomic<int> m_scoutSampleIndex = 0;
+    
+    void ResetScoutState();
+    void ApplyScientificConcurrency(double avgScoreMPs);
+
     std::atomic<int> m_activeCount = 0;  // STANDBY + BUSY
     std::atomic<int> m_busyCount = 0;    // Only BUSY
     std::atomic<int> m_cancelCount = 0;

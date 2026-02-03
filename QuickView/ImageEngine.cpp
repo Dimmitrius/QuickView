@@ -154,8 +154,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
 
     bool enableTitan = (sizeTrigger || pixelTrigger) && isSupportedFormat;
     
-    // [Titan Guard] Thresholds
-    const size_t THRESHOLD_TITAN = 500 * 1000 * 1000;      // 500MP
+    // [Titan Guard] Threshold for skipping base layer (very large images)
     const size_t THRESHOLD_SKIP_BASE = 200 * 1000 * 1000;  // 200MP
 
     if (enableTitan) {
@@ -169,54 +168,18 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
              (m_mmf && m_mmf->IsValid()) ? L"OK" : L"FAIL");
          OutputDebugStringW(debugBuf);
          
-         // [Fix] Activate Titan Mode in Pool (Persistence)
-         // MOVED BELOW: We must determine Limit FIRST before enabling Titan Mode
-         // so that TryExpand pre-heats the correct number of threads.
-         // m_heavyPool->SetTitanMode(true);
-
-         // [Titan Guard] Logic
-         int hwThreads = (int)std::thread::hardware_concurrency();
-         int halfThreads = hwThreads / 2;
-         if (halfThreads < 2) halfThreads = 2;
-
-         if (pixelCount > THRESHOLD_TITAN) { 
-             // [Defense Mode] - >500MP
-             // Rule: Min(CPU/2, 2) [TEST MODE]
-             int limit = 2;
-             m_heavyPool->SetConcurrencyLimit(limit);
-             m_heavyPool->SetUseThreadLocalHandle(false); 
-             m_enablePadding = false; 
-             OutputDebugStringW(L"[Titan Guard] Activated: Defense Mode (>500MP) -> Limit 1 [TEST]\n");
-         } else if (pixelCount > THRESHOLD_SKIP_BASE) {
-             // [Balanced Mode] - 200MP ~ 500MP
-             // Rule: Min(CPU/2, 4)
-             int limit = std::min(halfThreads, 4);
-             m_heavyPool->SetConcurrencyLimit(limit);
-             m_heavyPool->SetUseThreadLocalHandle(true);
-             m_enablePadding = true;
-             OutputDebugStringW(L"[Titan Guard] Activated: Balanced Mode (200-500MP) -> Limit 4\n");
-         } else {
-             // [Speed Mode] - < 200MP
-             // Rule: CPU/2
-             m_heavyPool->SetConcurrencyLimit(halfThreads);
-             m_heavyPool->SetUseThreadLocalHandle(true);
-             m_enablePadding = true;
-             wchar_t buf[128];
-             swprintf_s(buf, L"[Titan Guard] Activated: Speed Mode (50-200MP) -> Limit %d (Half-CPU)\n", halfThreads);
-             OutputDebugStringW(buf);
-         }
-         
-         // [Fix] Enable Titan Mode AFTER setting limits to ensure correct pre-heating
+         // [Scientific 2.0] Enable Titan Mode - pool handles dynamic concurrency via Scout phase.
+         // SetTitanMode(true) resets scout state, sets initial concurrency to 2, 
+         // and after measuring 2 tiles, adjusts to optimal thread count based on MP/s.
          m_heavyPool->SetTitanMode(true);
+         m_heavyPool->SetUseThreadLocalHandle(true);
+         m_enablePadding = true;
 
     } else {
          m_mmf.reset(); // Release Member MMF (but primaryMMF still exists for this scope/job)
          
          // [Fix] Deactivate Titan Mode (Elastic)
          m_heavyPool->SetTitanMode(false);
-         // Reset Guard (Standard Defaults)
-         m_heavyPool->SetConcurrencyLimit(0); // Unlimited (Cap)
-         m_heavyPool->SetUseThreadLocalHandle(true);
          m_enablePadding = true; 
     }
 

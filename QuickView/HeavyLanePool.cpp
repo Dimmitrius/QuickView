@@ -72,8 +72,20 @@ void HeavyLanePool::UpdateIOLimit(int newLimit) {
 void HeavyLanePool::SetTitanMode(bool enabled) {
     m_isTitanMode = enabled;
     if (enabled) {
-        // [Titan] Pre-spawn all workers
+        // [Scientific 2.0] ALWAYS reset scout state when entering Titan mode.
+        // This handles fast image switching correctly.
+        ResetScoutState();
+        
+        // [Scout] Initial concurrency = 2 for measurement phase.
+        // This gives us 2 data points quickly and provides visual feedback.
+        SetConcurrencyLimit(2);
+        
+        // [Titan] Pre-spawn workers (now limited to 2 by concurrency limit)
         TryExpand(); 
+    } else {
+        // Leaving Titan mode: reset to standard elastic behavior
+        m_scoutPhase = ScoutPhase::IDLE;
+        SetConcurrencyLimit(0); // 0 = Unlimited (elastic)
     }
 }
 
@@ -92,6 +104,50 @@ void HeavyLanePool::SetConcurrencyLimit(int limit) {
 
 void HeavyLanePool::SetUseThreadLocalHandle(bool use) {
     m_useThreadLocalHandle = use;
+}
+
+// [Scientific 2.0] Reset scout state for a new Titan image
+void HeavyLanePool::ResetScoutState() {
+    m_scoutPhase = ScoutPhase::SCOUTING;
+    m_scoutSampleIndex = 0;
+    for (int i = 0; i < SCOUT_SAMPLE_COUNT; ++i) {
+        m_scoutSamples[i] = 0.0;
+    }
+    OutputDebugStringW(L"[HeavyPool] Scout state RESET. Phase: SCOUTING (2 threads).\n");
+}
+
+// [Scientific 2.0] Apply dynamic concurrency based on measured throughput
+void HeavyLanePool::ApplyScientificConcurrency(double avgScoreMPs) {
+    // Decision Table (from user spec)
+    int targetConcurrency = 2; // Default: Slow hardware
+    
+    if (avgScoreMPs > 15.0) {
+        targetConcurrency = 12; // Top-tier workstation
+    } else if (avgScoreMPs > 8.0) {
+        targetConcurrency = 8;  // High-performance
+    } else if (avgScoreMPs > 3.0) {
+        targetConcurrency = 6;  // Mainstream
+    } else {
+        targetConcurrency = 2;  // Low-end / constrained
+    }
+    
+    // Hardware Clamp: Don't exceed physical cores - 1 (leave one for UI)
+    int physicalCores = (int)std::thread::hardware_concurrency() / 2;
+    int finalThreads = std::min(targetConcurrency, physicalCores - 1);
+    
+    // Safety Floor: At least 2 threads
+    finalThreads = std::max(finalThreads, 2);
+    
+    // Don't exceed pool capacity
+    finalThreads = std::min(finalThreads, m_cap);
+    
+    wchar_t buf[256];
+    swprintf_s(buf, L"[HeavyPool] Scout Result: %.2f MP/s. Target: %d. Physical: %d. Final: %d threads.\n",
+        avgScoreMPs, targetConcurrency, physicalCores, finalThreads);
+    OutputDebugStringW(buf);
+    
+    m_scoutPhase = ScoutPhase::DECIDED;
+    SetConcurrencyLimit(finalThreads);
 }
 
 void HeavyLanePool::Flush() {
@@ -761,6 +817,38 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
           swprintf_s(resultLog, L"[HeavyPool] Worker %d: %s %s in %d ms (Wait: %lld ms, Concurrency: %d, Loader: %s)\n", 
               workerId, SUCCEEDED(hr) ? L"DONE" : L"FAIL", (job.type == JobType::Tile ? L"Tile" : L"Std"), decodeMs, waitMs, activeWorkers, loaderName.c_str());
           OutputDebugStringW(resultLog);
+          
+          // [Scientific 2.0] Scout Measurement for Tile Decodes
+          if (job.type == JobType::Tile && SUCCEEDED(hr) && m_scoutPhase == ScoutPhase::SCOUTING) {
+              // Calculate MP/s (pixels decoded per second, normalized)
+              double tilePixels = (double)rawFrame.width * rawFrame.height; // Actual decoded pixels
+              double durationSec = decodeMs / 1000.0;
+              if (durationSec > 0.001) { // Avoid divide-by-zero for instant decodes
+                  double scoreMPs = (tilePixels / 1000000.0) / durationSec;
+                  
+                  // Store sample (atomic increment)
+                  int idx = m_scoutSampleIndex.fetch_add(1);
+                  if (idx < SCOUT_SAMPLE_COUNT) {
+                      m_scoutSamples[idx] = scoreMPs;
+                      
+                      wchar_t scoutBuf[128];
+                      swprintf_s(scoutBuf, L"[HeavyPool] Scout Sample %d: %.2f MP/s (Tile %dx%d in %d ms)\n",
+                          idx + 1, scoreMPs, rawFrame.width, rawFrame.height, decodeMs);
+                      OutputDebugStringW(scoutBuf);
+                      
+                      // Check if we have enough samples
+                      if (idx == SCOUT_SAMPLE_COUNT - 1) {
+                          // We have all samples - calculate average and apply
+                          double sum = 0.0;
+                          for (int i = 0; i < SCOUT_SAMPLE_COUNT; ++i) {
+                              sum += m_scoutSamples[i].load();
+                          }
+                          double avg = sum / SCOUT_SAMPLE_COUNT;
+                          ApplyScientificConcurrency(avg);
+                      }
+                  }
+              }
+          }
         
         if (cancelPred() || hr == E_ABORT) {
             m_cancelCount++;
