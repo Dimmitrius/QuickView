@@ -80,8 +80,11 @@ void HeavyLanePool::SetTitanMode(bool enabled) {
 void HeavyLanePool::SetConcurrencyLimit(int limit) {
     m_concurrencyLimit = limit;
     // We don't need to force shrink here; WorkerLoop checks limit before starting work.
-    // If we wanted to be aggressive, we could use m_ioSemaphore, but existing logic uses it for SSD/HDD.
-    // We'll add a check in WorkerLoop.
+    // however, if we GROW the limit, we must wake up sleeping workers so they can check the new limit rule.
+    // AND we must potentially spawn new workers if we were enforcing a strict count.
+    TryExpand(); 
+    m_poolCv.notify_all();
+    
     wchar_t buf[128];
     swprintf_s(buf, L"[HeavyPool] Concurrency Limit set to %d\n", limit);
     OutputDebugStringW(buf);
@@ -93,6 +96,17 @@ void HeavyLanePool::SetUseThreadLocalHandle(bool use) {
 
 void HeavyLanePool::Flush() {
     std::lock_guard lock(m_poolMutex);
+    
+    // [Fix] Fix Leaked Active Count
+    // We must count how many tile jobs are being discarded
+    int discardedTiles = 0;
+    for (const auto& job : m_pendingJobs) {
+        if (job.type == JobType::Tile) discardedTiles++;
+    }
+    if (discardedTiles > 0) {
+        m_activeTileJobs.fetch_sub(discardedTiles);
+    }
+    
     m_pendingJobs.clear(); // O(1) with vector
     // Increment generation to invalidate any in-flight jobs that haven't started processing
     m_generationID.fetch_add(1); 
@@ -165,7 +179,7 @@ void HeavyLanePool::Submit(const std::wstring& path, ImageID imageId, std::share
     std::push_heap(m_pendingJobs.begin(), m_pendingJobs.end()); // O(log N)
 
     TryExpand();
-    m_poolCv.notify_one();
+    m_poolCv.notify_all(); // [Fix] notify_all required
 }
 
 void HeavyLanePool::SubmitFullDecode(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf) {
@@ -185,7 +199,7 @@ void HeavyLanePool::SubmitFullDecode(const std::wstring& path, ImageID imageId, 
     std::push_heap(m_pendingJobs.begin(), m_pendingJobs.end());
 
     TryExpand();
-    m_poolCv.notify_one();
+    m_poolCv.notify_all();
 }
 
 void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, TileCoord coord, RegionRequest region, int priority) {
@@ -206,7 +220,7 @@ void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::s
     
     TryExpand();
     m_activeTileJobs.fetch_add(1);
-    m_poolCv.notify_one();
+    m_poolCv.notify_all(); // [Fix] notify_all required for filtered pool
 }
 
 void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<TilePriorityRequest>& batch) {
@@ -280,16 +294,19 @@ void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, s
 void HeavyLanePool::CancelOthers(ImageID currentId) {
     std::lock_guard lock(m_poolMutex);
     
-    // 1. Clear Job Queue of non-matching IDs
+// 1. Clear Job Queue of non-matching IDs
     auto it = m_pendingJobs.begin();
+    int removedTiles = 0;
     while (it != m_pendingJobs.end()) {
         if (it->imageId != currentId) {
+            if (it->type == JobType::Tile) removedTiles++;
             it = m_pendingJobs.erase(it);
             m_cancelCount++;
         } else {
             ++it;
         }
     }
+    if (removedTiles > 0) m_activeTileJobs.fetch_sub(removedTiles);
     
     // 2. Stop BUSY workers working on old IDs
     for (auto& w : m_workers) {
@@ -302,6 +319,13 @@ void HeavyLanePool::CancelOthers(ImageID currentId) {
 
 void HeavyLanePool::CancelAll() {
     std::lock_guard lock(m_poolMutex);
+    
+    int discardedTiles = 0;
+    for (const auto& job : m_pendingJobs) {
+        if (job.type == JobType::Tile) discardedTiles++;
+    }
+    if (discardedTiles > 0) m_activeTileJobs.fetch_sub(discardedTiles);
+    
     m_pendingJobs.clear();
     for (auto& w : m_workers) {
         w.stopSource.request_stop();
@@ -329,7 +353,12 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
             m_poolCv.wait(lock, [&] {
                 // In Titan Mode, we persist even if empty (until stop_requested)
                 // But generally we wait until there IS a job or stop is requested.
-                return st.stop_requested() || !m_pendingJobs.empty();
+                // [Fix] Enforce Concurrency Limit at Wakeup
+                // High-index workers (e.g. 7) should NOT take jobs if limit is low (e.g. 4).
+                int limit = m_concurrencyLimit.load();
+                bool allowed = (limit == 0 || workerId < limit);
+                
+                return st.stop_requested() || (!m_pendingJobs.empty() && allowed);
             });
             
             if (st.stop_requested()) break;
@@ -345,6 +374,15 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
             // [Smart Pull] Check 1: Generation ID
             // If job is from an old generation (before Flush), assert it's dead.
             if (job.genID != m_generationID.load()) {
+                // [Fix Leak] If we popped it, but reject it, we must decrement the global counter if Flush missed it.
+                // Flush matches GenID? No, Flush increments GenID.
+                // If we hold an old GenID job, it means Flush already ran or is running.
+                // Flush only counts what's IN the vector. We removed this from vector.
+                // So WE are responsible for decrementing the count for this dropped job.
+                if (job.type == JobType::Tile) {
+                    m_activeTileJobs.fetch_sub(1);
+                }
+                
                 // Drop and loop again
                 continue;
             }
@@ -357,29 +395,10 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         }
 
         // [Titan Guard] Pool Throttling
-        // Check concurrency limit before proceeding.
-        // If we are over the limit, we wait here without holding the job mutex (already released above).
-        // But we DO hold the 'm_busyCount' token.
-        // Wait... if we hold m_busyCount, we are counting as active.
-        // If we wait here, we block *processing* but we are already "BUSY".
-        // The limit check should ideally happen BEFORE taking the job, OR we spin-wait here?
-        // User says: "temporarily wait or not compete for semaphore".
-        // Let's us a simplified approach: Wait until active_workers < limit.
-        int limit = m_concurrencyLimit.load();
-        if (limit > 0) {
-            // Check if we exceed limit.
-            // Note: We already incremented m_busyCount.
-            // So if m_busyCount > limit, we are the excess.
-            // We should wait until someone finishes.
-            // We can use a condition variable or a simple sleep/yield loop.
-            // Since this is "Titan Guard" (rare huge images), simple yield is fine.
-            int backoff = 1;
-            while (m_busyCount.load() > limit && !st.stop_requested()) {
-                 // Yield to let others finish
-                 std::this_thread::sleep_for(std::chrono::milliseconds(backoff));
-                 backoff = std::min(backoff * 2, 50); // Cap at 50ms
-            }
-        }
+        // Deprecated: Loop now enforces admission at the Condition Variable.
+        // Also, TryExpand aggressively kills excess workers if limit drops.
+        // So we don't need to yield here.
+
 
         // [Smart Pull] Check 2: Visibility & State (Only for Tiles)
         // Check if tile is still valid (not reset by Zoom or scrolled away)
@@ -482,16 +501,35 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
 void HeavyLanePool::TryExpand() {
     // [Optimization] Aggressive Expansion Strategy
     
-    // [Titan Mode] Logic: Fill to Capacity
+    // [Titan Mode] Logic: Pre-heat EXACTLY the needed number of threads
+    // If Limit is 4, we spawn Workers 0-3. We do NOT spawn 4-13.
+    // This reduces contention and ensures "notify_all" targets valid workers.
     if (m_isTitanMode) {
+        int limit = m_concurrencyLimit.load();
+        int targetFn = (limit > 0) ? limit : m_cap;
+        
+        // Safety: clamp to physical capacity
+        if (targetFn > m_cap) targetFn = m_cap;
+
         for (int i = 0; i < m_cap; ++i) {
-             if (m_workers[i].state == WorkerState::SLEEPING) {
-                m_workers[i].thread = std::jthread([this, i](std::stop_token st) {
-                    WorkerLoop(i, st);
-                });
-                m_workers[i].state = WorkerState::STANDBY;
-                m_workers[i].lastActiveTime = std::chrono::steady_clock::now();
-                m_activeCount.fetch_add(1);
+             if (i < targetFn) {
+                 // Spawn/Preheat if needed
+                 if (m_workers[i].state == WorkerState::SLEEPING) {
+                    m_workers[i].thread = std::jthread([this, i](std::stop_token st) {
+                        WorkerLoop(i, st);
+                    });
+                    m_workers[i].state = WorkerState::STANDBY;
+                    m_workers[i].lastActiveTime = std::chrono::steady_clock::now();
+                    m_activeCount.fetch_add(1);
+                 }
+             } else {
+                 // [Titan Strict] Kill Excess Workers (i >= Target)
+                 // If we switched from 14 -> 2, we must kill 12.
+                 if (m_workers[i].state != WorkerState::SLEEPING) {
+                     // [Fix] Use thread.request_stop() to terminate the jthread loop.
+                     // stopSource is for Job Cancellation, not Thread Life.
+                     m_workers[i].thread.request_stop();
+                 }
              }
         }
         return;
@@ -514,14 +552,8 @@ void HeavyLanePool::TryExpand() {
     
     // If (idle < pending + 1), try to spawn more.
     
-    // [Optimization] Concurrency Throttling
-    // Too many threads thrash the cache/bandwidth for tile decoding.
-    // Limit active workers to physical cores (approx 8-12) or a tuned constant.
-    // 15 threads -> 1.2s latency (Saturation).
-    // 12 threads -> 1.2s latency (Still Saturated).
-    // Try 8 threads to reduce memory bus contention.
+    // [User Request] Remove artificial hardcap (e.g. 8). Use full m_cap (CPU-2).
     int effectiveCap = m_cap;
-    if (effectiveCap > 8) effectiveCap = 8; // Hardcap to 8 for smoother tiles
 
     // Iterate and fill slots until satisfied or full
     for (int i = 0; i < effectiveCap; ++i) {
@@ -591,8 +623,16 @@ bool HeavyLanePool::ShouldBecomeHotSpare(int workerId) {
     // The shrinker thread handles the actual timeout.
     // [Titan] If ThreadLocalHandle disabled, destroy thread to release memory?
     // User requirement: "Disable reuse, use and release immediately".
+    // [Fix] In Titan Mode (Defense), we MUST keep the thread alive (STANDBY) 
+    // to handle the next tile efficiently. The "Disable Reuse" logic applies to 
+    // internal codec handles (handled by LoadJpegRegion_V3 stack allocation), 
+    // not the OS thread itself.
+    // So we always return true here to let the worker go back to Sleep/Wait.
+    if (m_isTitanMode) return true;
+
     if (!m_useThreadLocalHandle) {
-        return false; // Exit WorkerLoop -> Thread dies -> Stack/resources freed.
+        // Legacy mode check... usually we still want to keep thread.
+        // But let's trust m_isTitanMode override relative logic.
     }
     
     // Here we just return true unless we are shutting down.

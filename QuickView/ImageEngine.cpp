@@ -24,14 +24,10 @@ ImageEngine::ImageEngine(CImageLoader* loader)
     SystemInfo sysInfo = SystemInfo::Detect();
     m_engineConfig = EngineConfig::FromHardware(sysInfo);
     
-    // [Fix Lag] Limit Concurrency for Tiles
-    // Allow UI thread + Render thread + OS to breathe.
-    // 1.2s latency observed with full core saturation.
-    int safeLimit = sysInfo.logicalCores / 2;
-    if (safeLimit < 2) safeLimit = 2; // Minimum floor
-    if (m_engineConfig.maxHeavyWorkers > safeLimit) {
-        m_engineConfig.maxHeavyWorkers = safeLimit;
-    }
+    // [N+1] Uncapped Pool (User Request)
+    // Default is now max(2, CPU - 2) from EngineConfig.
+    // We do NOT clamp to 8 or half-CPU anymore.
+    // safeLimit logic removed.
     
     // [Unified Architecture] Initialize 3-Arena System
     m_pool.Initialize(ArenaConfig::Detect());
@@ -174,24 +170,44 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
          OutputDebugStringW(debugBuf);
          
          // [Fix] Activate Titan Mode in Pool (Persistence)
-         m_heavyPool->SetTitanMode(true);
+         // MOVED BELOW: We must determine Limit FIRST before enabling Titan Mode
+         // so that TryExpand pre-heats the correct number of threads.
+         // m_heavyPool->SetTitanMode(true);
 
          // [Titan Guard] Logic
-         if (pixelCount > THRESHOLD_TITAN) {
-             // [Defense Mode]
-             m_heavyPool->SetConcurrencyLimit(4);
-             m_heavyPool->SetUseThreadLocalHandle(false); // Disable reuse
-             m_enablePadding = false; // Only visible
-             OutputDebugStringW(L"[Titan Guard] Activated: Restricted Concurrency (4), No Padding, No Reuse.\n");
-         } else {
-             // [Speed Mode]
-             int hwThreads = (int)std::thread::hardware_concurrency();
-             int limit = std::min(hwThreads - 2, 8);
-             if (limit < 2) limit = 2;
+         int hwThreads = (int)std::thread::hardware_concurrency();
+         int halfThreads = hwThreads / 2;
+         if (halfThreads < 2) halfThreads = 2;
+
+         if (pixelCount > THRESHOLD_TITAN) { 
+             // [Defense Mode] - >500MP
+             // Rule: Min(CPU/2, 2) [TEST MODE]
+             int limit = 2;
+             m_heavyPool->SetConcurrencyLimit(limit);
+             m_heavyPool->SetUseThreadLocalHandle(false); 
+             m_enablePadding = false; 
+             OutputDebugStringW(L"[Titan Guard] Activated: Defense Mode (>500MP) -> Limit 1 [TEST]\n");
+         } else if (pixelCount > THRESHOLD_SKIP_BASE) {
+             // [Balanced Mode] - 200MP ~ 500MP
+             // Rule: Min(CPU/2, 4)
+             int limit = std::min(halfThreads, 4);
              m_heavyPool->SetConcurrencyLimit(limit);
              m_heavyPool->SetUseThreadLocalHandle(true);
              m_enablePadding = true;
+             OutputDebugStringW(L"[Titan Guard] Activated: Balanced Mode (200-500MP) -> Limit 4\n");
+         } else {
+             // [Speed Mode] - < 200MP
+             // Rule: CPU/2
+             m_heavyPool->SetConcurrencyLimit(halfThreads);
+             m_heavyPool->SetUseThreadLocalHandle(true);
+             m_enablePadding = true;
+             wchar_t buf[128];
+             swprintf_s(buf, L"[Titan Guard] Activated: Speed Mode (50-200MP) -> Limit %d (Half-CPU)\n", halfThreads);
+             OutputDebugStringW(buf);
          }
+         
+         // [Fix] Enable Titan Mode AFTER setting limits to ensure correct pre-heating
+         m_heavyPool->SetTitanMode(true);
 
     } else {
          m_mmf.reset(); // Release Member MMF (but primaryMMF still exists for this scope/job)

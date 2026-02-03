@@ -140,9 +140,9 @@ struct EngineConfig {
         EngineConfig cfg;
         
         // CPU Configuration
-        // [User Feedback] Minimum 2 lanes: Scout (always 1) + Heavy (at least 1)
-        // But allow more workers for parallelism on multi-core systems
-        cfg.maxHeavyWorkers = std::max(1, info.logicalCores - 1);
+        // [User Feedback] Start = max(2, CPU - 2)
+        // Remove 8-thread cap. Use all available cores (minus UI/FastLane).
+        cfg.maxHeavyWorkers = std::max(2, info.logicalCores - 2);
         
         // RAM-based tiering
         if (info.totalRAM >= 32ULL * 1024 * 1024 * 1024) {
