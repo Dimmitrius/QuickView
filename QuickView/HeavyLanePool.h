@@ -153,6 +153,7 @@ private:
     
     // [Titan] Mode Flag & IO Control
     std::atomic<bool> m_isTitanMode = false;
+    int m_titanSrcW = 0, m_titanSrcH = 0; // Source image dimensions (set in SetTitanMode)
     std::counting_semaphore<std::numeric_limits<std::ptrdiff_t>::max()> m_ioSemaphore{ 0 }; // Initialized in constructor
     int m_ioLimit = 0; // Dynamic limit based on HDD/SSD
 
@@ -193,13 +194,14 @@ private:
     struct BaselineCacheEntry {
         double mps;       // Measured throughput
         int threads;      // Decided thread count
+        bool isProgressive = false; // JPEG type for memory estimate
     };
     std::unordered_map<uint64_t, BaselineCacheEntry> m_baselineCache;
     static uint64_t MakeDimHash(int w, int h) { return ((uint64_t)w << 32) | (uint64_t)h; }
     
     void ResetBenchState();
-    void RecordBaselineSample(double outPixels, double decodeMs, int srcWidth, int srcHeight);
-    void ApplyBaselineConcurrency(double decodeMPS, int srcWidth, int srcHeight);
+    void RecordBaselineSample(double outPixels, double decodeMs, int srcWidth, int srcHeight, bool isProgressiveJPEG);
+    void ApplyBaselineConcurrency(double decodeMPS, int srcWidth, int srcHeight, bool isProgressiveJPEG);
 
     std::atomic<int> m_activeCount = 0;  // STANDBY + BUSY
     std::atomic<int> m_busyCount = 0;    // Only BUSY
@@ -289,6 +291,28 @@ private:
 
     // [Safety] Atomic Tracking for Lifecycle Management
     std::atomic<int> m_activeTileJobs = 0;
+
+    // ============================================================================
+    // [P14] LOD Decode Cache (Single-Decode-Then-Slice)
+    // ============================================================================
+    // Instead of N separate TJ region decodes per LOD (each parsing the ENTIRE
+    // progressive JPEG file), do ONE full decode at the target scale and cache.
+    // All tiles at that LOD are then sliced via memcpy (<0.1ms each).
+    struct LODCache {
+        std::shared_ptr<uint8_t[]> pixels; // Decoded full-LOD pixel buffer
+        int width = 0, height = 0, stride = 0;
+        int lod = -1;           // Which LOD level this cache represents
+        ImageID imageId = 0;    // Which image (invalidate on switch)
+    };
+    LODCache m_lodCache;
+    std::mutex m_lodCacheMutex;
+    std::atomic<bool> m_lodCacheBuilding = false; // Prevent concurrent full decodes
+    bool m_isProgressiveJPEG = false; // Detected during baseline decode
+    
+    // [P14] Helpers
+    HRESULT FullDecodeAndCacheLOD(const JobInfo& job, QuickView::RawImageFrame& outTile, std::wstring& loader);
+    HRESULT SliceTileFromLODCache(const JobInfo& job, QuickView::RawImageFrame& outTile, std::wstring& loader);
+    bool ShouldUseSingleDecode(int lod) const;
     
     // ============================================================================
     // [Optimization] Full Image Cache (RAM Preload)
