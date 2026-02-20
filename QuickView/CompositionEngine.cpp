@@ -173,7 +173,20 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
     // Note: User interacts with m_imageA/B. Smart Dispatch sets 'isTitan'.
     ImageLayer* pLayer = (m_activeLayerIndex == 0) ? &m_imageA : &m_imageB;
 
-    if (!pLayer->isTitan || !pLayer->virtualSurface) return S_FALSE; 
+    if (!pLayer->isTitan) return S_FALSE; 
+    
+    // [Fix17d] Process Eviction Queue for VRAM Trim
+    auto evicted = tileManager->PopEvictedTiles();
+    for (const auto& key : evicted) {
+        int l = key.level();
+        if (l >= 0 && l <= QuickView::MAX_LOD_LEVELS && pLayer->virtualSurfaces[l]) {
+            int bs = QuickView::TILE_SIZE;
+            int px = key.x() * bs;
+            int py = key.y() * bs;
+            RECT trimRect = { px, py, px + bs, py + bs };
+            pLayer->virtualSurfaces[l]->Trim(&trimRect, 1);
+        }
+    }
     
     HRESULT hr = S_OK;
     int updateCount = 0;
@@ -211,37 +224,22 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
             return;
         }
         
-        // Calculate Rect on Virtual Surface (Image Space)
-        int bitmapSize = QuickView::TILE_SIZE; // 512 (Physical Bitmap Size)
-        int scale = 1 << key.level();          // LOD Scale Factor (1, 2, 4...)
-        int virtualSize = bitmapSize * scale;  // Virtual Area covered by this tile
-        
-        int pixelX = key.x() * virtualSize;
-        int pixelY = key.y() * virtualSize;
-        
-        RECT updateRect = { pixelX, pixelY, pixelX + virtualSize, pixelY + virtualSize };
-        
-        // [Fix] Clip against Surface Bounds
-        if (updateRect.right > (LONG)pLayer->width) updateRect.right = (LONG)pLayer->width;
-        if (updateRect.bottom > (LONG)pLayer->height) updateRect.bottom = (LONG)pLayer->height;
-        
-        // Skip if empty
-        if (updateRect.left >= updateRect.right || updateRect.top >= updateRect.bottom) return;
+        // For Hybrid Render Tree, each LOD tile is drawn to its own VirtualSurface
+        int level = key.level();
+        if (level < 0 || level > QuickView::MAX_LOD_LEVELS || !pLayer->virtualSurfaces[level]) return;
 
-        // [Fix] Viewport Culling (Double Check)
-        // ForEachReadyTile iterates the grid, but let's ensure intersection exact logic
+        int bitmapSize = QuickView::TILE_SIZE; // 512 (Physical Bitmap Size)
+        int scale = 1 << level;                // LOD Scale Factor
+
+        // Screen/World Cull check (in full image space)
+        int worldPixelX = key.x() * bitmapSize * scale;
+        int worldPixelY = key.y() * bitmapSize * scale;
+        int worldSize = bitmapSize * scale;
+
+        // [Fix] Viewport Culling (Double Check in World Space)
         if (visibleRect) {
-             // Already culled by ForEachReadyTile roughly, but exact pixel-perfect intersection:
-             if (pixelX >= visibleRect->right || pixelX + virtualSize <= visibleRect->left ||
-                 pixelY >= visibleRect->bottom || pixelY + virtualSize <= visibleRect->top) {
-                 
-                 // [Diagnostic] Trace (4,0) culling
-                 if (key.x() == 4 && key.y() == 0 && key.level() == 3) {
-                     wchar_t buf[256];
-                     swprintf_s(buf, L"[CompEngine] CULLED (4,0) LOD3: Tile=[%d,%d] Viewport=[%.0f,%.0f,%.0f,%.0f]\n", 
-                         pixelX, pixelY, visibleRect->left, visibleRect->top, visibleRect->right, visibleRect->bottom);
-                     OutputDebugStringW(buf);
-                 }
+             if (worldPixelX >= visibleRect->right || worldPixelX + worldSize <= visibleRect->left ||
+                 worldPixelY >= visibleRect->bottom || worldPixelY + worldSize <= visibleRect->top) {
                  return;
              }
         }
@@ -251,30 +249,31 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         // [Optim] If already on Virtual Surface, don't redraw unless invalidated.
         if (tile->uploaded) return;
 
+        // Calculate Rect on THIS level's Virtual Surface (Intrinsic Resolution)
+        int surfPixelX = key.x() * bitmapSize;
+        int surfPixelY = key.y() * bitmapSize;
+        
+        RECT updateRect = { surfPixelX, surfPixelY, surfPixelX + bitmapSize, surfPixelY + bitmapSize };
+        
+        // Clip against THIS surface's bounds
+        UINT surfWidth = (pLayer->width + scale - 1) / scale;
+        UINT surfHeight = (pLayer->height + scale - 1) / scale;
+        if (surfWidth == 0) surfWidth = 1;
+        if (surfHeight == 0) surfHeight = 1;
+        
+        if (updateRect.right > (LONG)surfWidth) updateRect.right = (LONG)surfWidth;
+        if (updateRect.bottom > (LONG)surfHeight) updateRect.bottom = (LONG)surfHeight;
+        
+        // Skip if empty
+        if (updateRect.left >= updateRect.right || updateRect.top >= updateRect.bottom) return;
+
         ComPtr<IDXGISurface> dxgiSurf;
         POINT offset;
-        HRESULT hrDraw = pLayer->virtualSurface->BeginDraw(&updateRect, IID_PPV_ARGS(&dxgiSurf), &offset);
+        HRESULT hrDraw = pLayer->virtualSurfaces[level]->BeginDraw(&updateRect, IID_PPV_ARGS(&dxgiSurf), &offset);
         if (hrDraw == DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED) return; 
         if (FAILED(hrDraw)) {
-            // [Diagnostic] Trace (4,0) failure
-            if (key.x() == 4 && key.y() == 0 && key.level() == 3) {
-                wchar_t buf[256];
-                swprintf_s(buf, L"[CompEngine] UPDATE FAIL (4,0) LOD3: BeginDraw=0x%X Rect=[%d,%d,%d,%d]\n", 
-                    hrDraw, updateRect.left, updateRect.top, updateRect.right, updateRect.bottom);
-                OutputDebugStringW(buf);
-            }
             return; 
         }
-
-        // [Diagnostic] Trace (4,0) success start
-        if (key.x() == 4 && key.y() == 0 && key.level() == 3) {
-            wchar_t buf[256];
-            swprintf_s(buf, L"[CompEngine] DRAW START (4,0) LOD3: Rect=[%d,%d,%d,%d] Visible=[%.0f,%.0f,%.0f,%.0f]\n", 
-                updateRect.left, updateRect.top, updateRect.right, updateRect.bottom,
-                visibleRect ? visibleRect->left : -1, visibleRect ? visibleRect->top : -1,
-                visibleRect ? visibleRect->right : -1, visibleRect ? visibleRect->bottom : -1);
-            OutputDebugStringW(buf);
-        } 
         
         // Setup D2D Target
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
@@ -285,7 +284,7 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         ComPtr<ID2D1Bitmap1> target;
         HRESULT hrTarget = m_pendingContext->CreateBitmapFromDxgiSurface(dxgiSurf.Get(), &props, &target);
         if (FAILED(hrTarget) || !target) {
-            pLayer->virtualSurface->EndDraw();
+            pLayer->virtualSurfaces[level]->EndDraw();
             hasDeferredTiles = true;
             return; // [Fix15b] Device lost / GPU OOM → skip tile, defer to next frame
         }
@@ -309,13 +308,13 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         // [Fix14a] GPU OOM / Device Lost → srcBitmap is NULL → skip tile, defer to next frame
         if (FAILED(hrBmp) || !srcBitmap) {
             m_pendingContext->EndDraw();
-            pLayer->virtualSurface->EndDraw();
+            pLayer->virtualSurfaces[level]->EndDraw();
             hasDeferredTiles = true;
             return;
         }
             
-        // Used for filling
-        D2D1_RECT_F destRect = D2D1::RectF((float)pixelX, (float)pixelY, (float)(pixelX + virtualSize), (float)(pixelY + virtualSize));
+        // Draw 1:1 matching the physical tile size on this virtual surface
+        D2D1_RECT_F destRect = D2D1::RectF((float)surfPixelX, (float)surfPixelY, (float)(surfPixelX + bitmapSize), (float)(surfPixelY + bitmapSize));
         
         m_pendingContext->DrawBitmap(srcBitmap.Get(), destRect);
         
@@ -341,7 +340,7 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
         }
         
         HRESULT hrEnd = m_pendingContext->EndDraw();
-        pLayer->virtualSurface->EndDraw();
+        pLayer->virtualSurfaces[level]->EndDraw();
         
         // [Fix14c] D2D device lost → stop uploading remaining tiles
         if (FAILED(hrEnd)) {
@@ -525,8 +524,10 @@ ID2D1DeviceContext* CompositionEngine::BeginPendingUpdate(UINT width, UINT heigh
     layer.surface.Reset();
     layer.baseVisual.Reset();
     layer.baseSurface.Reset();
-    layer.detailVisual.Reset();
-    layer.virtualSurface.Reset();
+    for (int i = 0; i <= QuickView::MAX_LOD_LEVELS; ++i) {
+        layer.lodVisuals[i].Reset();
+        layer.virtualSurfaces[i].Reset();
+    }
     layer.isTitan = false;
     
     HRESULT hr = S_OK;
@@ -547,11 +548,9 @@ ID2D1DeviceContext* CompositionEngine::BeginPendingUpdate(UINT width, UINT heigh
          layer.height = fullHeight;
          
          m_device->CreateVisual(&layer.baseVisual);
-         m_device->CreateVisual(&layer.detailVisual);
          
-         // Order: Base -> Detail
+         // Order: Base -> Detail (Detail is added later cascaded)
          layer.visual->AddVisual(layer.baseVisual.Get(), FALSE, nullptr);
-         layer.visual->AddVisual(layer.detailVisual.Get(), TRUE, layer.baseVisual.Get());
 
          // [Center Topology] Offset Layer Visual to center it at (0,0)
          layer.visual->SetOffsetX(-1.0f * fullWidth / 2.0f);
@@ -582,11 +581,29 @@ ID2D1DeviceContext* CompositionEngine::BeginPendingUpdate(UINT width, UINT heigh
          layer.baseVisual->SetTransform(D2D1::Matrix3x2F::Scale(stretchX, stretchY));
          layer.baseVisual->SetBitmapInterpolationMode(DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR);
 
-         // 2. Setup Detail Layer (Virtual Surface)
-         // Initial Empty
-         hr = m_device->CreateVirtualSurface(layer.width, layer.height, 
-             DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_ALPHA_MODE_PREMULTIPLIED, &layer.virtualSurface);
-         layer.detailVisual->SetContent(layer.virtualSurface.Get());
+         // 2. Setup Cascaded Detail Layers (LOD 0 to MAX_LOD_LEVELS)
+         IDCompositionVisual* prevVisual = layer.baseVisual.Get();
+         // Render from back (MAX_LOD) to front (LOD 0)
+         for (int i = QuickView::MAX_LOD_LEVELS; i >= 0; --i) {
+             m_device->CreateVisual(&layer.lodVisuals[i]);
+             layer.visual->AddVisual(layer.lodVisuals[i].Get(), TRUE, prevVisual);
+             prevVisual = layer.lodVisuals[i].Get();
+             
+             UINT lodW = (layer.width + (1 << i) - 1) >> i;
+             UINT lodH = (layer.height + (1 << i) - 1) >> i;
+             if (lodW == 0) lodW = 1;
+             if (lodH == 0) lodH = 1;
+             
+             m_device->CreateVirtualSurface(lodW, lodH, 
+                 DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_ALPHA_MODE_PREMULTIPLIED, &layer.virtualSurfaces[i]);
+                 
+             layer.lodVisuals[i]->SetContent(layer.virtualSurfaces[i].Get());
+             
+             // Scale up to align with full image space
+             float scale = (float)(1 << i);
+             layer.lodVisuals[i]->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
+             layer.lodVisuals[i]->SetBitmapInterpolationMode(DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR);
+         }
          
          // Return Base Context
          return BeginDrawHelper(layer.baseSurface.Get());

@@ -13,10 +13,6 @@ namespace QuickView {
     // Handles Lifecycle: Visible -> Ready -> Cache -> Evicted
     class TileManager {
     public:
-        // Budget: 256MB VRAM
-        static constexpr size_t VRAM_BUDGET_MB = 256;
-        static constexpr size_t BYTES_PER_TILE = TILE_SIZE * TILE_SIZE * 4;
-        static constexpr size_t MAX_TILES = (VRAM_BUDGET_MB * 1024 * 1024) / BYTES_PER_TILE;
         static constexpr size_t DENSE_THRESHOLD = 4 * 1024 * 1024; // [Hybrid Pyramid]
 
         TileManager();
@@ -93,18 +89,21 @@ namespace QuickView {
         int GetTotalCount() const;
         int GetReadyCount() const;
 
+        // [Fix17d] Trim Queue
+        std::vector<TileKey> PopEvictedTiles();
+
     private:
         void EnforceBudget();
 
         // [Hybrid Pyramid] Layers
         std::vector<std::unique_ptr<ITileStateLayer>> m_layers;
         
-        // LRU Tracking (Keep a separate list for eviction?)
-        // If we use DenseLayer, we don't have a map to iterate for LRU.
-        // We need a separate structure to track "Active/Loaded" tiles for LRU.
-        // Linked List of Key?
+        // LRU Tracking
         std::list<TileKey> m_lru; 
         std::mutex m_mutex;
+        
+        // [Fix17d] Eviction Queue for VRAM Trim
+        std::vector<TileKey> m_evictedTiles;
         
         uint32_t m_generationId = 1;
         RegionRect m_lastViewport = {};

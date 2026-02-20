@@ -5526,6 +5526,7 @@ void Navigate(HWND hwnd, int direction) {
 }
 
 void OnPaint(HWND hwnd) {
+    ValidateRect(hwnd, nullptr); // Validate early so deferred Repaint requests survive
     if (!g_renderEngine) return;
     
     // [MIGRATED] Hover tracking moved to UIRenderer::UpdateHoverState
@@ -5759,8 +5760,6 @@ void OnPaint(HWND hwnd) {
     
     // Commit DirectComposition (Required for UI layer visibility)
     if (g_compEngine) g_compEngine->Commit();
-
-    ValidateRect(hwnd, nullptr);
 }
 
 // [Refactor] Centralized Zoom Logic

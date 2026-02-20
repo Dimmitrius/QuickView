@@ -149,9 +149,10 @@ private:
         // Layer 1: Base (Thumbnail stretched)
         ComPtr<IDCompositionVisual2> baseVisual; 
         ComPtr<IDCompositionSurface> baseSurface;
-        // Layer 2: Detail (Virtual Tiles)
-        ComPtr<IDCompositionVisual2> detailVisual;
-        ComPtr<IDCompositionVirtualSurface> virtualSurface;
+        
+        // [Fix17a] Layer 2: Cascaded Virtual Surfaces (LOD 0 to MAX_LOD_LEVELS)
+        ComPtr<IDCompositionVisual2> lodVisuals[QuickView::MAX_LOD_LEVELS + 1];
+        ComPtr<IDCompositionVirtualSurface> virtualSurfaces[QuickView::MAX_LOD_LEVELS + 1];
         
         // Cache used width/height to avoid resizing if not needed
         UINT width = 0;

@@ -287,7 +287,7 @@ namespace QuickView {
         });
 
         // Evict
-        while (GetReadyCount() > MAX_TILES && !m_lru.empty()) {
+        while (GetReadyCount() > m_maxTiles && !m_lru.empty()) {
             TileKey victim = m_lru.front();
             m_lru.pop_front();
 
@@ -299,19 +299,24 @@ namespace QuickView {
                     continue; 
                 }
                 
-                // [Fix] Don't evict tiles uploaded to VirtualSurface!
-                // Their CPU frame is already released (only ~64 bytes metadata remain).
-                // Evicting them resets state to Empty, causing expensive re-decode
-                // even though the pixels are still on the GPU VirtualSurface.
+                // [Fix17d] Record VirtualSurface tiles for VRAM Trim
                 if (entry->data && entry->data->uploaded) {
-                    continue;
+                    m_evictedTiles.push_back(victim);
                 }
                 
-                // Release CPU-only tiles
+                // Release CPU-only tiles AND Reset GPU tiles
                 entry->state.store(TileStateCode::Empty);
                 entry->data.reset();
             }
         }
+    }
+
+    // [Fix17d]
+    std::vector<TileKey> TileManager::PopEvictedTiles() {
+        std::lock_guard lock(m_mutex);
+        std::vector<TileKey> result = std::move(m_evictedTiles);
+        m_evictedTiles.clear();
+        return result;
     }
 
     TileEntry* TileManager::GetTileEntry(TileKey key) {
