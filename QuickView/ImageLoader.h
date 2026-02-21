@@ -286,6 +286,20 @@ public:
                                        CancelPredicate checkCancel,
                                        int targetWidth = 0, int targetHeight = 0);
 
+    HRESULT LoadWebPRegionToFrame(LPCWSTR filePath, QuickView::RegionRect srcRect, float scale,
+                              QuickView::RawImageFrame* outFrame,
+                              QuickView::TileMemoryManager* tileManager,
+                              class QuantumArena* arena,
+                              CancelPredicate checkCancel,
+                              int targetWidth = 0, int targetHeight = 0);
+
+    HRESULT LoadJxlRegionToFrame(LPCWSTR filePath, QuickView::RegionRect srcRect, float scale,
+                              QuickView::RawImageFrame* outFrame,
+                              QuickView::TileMemoryManager* tileManager,
+                              class QuantumArena* arena,
+                              CancelPredicate checkCancel,
+                              int targetWidth = 0, int targetHeight = 0);
+
     HRESULT LoadJPEG(LPCWSTR filePath, IWICBitmap** ppBitmap);  // libjpeg-turbo
 
 

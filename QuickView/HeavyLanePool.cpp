@@ -1445,6 +1445,11 @@ void HeavyLanePool::WaitForTileJobs() {
 bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
     if (m_titanSrcW <= 0 || m_titanSrcH <= 0) return false;
     
+    // Formats with Native Region Decoding do NOT use Single Decode Cache!
+    if (m_titanFormat == L"JPEG" || m_titanFormat == L"WEBP" || m_titanFormat == L"JXL") {
+        return false;
+    }
+    
     int scaleFactor = 1 << lod;
     int outW = (m_titanSrcW + scaleFactor - 1) / scaleFactor;
     int outH = (m_titanSrcH + scaleFactor - 1) / scaleFactor;
@@ -1485,6 +1490,15 @@ bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
     
     // Peak memory must be < 50% of available RAM
     bool fits = peakBytes < (available / 2);
+    
+    // [Fix: PNG/StrategyB OOM] For formats that do NOT have native region decoding (like PNG), 
+    // falling back to per-tile decoding means running StrategyB concurrently.
+    // StrategyB will allocate the ENTIRE fullFrame for EVERY tile thread, virtually guaranteeing an OOM crash!
+    // Therefore, for these formats, we MUST force Single Decode and Cache, regardless of RAM limits,
+    // so it at least only decodes once and relies on OS pagefile if it exceeds Physical RAM.
+    if (m_titanFormat == L"PNG" || m_titanFormat == L"BMP" || m_titanFormat == L"TGA" || m_titanFormat == L"GIF") {
+        fits = true;
+    }
     
     // [Fix2] Rate-limit log: once per LOD per 2s — shared across all workers
     static std::atomic<int> lastLoggedLOD{-1};

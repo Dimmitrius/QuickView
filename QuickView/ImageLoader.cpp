@@ -1300,17 +1300,23 @@ HRESULT CImageLoader::LoadRegionToFrame(LPCWSTR filePath, QuickView::RegionRect 
         return SafeLoadJpegRegion(mapping.data(), mapping.size(), srcRect, scale, outFrame, tileManager, arena, targetWidth, targetHeight);
     }
 
+    // --- Strategy 1b: WebP Native Region Decoding ---
+    if (format == L"WEBP") {
+        if (pLoaderName) *pLoaderName = L"WebP Native Region";
+        return LoadWebPRegionToFrame(filePath, srcRect, scale, outFrame, tileManager, arena, checkCancel, targetWidth, targetHeight);
+    }
+
     // --- Strategy 2: Strategy B (Load Full & Crop/Resize) ---
-    // For formats without native region decoding support (WebP, PNG)
-    if (format == L"WEBP" || format == L"PNG") {
+    // For formats without native region decoding support (PNG, etc.)
+    if (format == L"PNG") {
         if (pLoaderName) *pLoaderName = (format + L" Strategy-B").c_str();
         return LoadRegionGeneric_StrategyB(filePath, srcRect, scale, outFrame, tileManager, arena, checkCancel, targetWidth, targetHeight);
     }
     
-    // --- [P15] JXL: No per-tile region decode — must use Single-Decode-Then-Slice ---
+    // --- [P15] JXL: Callback-based Region Decode (Avoids massive allocation) ---
     if (format == L"JXL") {
-        OutputDebugStringW(L"[P15] JXL per-tile region decode not supported, use P14 path\n");
-        return E_ABORT;
+        if (pLoaderName) *pLoaderName = L"JXL Region Callback";
+        return LoadJxlRegionToFrame(filePath, srcRect, scale, outFrame, tileManager, arena, checkCancel, targetWidth, targetHeight);
     }
 
     return E_NOTIMPL; 
@@ -1368,7 +1374,314 @@ HRESULT CImageLoader::LoadRegionGeneric_StrategyB(LPCWSTR filePath, QuickView::R
     return S_OK;
 }
 
+HRESULT CImageLoader::LoadWebPRegionToFrame(LPCWSTR filePath, QuickView::RegionRect srcRect, float scale,
+                                            QuickView::RawImageFrame* outFrame,
+                                            QuickView::TileMemoryManager* tileManager,
+                                            QuantumArena* arena,
+                                            CancelPredicate checkCancel,
+                                            int explicitTargetW, int explicitTargetH)
+{
+    // [WebP Native Region] Use memory mapped file for zero-copy parsing
+    QuickView::MappedFile mapping(filePath);
+    if (!mapping.IsValid()) return E_FAIL;
 
+    if (checkCancel && checkCancel()) return E_ABORT;
+
+    WebPDecoderConfig config;
+    if (!WebPInitDecoderConfig(&config)) return E_FAIL;
+    
+    // RAII for decoder output buffer
+    struct ConfigGuard { WebPDecBuffer* b; ~ConfigGuard() { WebPFreeDecBuffer(b); } } cGuard{ &config.output };
+
+    if (WebPGetFeatures(mapping.data(), mapping.size(), &config.input) != VP8_STATUS_OK) return E_FAIL;
+
+    int contentW = (int)(srcRect.w * scale + 0.5f);
+    int contentH = (int)(srcRect.h * scale + 0.5f);
+
+    int frameW = (explicitTargetW > 0) ? explicitTargetW : contentW;
+    int frameH = (explicitTargetH > 0) ? explicitTargetH : contentH;
+
+    if (contentW <= 0) contentW = 1;
+    if (contentH <= 0) contentH = 1;
+
+    // Apply strict cropping boundaries to avoid decoder errors
+    int crop_x = srcRect.x;
+    int crop_y = srcRect.y;
+    int crop_w = srcRect.w;
+    int crop_h = srcRect.h;
+
+    // Clamp crop region to image dimensions
+    if (crop_x < 0) { crop_w += crop_x; crop_x = 0; }
+    if (crop_y < 0) { crop_h += crop_y; crop_y = 0; }
+    if (crop_x + crop_w > config.input.width) crop_w = config.input.width - crop_x;
+    if (crop_y + crop_h > config.input.height) crop_h = config.input.height - crop_y;
+
+    if (crop_w <= 0 || crop_h <= 0) return E_FAIL;
+
+    // 1. Cropping
+    config.options.use_cropping = 1;
+    config.options.crop_left = crop_x;
+    config.options.crop_top = crop_y;
+    config.options.crop_width = crop_w;
+    config.options.crop_height = crop_h;
+
+    // 2. Scaling
+    if (scale != 1.0f) {
+        config.options.use_scaling = 1;
+        // Adjust scaled size proportionally based on clamped crop dimensions
+        config.options.scaled_width = (int)(crop_w * scale + 0.5f);
+        config.options.scaled_height = (int)(crop_h * scale + 0.5f);
+        if (config.options.scaled_width <= 0) config.options.scaled_width = 1;
+        if (config.options.scaled_height <= 0) config.options.scaled_height = 1;
+        
+        contentW = config.options.scaled_width;
+        contentH = config.options.scaled_height;
+    } else {
+        contentW = crop_w;
+        contentH = crop_h;
+    }
+
+    outFrame->width = frameW;
+    outFrame->height = frameH;
+    outFrame->stride = CalculateAlignedStride(frameW, 4);
+    outFrame->format = PixelFormat::BGRA8888;
+    outFrame->formatDetails = L"WebP Region";
+
+    size_t totalSize = outFrame->GetBufferSize();
+
+    if (tileManager && totalSize <= TILE_SLAB_SIZE) {
+        outFrame->pixels = (uint8_t*)tileManager->Allocate();
+        if (outFrame->pixels) {
+            outFrame->memoryDeleter = [tileManager](uint8_t* p) { tileManager->Free(p); };
+        }
+    }
+    
+    if (!outFrame->pixels) {
+        if (arena) {
+             outFrame->pixels = (uint8_t*)arena->Allocate(totalSize, 64);
+             outFrame->memoryDeleter = nullptr; 
+        } else {
+             outFrame->pixels = (uint8_t*)_aligned_malloc(totalSize, 64);
+             outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+        }
+    }
+    
+    if (!outFrame->pixels) return E_OUTOFMEMORY;
+
+    // Padding
+    if (contentH < frameH || contentW < frameW) {
+        memset(outFrame->pixels, 0, totalSize);
+    }
+
+    // Direct Decode setup
+    config.output.colorspace = MODE_BGRA;
+    config.output.is_external_memory = 1;
+    config.output.u.RGBA.rgba = outFrame->pixels;
+    config.output.u.RGBA.stride = outFrame->stride;
+    config.output.u.RGBA.size = totalSize;
+    config.options.use_threads = 1; 
+
+    if (WebPDecode(mapping.data(), mapping.size(), &config) != VP8_STATUS_OK) {
+        return E_FAIL;
+    }
+
+    // WebP returns un-premultiplied. We use Premultiplied visually.
+    if (config.input.has_alpha) {
+        SIMDUtils::PremultiplyAlpha_BGRA(outFrame->pixels, contentW, contentH, outFrame->stride);
+    }
+
+    return S_OK;
+}
+
+// Struct to track state during JXL Callback
+struct JxlCropCtx {
+    uint8_t* tempBuf;
+    int tempStride;
+    int cropX, cropY, cropW, cropH;
+};
+
+static void JxlCropCallback(void* opaque, size_t x, size_t y, size_t num_pixels, const void* pixels) {
+    JxlCropCtx* ctx = (JxlCropCtx*)opaque;
+    if (!ctx->tempBuf) return;
+    
+    if (y < (size_t)ctx->cropY || y >= (size_t)(ctx->cropY + ctx->cropH)) return;
+    if (x >= (size_t)(ctx->cropX + ctx->cropW) || x + num_pixels <= (size_t)ctx->cropX) return;
+    
+    size_t startX = std::max(x, (size_t)ctx->cropX);
+    size_t endX = std::min(x + num_pixels, (size_t)(ctx->cropX + ctx->cropW));
+    
+    size_t copyPixels = endX - startX;
+    size_t srcOffset = startX - x;
+    
+    size_t dstX = startX - ctx->cropX;
+    size_t dstY = y - ctx->cropY;
+    
+    uint8_t* dst = ctx->tempBuf + dstY * ctx->tempStride + dstX * 4;
+    const uint8_t* src = (const uint8_t*)pixels + srcOffset * 4;
+    
+    memcpy(dst, src, copyPixels * 4);
+}
+
+HRESULT CImageLoader::LoadJxlRegionToFrame(LPCWSTR filePath, QuickView::RegionRect srcRect, float scale,
+                                           QuickView::RawImageFrame* outFrame,
+                                           QuickView::TileMemoryManager* tileManager,
+                                           QuantumArena* arena,
+                                           CancelPredicate checkCancel,
+                                           int explicitTargetW, int explicitTargetH)
+{
+    QuickView::MappedFile mapping(filePath);
+    if (!mapping.IsValid()) return E_FAIL;
+
+    if (checkCancel && checkCancel()) return E_ABORT;
+
+    JxlDecoder* dec = JxlDecoderCreate(NULL);
+    if (!dec) return E_OUTOFMEMORY;
+
+    // RAII for decoder
+    struct DecGuard { JxlDecoder* d; ~DecGuard() { JxlDecoderDestroy(d); } } dGuard{ dec };
+
+    void* runner = CImageLoader::GetJxlRunner();
+    if (runner) {
+        JxlDecoderSetParallelRunner(dec, JxlThreadParallelRunner, runner);
+    }
+
+    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec, JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE)) {
+        return E_FAIL;
+    }
+
+    JxlDecoderSetInput(dec, mapping.data(), mapping.size());
+    JxlDecoderCloseInput(dec);
+
+    JxlBasicInfo info = {};
+    JxlPixelFormat pixFmt = { 4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0 };
+    
+    HRESULT hr = E_FAIL;
+    
+    int contentW = (int)(srcRect.w * scale + 0.5f);
+    int contentH = (int)(srcRect.h * scale + 0.5f);
+    int frameW = (explicitTargetW > 0) ? explicitTargetW : contentW;
+    int frameH = (explicitTargetH > 0) ? explicitTargetH : contentH;
+    
+    if (contentW <= 0) contentW = 1;
+    if (contentH <= 0) contentH = 1;
+
+    // Crop Bounds in 1:1 image space
+    int crop_x = srcRect.x;
+    int crop_y = srcRect.y;
+    int crop_w = srcRect.w;
+    int crop_h = srcRect.h;
+
+    uint8_t* tempBuf = nullptr;
+    int tempStride = 0;
+    
+    JxlCropCtx ctx = {0};
+
+    for (;;) {
+        if (checkCancel && checkCancel()) {
+            if (tempBuf && (!arena || !arena->Owns(tempBuf))) _aligned_free(tempBuf);
+            return E_ABORT;
+        }
+
+        JxlDecoderStatus st = JxlDecoderProcessInput(dec);
+        if (st == JXL_DEC_ERROR) break;
+        if (st == JXL_DEC_SUCCESS) { hr = S_OK; break; }
+
+        if (st == JXL_DEC_BASIC_INFO) {
+            if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec, &info)) break;
+
+            // Clamp crop region
+            if (crop_x < 0) { crop_w += crop_x; crop_x = 0; }
+            if (crop_y < 0) { crop_h += crop_y; crop_y = 0; }
+            if (crop_x + crop_w > (int)info.xsize) crop_w = info.xsize - crop_x;
+            if (crop_y + crop_h > (int)info.ysize) crop_h = info.ysize - crop_y;
+
+            if (crop_w <= 0 || crop_h <= 0) { hr = E_FAIL; break; }
+
+            // Allocate temp buffer for 1:1 cropped region
+            tempStride = CalculateAlignedStride(crop_w, 4);
+            size_t tempSize = (size_t)tempStride * crop_h;
+            
+            if (arena) {
+                tempBuf = (uint8_t*)arena->Allocate(tempSize, 64);
+            }
+            if (!tempBuf) {
+                tempBuf = (uint8_t*)_aligned_malloc(tempSize, 64);
+            }
+            if (!tempBuf) { hr = E_OUTOFMEMORY; break; }
+
+            // Initialize context
+            ctx.tempBuf = tempBuf;
+            ctx.tempStride = tempStride;
+            ctx.cropX = crop_x;
+            ctx.cropY = crop_y;
+            ctx.cropW = crop_w;
+            ctx.cropH = crop_h;
+
+            if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutCallback(dec, &pixFmt, JxlCropCallback, &ctx)) {
+                hr = E_FAIL; break;
+            }
+        }
+        else if (st == JXL_DEC_FULL_IMAGE) {
+            hr = S_OK;
+            break;
+        }
+    }
+
+    if (FAILED(hr) || !tempBuf) {
+        if (tempBuf && (!arena || !arena->Owns(tempBuf))) _aligned_free(tempBuf);
+        return hr == S_OK ? E_FAIL : hr;
+    }
+
+    // Allocate Output Frame
+    outFrame->width = frameW;
+    outFrame->height = frameH;
+    outFrame->stride = CalculateAlignedStride(frameW, 4);
+    outFrame->format = PixelFormat::BGRA8888;
+    outFrame->formatDetails = L"JXL Region Callback";
+
+    size_t totalSize = outFrame->GetBufferSize();
+
+    if (tileManager && totalSize <= TILE_SLAB_SIZE) {
+        outFrame->pixels = (uint8_t*)tileManager->Allocate();
+        if (outFrame->pixels) {
+            outFrame->memoryDeleter = [tileManager](uint8_t* p) { tileManager->Free(p); };
+        }
+    }
+    
+    if (!outFrame->pixels) {
+        if (arena) {
+             outFrame->pixels = (uint8_t*)arena->Allocate(totalSize, 64);
+             outFrame->memoryDeleter = nullptr; 
+        } else {
+             outFrame->pixels = (uint8_t*)_aligned_malloc(totalSize, 64);
+             outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+        }
+    }
+    
+    if (!outFrame->pixels) {
+        if (tempBuf && (!arena || !arena->Owns(tempBuf))) _aligned_free(tempBuf);
+        return E_OUTOFMEMORY;
+    }
+
+    // Zero-fill padding
+    if (contentH < frameH || contentW < frameW) {
+        memset(outFrame->pixels, 0, totalSize);
+    }
+
+    // Resize (or direct copy if scale == 1.0)
+    // Remember libjxl outputs RGBA, we need BGRA
+    SIMDUtils::SwizzleRGBA_to_BGRA_Premul(tempBuf, (size_t)crop_w * crop_h);
+    
+    SIMDUtils::ResizeBilinear(tempBuf, crop_w, crop_h, tempStride, 
+                              outFrame->pixels, contentW, contentH, outFrame->stride);
+
+    // Cleanup
+    if (tempBuf && (!arena || !arena->Owns(tempBuf))) {
+        _aligned_free(tempBuf);
+    }
+
+    return S_OK;
+}
 
 HRESULT CImageLoader::LoadJPEG(LPCWSTR filePath, IWICBitmap** ppBitmap) {
     std::vector<uint8_t> jpegBuf;
