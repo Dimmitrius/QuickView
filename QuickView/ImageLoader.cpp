@@ -6769,8 +6769,9 @@ HRESULT CImageLoader::LoadThumbJXL_DC(const uint8_t* pFile, size_t fileSize, Thu
     if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec, pFile, fileSize)) return cleanup(E_FAIL);
     
     // 3. Subscribe Events
-    // Must subscribe to FRAME_PROGRESSION to catch 1:8
-    int events = JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME | JXL_DEC_FRAME_PROGRESSION;
+    // Must subscribe to FRAME_PROGRESSION to catch 1:8.
+    // Also subscribe PREVIEW_IMAGE as fallback when DC is missing.
+    int events = JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME | JXL_DEC_FRAME_PROGRESSION | JXL_DEC_PREVIEW_IMAGE;
     if (pMetadata) events |= JXL_DEC_BOX;
     
     if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec, events)) return cleanup(E_FAIL);
@@ -6896,6 +6897,45 @@ HRESULT CImageLoader::LoadThumbJXL_DC(const uint8_t* pFile, size_t fileSize, Thu
             if (readingExif) JxlDecoderReleaseBoxBuffer(dec);
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
+            size_t outSize = 0;
+            if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec, &format, &outSize)) {
+                return cleanup(E_FAIL);
+            }
+
+            // [Fallback A] If no DC found but preview exists, prefer preview over 1x1 fake.
+            // This improves first-frame latency for large JXL files that ship preview but no 1:8 DC.
+            if (!foundDC && info.have_preview) {
+                size_t previewSize = (size_t)info.preview.xsize * (size_t)info.preview.ysize * 4;
+                if (previewSize > 0 && outSize == previewSize) {
+                    // Safety cap: preview buffer should remain practical for base-layer display.
+                    const size_t kPreviewCap = 512ULL * 1024ULL * 1024ULL; // 512 MB
+                    if (previewSize <= kPreviewCap) {
+                        try {
+                            pData->pixels.resize(previewSize);
+                        } catch (...) {
+                            return cleanup(E_OUTOFMEMORY);
+                        }
+
+                        pData->width = (UINT)info.preview.xsize;
+                        pData->height = (UINT)info.preview.ysize;
+                        pData->stride = (UINT)info.preview.xsize * 4;
+                        pData->isValid = true;
+                        pData->isBlurry = true;
+                        pData->loaderName = L"libjxl (Preview)";
+
+                        if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec, &format, pData->pixels.data(), previewSize)) {
+                            return cleanup(E_FAIL);
+                        }
+
+                        wchar_t dbg[160];
+                        swprintf_s(dbg, L"[JXL_DC] Using Preview fallback: %ux%u (no 1:8 DC)\n",
+                                   info.preview.xsize, info.preview.ysize);
+                        OutputDebugStringW(dbg);
+                        continue;
+                    }
+                }
+            }
+
             // [v8.3] Fallback Logic
             // Reached here means NO 1:8 event occurred (Modular or Small).
             
@@ -6957,7 +6997,31 @@ HRESULT CImageLoader::LoadThumbJXL_DC(const uint8_t* pFile, size_t fileSize, Thu
                  }
                  return cleanup(S_OK);
              }
-        }  
+        }
+        else if (status == JXL_DEC_PREVIEW_IMAGE) {
+            if (pData->isValid) {
+                uint8_t* p = pData->pixels.data();
+                size_t pxCount = (size_t)pData->width * pData->height;
+                for (size_t i = 0; i < pxCount; ++i) {
+                    uint8_t r = p[i * 4 + 0];
+                    uint8_t g = p[i * 4 + 1];
+                    uint8_t b = p[i * 4 + 2];
+                    uint8_t a = p[i * 4 + 3];
+                    if (a < 255 && a > 0) {
+                        r = (uint8_t)((r * a) / 255);
+                        g = (uint8_t)((g * a) / 255);
+                        b = (uint8_t)((b * a) / 255);
+                    } else if (a == 0) {
+                        r = g = b = 0;
+                    }
+                    p[i * 4 + 0] = b;
+                    p[i * 4 + 1] = g;
+                    p[i * 4 + 2] = r;
+                    p[i * 4 + 3] = a;
+                }
+                return cleanup(S_OK);
+            }
+        }
         // Exif Box Handling
         if (readingExif && status != JXL_DEC_BOX && status != JXL_DEC_BOX_NEED_MORE_OUTPUT) {
              size_t remaining = JxlDecoderReleaseBoxBuffer(dec);

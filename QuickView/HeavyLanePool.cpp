@@ -730,6 +730,7 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         bool acquiredIO = false;
         if (!m_isTitanMode) {
             m_ioSemaphore.acquire();
+            acquiredIO = true;
         }
 
         // [Safety] Post-Acquire Check
@@ -1057,9 +1058,10 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                        }
                        m_isProgressiveJPEG = isProgressiveJPEG; // [P14] Cache for LOD decode
                        
-                       // [JXL] Check if it was a progressive DC Base Layer!
+                       // [JXL] Check if base layer is a true progressive DC preview.
+                       // Do not treat "Fake Base Prog" as native-region capable.
                        if (m_titanFormat == L"JXL") {
-                           if (loaderName.find(L"Prog") != std::wstring::npos) {
+                           if (loaderName.find(L"Prog DC") != std::wstring::npos) {
                                m_isProgressiveJXL = true;
                                OutputDebugStringW(L"[HeavyPool] Detected Progressive JXL. Enabling native Region Decoding!\n");
                            } else {
@@ -1122,29 +1124,30 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                         }
                     }
                     
+                    bool hasNativeRegionDecoder = (m_titanFormat == L"WEBP") || (m_titanFormat == L"JXL" && m_isProgressiveJXL);
+                    bool wantsSingleDecode = isSingleDecodeMandatory || (m_isTitanMode && !hasNativeRegionDecoder && ShouldUseSingleDecode(job.tileCoord.lod));
+
                     // [B4] Check fail count — give up if too many failures
-                    if (isSingleDecodeMandatory && m_lodCacheFailCount.load() >= kMaxLODCacheRetries) {
+                    if (wantsSingleDecode && m_lodCacheFailCount.load() >= kMaxLODCacheRetries) {
                         hr = E_FAIL;
                         loaderName = L"LOD Exhausted";
                         // Don't reset tile to Empty — mark as permanently failed
                         goto tile_decode_done;
                     }
-                    
-                    bool hasNativeRegionDecoder = (m_titanFormat == L"WEBP") || (m_titanFormat == L"JXL" && m_isProgressiveJXL);
 
                     // Cache miss: Try full decode + cache
                     // [v8.4] Critical Fix: If the format has a TRUE NATIVE REGION DECODER (WebP, Progressive JXL),
                     // we MUST NOT let ShouldUseSingleDecode hijack the pipeline and force an 8.6 second 
                     // single-core full decode stall! We bypass caching and go straight to High-Concurrency Region Decoding.
-                    if (m_isTitanMode && !hasNativeRegionDecoder && ShouldUseSingleDecode(job.tileCoord.lod)) {
+                    if (wantsSingleDecode) {
                         hr = FullDecodeAndCacheLOD(job, rawFrame, loaderName);
                         if (SUCCEEDED(hr)) goto tile_decode_done;
-                        // CAS failed (another builder): wait briefly for it
+                        // CAS failed (another builder) or decode failed: wait and retry slice.
                     }
                     
                     // [B3] Wait for LOD cache builder if SingleDecode is active, then retry slice.
                     // This applies to ALL formats using SingleDecode (including progressive JPEG).
-                    bool expectSingleDecode = isSingleDecodeMandatory || (m_isTitanMode && !hasNativeRegionDecoder && ShouldUseSingleDecode(job.tileCoord.lod));
+                    bool expectSingleDecode = wantsSingleDecode;
                     
                     if (expectSingleDecode) {
                         // [Fix16] Event-driven wait (max 60s) instead of 100ms polling
