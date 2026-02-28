@@ -256,7 +256,8 @@ public:
                         std::wstring* pLoaderName = nullptr,
                         CancelPredicate checkCancel = nullptr,
                         ImageMetadata* pMetadata = nullptr,
-                        bool allowFakeBase = true);
+                        bool allowFakeBase = true,
+                        bool isTitanMode = false);
 
     /// <summary>
     /// [Optimization] Load full image from memory pointer (for MMF Preload) with optional IDCT Scaling

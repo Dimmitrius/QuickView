@@ -112,6 +112,7 @@ namespace QuickView {
             
             // [v10.1] Override to prevent 1x1 Fake Base generation (e.g. for specific LODs)
             bool allowFakeBase = true;
+            bool isTitanMode = false;
         };
 
         struct DecodeResult {
@@ -3937,6 +3938,9 @@ namespace QuickView {
                     }
                     else if (status == JXL_DEC_FRAME_PROGRESSION) {
                         // [v8.3] Catch the Rabbit: 1:8 Progressive DC Preview
+                        // [Fix] Only return DC preview early if forcePreview is set (Titan base layer).
+                        // For normal SubmitFullDecode, we MUST continue to full decode.
+                        if (ctx.forcePreview) {
                         size_t ratio = JxlDecoderGetIntendedDownsamplingRatio(dec);
                         if (ratio >= 4 && ratio <= 16) {
                             size_t downW = info.xsize / ratio;
@@ -3973,6 +3977,8 @@ namespace QuickView {
                             
                             return S_OK;
                         }
+                        }
+                        // else: not forcePreview, ignore DC event and continue to full decode
                     }
                     else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
                         size_t bufferSize = 0;
@@ -4525,7 +4531,8 @@ static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, Deco
         else if (fmt == L"JXL") {
              // [Two-Stage] Only use DC Preview if scaling is requested (Stage 1)
              // or if explicitly forcing preview.
-             if (ctx.targetWidth > 0 || ctx.targetHeight > 0 || ctx.forceRenderFull) {
+             // [Fix] User Requirement: 提取缩略图逻辑仅在 titan 模式下进行，普通模式下不进行缩略图逻辑
+             if (ctx.isTitanMode && (ctx.targetWidth > 0 || ctx.targetHeight > 0 || ctx.forceRenderFull)) {
                  CImageLoader::ThumbData tmp;
                  HRESULT hr = CImageLoader::LoadThumbJXL_DC(mappedData, mappedSize, &tmp, &result.metadata, ctx.forceRenderFull, ctx.allowFakeBase);
                  
@@ -8043,7 +8050,8 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                                    std::wstring* pLoaderName,
                                    CancelPredicate checkCancel,
                                    ImageMetadata* pMetadata,
-                                   bool allowFakeBase) {
+                                   bool allowFakeBase,
+                                   bool isTitanMode) {
     using namespace QuickView;
     
     if (!filePath || !outFrame) return E_INVALIDARG;
@@ -8087,6 +8095,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
     ctx.pMetadata = pMetadata; // [v5.3] Pass metadata pointer to Collect Metadata directly
     ctx.forceRenderFull = true; // [v10] Ensure HeavyLane base layer decode does not abort for large non-DC JXLs
     ctx.allowFakeBase = allowFakeBase; // [v10.1] Pass the fallback behavior override
+    ctx.isTitanMode = isTitanMode;
 
     DecodeResult res;
     HRESULT hrUnified = LoadImageUnified(filePath, ctx, res);

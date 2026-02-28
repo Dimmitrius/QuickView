@@ -425,10 +425,22 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
             m_fastLane.Push(path, imageId);
         } 
         else {
-            // [v8.5] Hard Dispatch: Large JXL (>2MP or >3MB)
-            // Skip FastLane entirely. HeavyLane handles everything (Deep Cancel Relay).
-            OutputDebugStringW(L"[Dispatch] -> JXL Large: Heavy Direct (Skip FastLane)\n");
-             m_heavyPool->Submit(path, imageId, primaryMMF);
+            if (enableTitan) {
+                // [v8.5] Hard Dispatch: Large JXL (>2MP or >3MB)
+                // Skip FastLane entirely. HeavyLane handles everything (Deep Cancel Relay).
+                OutputDebugStringW(L"[Dispatch] -> JXL Titan: Heavy Direct (Skip FastLane)\n");
+                
+                // [Fix] Stage 2 Trigger explicitly needs these to be set for the pending heavy decode
+                m_pendingJxlHeavyPath = path;
+                m_pendingJxlHeavyId = imageId;
+                
+                m_heavyPool->Submit(path, imageId, primaryMMF);
+            } else {
+                // [v3.2.5 Restore] 普通非Titan大型大图，像旧版一样直接跑 FullDecode
+                // 免去 300ms 延迟，速度最快，并天然由解码端展示自带预览图！
+                OutputDebugStringW(L"[Dispatch] -> JXL Large: Heavy SubmitFullDecode (Skip FastLane)\n");
+                m_heavyPool->SubmitFullDecode(path, imageId, primaryMMF);
+            }
         }
         return; // JXL dispatched
     }
