@@ -1140,15 +1140,64 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
               
               // [Phase 3] Titan Mode: Route Base Layer to killable subprocess
               if (m_isTitanMode && !job.isFullDecode && targetW > 0 && targetH > 0) {
-                   OutputDebugStringW(L"[Phase3] Titan Base Layer -> DecodeWorker subprocess\n");
-                   hr = LaunchDecodeWorker(self, job, targetW, targetH, rawFrame, meta, cancelPred);
-                   if (SUCCEEDED(hr)) {
-                       loaderName = L"DecodeWorker";
-                   } else if (hr == E_ABORT) {
-                       // Cancelled by user switching — normal flow
-                       return;
+                   bool expectsMasterCache = ShouldWarmupMasterBacking();
+                   bool warmupResolved = false;
+
+                   if (expectsMasterCache && m_masterWarmupImageId.load(std::memory_order_acquire) == job.imageId) {
+                        OutputDebugStringW(L"[Phase4] Standard Job Waiting for Master Warmup...\n");
+                        std::unique_lock<std::mutex> waitLock(m_lodCacheMutex);
+                        while (!m_masterWarmupReady.load(std::memory_order_acquire)) {
+                            if (cancelPred()) {
+                                return; // abort
+                            }
+                            m_lodCacheCond.wait_for(waitLock, std::chrono::milliseconds(100));
+                            if (m_masterWarmupImageId.load(std::memory_order_acquire) != job.imageId) {
+                                break;
+                            }
+                        }
+                        waitLock.unlock();
+
+                        const uint8_t* masterView = nullptr;
+                        int mW = 0, mH = 0, mS = 0;
+                        if (AcquireMasterBackingView(job.imageId, &masterView, &mW, &mH, &mS)) {
+                            size_t dstStride = (size_t)targetW * 4;
+                            size_t dstSize = dstStride * targetH;
+                            uint8_t* dstBuf = (uint8_t*)_aligned_malloc(dstSize, 32);
+                            
+                            if (dstBuf) {
+                                SIMDUtils::ResizeBilinear(masterView, mW, mH, mS,
+                                                          dstBuf, targetW, targetH, (int)dstStride);
+                                
+                                rawFrame.pixels = dstBuf;
+                                rawFrame.width = targetW;
+                                rawFrame.height = targetH;
+                                rawFrame.stride = (int)dstStride;
+                                rawFrame.format = QuickView::PixelFormat::BGRA8888;
+                                rawFrame.memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+                                
+                                meta.Width = mW;
+                                meta.Height = mH;
+                                meta.ExifOrientation = 1; // Handled by MMF decoder
+
+                                loaderName = L"MasterWarmup(MMF)";
+                                hr = S_OK;
+                                warmupResolved = true;
+                                OutputDebugStringW(L"[Phase4] Standard Job resolved via Master Warmup\n");
+                            }
+                        }
                    }
-                   // On failure, fall through to inline decode below
+
+                   if (!warmupResolved) {
+                       OutputDebugStringW(L"[Phase3] Titan Base Layer -> DecodeWorker subprocess\n");
+                       hr = LaunchDecodeWorker(self, job, targetW, targetH, rawFrame, meta, cancelPred);
+                       if (SUCCEEDED(hr)) {
+                           loaderName = L"DecodeWorker";
+                       } else if (hr == E_ABORT) {
+                           // Cancelled by user switching — normal flow
+                           return;
+                       }
+                       // On failure, fall through to inline decode below
+                   }
               }
 
               // Inline decode (non-Titan, or subprocess fallback)
@@ -1752,10 +1801,16 @@ bool HeavyLanePool::ShouldWarmupMasterBacking() const {
     if (m_titanSrcW <= 0 || m_titanSrcH <= 0) return false;
     if (m_titanSrcW < 8000 && m_titanSrcH < 8000) return false;
 
-    // [Fix JXL Titan] JXL has NO native scaling/region decode for non-progressive files.
-    // Without Master Cache, the subprocess attempts full-res decode (e.g. 4.8GB for 40000x30000)
-    // and crashes with ACCESS_VIOLATION. Including JXL here ensures a single full decode
-    // is cached to MMF, then all LODs are served via fast SIMD downscale from cache.
+    // [Tier 2: Medium-Large] If the unpacked image is < 1.5 GB, ALWAYS use Direct-to-MMF full decode.
+    // This entirely bypasses DecodeWorker for images up to ~384 MP, removing IPC and double-decode overhead.
+    size_t unpackedBytes = (size_t)m_titanSrcW * (size_t)m_titanSrcH * 4ULL;
+    if (unpackedBytes <= 1536ULL * 1024ULL * 1024ULL) {
+        return true;
+    }
+
+    // [Tier 3: Ultra-Large] > 1.5 GB
+    // For formats lacking native scaling/region decode, we STILL must do a full decode to MMF
+    // to prevent DecodeWorker from doing repeated OOM full-decodes.
     return (m_titanFormat == L"PNG" ||
             m_titanFormat == L"TIFF" ||
             m_titanFormat == L"TIF" ||
