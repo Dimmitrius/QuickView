@@ -79,7 +79,7 @@ struct AppConfig {
     bool LoopNavigation = true;
     bool ConfirmDelete = true;
     bool PortableMode = false;
-    int UIScaleMode = 0;                 // 0=Auto (follow monitor DPI), 1=Manual (100%)
+    int UIScalePreset = 0;               // 0=Auto(DPI), 1=90%, 2=100%, 3=110%, 4=125%
 
     // --- View ---
     int CanvasColor = 2;                // 0=Black, 1=White, 2=Grid, 3=Custom

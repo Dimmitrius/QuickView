@@ -808,23 +808,6 @@ void SettingsOverlay::BuildMenu() {
     };
     tabGeneral.items.push_back(itemLang);
 
-    SettingsItem itemUiScale = {
-        AppStrings::Settings_Label_UIScale,
-        OptionType::Segment,
-        nullptr,
-        nullptr,
-        &g_config.UIScaleMode,
-        nullptr,
-        0,
-        0,
-        { AppStrings::Settings_Option_Auto, AppStrings::Settings_Option_Manual }
-    };
-    itemUiScale.onChange = []() {
-        if (g_config.UIScaleMode < 0 || g_config.UIScaleMode > 1) g_config.UIScaleMode = 0;
-        SaveConfig();
-    };
-    tabGeneral.items.push_back(itemUiScale);
-
     tabGeneral.items.push_back({ AppStrings::Settings_Group_Startup, OptionType::Header });
     
     // Single Instance with restart notification
@@ -963,6 +946,23 @@ void SettingsOverlay::BuildMenu() {
     }
     
     tabVisuals.items.push_back({ AppStrings::Settings_Header_Window, OptionType::Header });
+
+    SettingsItem itemUiScale = {
+        AppStrings::Settings_Label_UIScale,
+        OptionType::Segment,
+        nullptr,
+        nullptr,
+        &g_config.UIScalePreset,
+        nullptr,
+        0,
+        0,
+        { AppStrings::Settings_Option_Auto, L"90%", L"100%", L"110%", L"125%" }
+    };
+    itemUiScale.onChange = []() {
+        if (g_config.UIScalePreset < 0 || g_config.UIScalePreset > 4) g_config.UIScalePreset = 0;
+        SaveConfig();
+    };
+    tabVisuals.items.push_back(itemUiScale);
     
     // Always on Top with immediate effect
     SettingsItem itemAoT = { AppStrings::Settings_Label_AlwaysOnTop, OptionType::Toggle, &g_config.AlwaysOnTop };
@@ -1852,9 +1852,31 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                     break;
                 case OptionType::ActionButton: {
                      // Button aligned to right side of control area (like other controls)
-                     float btnWidth = 60.0f;
+                     const float btnMinWidth = 80.0f * s;
+                     const float btnPadX = 14.0f * s;
+                     const float btnInsetY = 6.0f * s;
+                     const float btnRadius = 4.0f * s;
+                     std::wstring btnText = item.buttonText.empty() ? L"Add" : item.buttonText;
+
+                     float textW = 0.0f;
+                     if (m_dwriteFactory && m_textFormatItem) {
+                         ComPtr<IDWriteTextLayout> btnLayout;
+                         if (SUCCEEDED(m_dwriteFactory->CreateTextLayout(
+                             btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(),
+                             800.0f * s, rowHeight, &btnLayout))) {
+                             DWRITE_TEXT_METRICS metrics = {};
+                             if (SUCCEEDED(btnLayout->GetMetrics(&metrics))) {
+                                 textW = ceilf(metrics.widthIncludingTrailingWhitespace);
+                             }
+                         }
+                     }
+
+                     float btnWidth = std::max(btnMinWidth, textW + btnPadX * 2.0f);
+                     float btnMaxWidth = controlW * 0.55f;
+                     if (btnWidth > btnMaxWidth) btnWidth = btnMaxWidth;
+
                      float btnX = controlX + controlW - btnWidth; // Right-aligned
-                     D2D1_RECT_F btnRect = D2D1::RectF(btnX, contentY + 7, btnX + btnWidth, contentY + rowHeight - 7);
+                     D2D1_RECT_F btnRect = D2D1::RectF(btnX, contentY + btnInsetY, btnX + btnWidth, contentY + rowHeight - btnInsetY);
                      
                      ComPtr<ID2D1SolidColorBrush> btnBrush;
                      
@@ -1862,7 +1884,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      if (item.isDisabled) {
                          // Gray disabled button
                          pRT->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f), &btnBrush);
-                         pRT->FillRoundedRectangle(D2D1::RoundedRect(btnRect, 4, 4), btnBrush.Get());
+                         pRT->FillRoundedRectangle(D2D1::RoundedRect(btnRect, btnRadius, btnRadius), btnBrush.Get());
                          
                          // Show disabled text on the left
                          if (!item.disabledText.empty()) {
@@ -1871,12 +1893,11 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                          }
                          
                          // Gray button text
-                         std::wstring btnText = item.buttonText.empty() ? L"Add" : item.buttonText;
-                         ComPtr<IDWriteTextFormat> centerFormat;
-                         m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"", &centerFormat);
-                         centerFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-                         centerFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                         pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), centerFormat.Get(), btnRect, m_brushTextDim.Get());
+                         m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                         pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(), btnRect, m_brushTextDim.Get());
+                         m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                          break;
                      }
                      
@@ -1897,7 +1918,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                          }
                      }
                      
-                     pRT->FillRoundedRectangle(D2D1::RoundedRect(btnRect, 4, 4), btnBrush.Get());
+                     pRT->FillRoundedRectangle(D2D1::RoundedRect(btnRect, btnRadius, btnRadius), btnBrush.Get());
                      
                      // Show Status Text (e.g. "Config Initialized") or Activated Text
                      // Auto-hide status text
@@ -1927,13 +1948,12 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                          pRT->DrawTextW(statusToShow.c_str(), (UINT32)statusToShow.length(), m_textFormatItem.Get(), statusRect, statusBrush.Get());
                      }
                      
-                     // Centered button text using text format with center alignment
-                     std::wstring btnText = item.buttonText.empty() ? L"Add" : item.buttonText;
-                     ComPtr<IDWriteTextFormat> centerFormat;
-                     m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"", &centerFormat);
-                     centerFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-                     centerFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                     pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), centerFormat.Get(), btnRect, m_brushText.Get());
+                     // Centered button text using scaled item font
+                     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                     m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                     pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(), btnRect, m_brushText.Get());
+                     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                     m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                      break;
                 }
                 case OptionType::CustomColorRow: {

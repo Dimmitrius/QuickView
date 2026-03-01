@@ -359,10 +359,14 @@ static void ApplyUIScale(float scale) {
 }
 
 static float ResolveUIScale(UINT dpi) {
-    if (g_config.UIScaleMode == 1) {
-        return 1.0f;
+    switch (g_config.UIScalePreset) {
+    case 1: return 0.90f;
+    case 2: return 1.00f;
+    case 3: return 1.10f;
+    case 4: return 1.25f;
+    default:
+        return (float)dpi / 96.0f;
     }
-    return (float)dpi / 96.0f;
 }
 
 static void RefreshWindowDpi(HWND hwnd, UINT dpiHint = 0) {
@@ -2040,7 +2044,9 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"General", L"LoopNavigation", g_config.LoopNavigation ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"General", L"ConfirmDelete", g_config.ConfirmDelete ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"General", L"PortableMode", g_config.PortableMode ? L"1" : L"0", iniPath.c_str());
-    WritePrivateProfileStringW(L"General", L"UIScaleMode", std::to_wstring(g_config.UIScaleMode).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"General", L"UIScalePreset", std::to_wstring(g_config.UIScalePreset).c_str(), iniPath.c_str());
+    // Backward compatibility for older builds that only understand Auto/Manual.
+    WritePrivateProfileStringW(L"General", L"UIScaleMode", (g_config.UIScalePreset == 0) ? L"0" : L"1", iniPath.c_str());
 
     // View
     WritePrivateProfileStringW(L"View", L"CanvasColor", std::to_wstring(g_config.CanvasColor).c_str(), iniPath.c_str());
@@ -2114,8 +2120,14 @@ void LoadConfig() {
     g_config.LoopNavigation = GetPrivateProfileIntW(L"General", L"LoopNavigation", 1, iniPath.c_str()) != 0;
     g_config.ConfirmDelete = GetPrivateProfileIntW(L"General", L"ConfirmDelete", 1, iniPath.c_str()) != 0;
     g_config.PortableMode = GetPrivateProfileIntW(L"General", L"PortableMode", 0, iniPath.c_str()) != 0;
-    g_config.UIScaleMode = GetPrivateProfileIntW(L"General", L"UIScaleMode", 0, iniPath.c_str());
-    if (g_config.UIScaleMode < 0 || g_config.UIScaleMode > 1) g_config.UIScaleMode = 0;
+    int uiScalePreset = GetPrivateProfileIntW(L"General", L"UIScalePreset", -1, iniPath.c_str());
+    if (uiScalePreset == -1) {
+        // Migration from old config: 0=Auto, 1=Manual(100%)
+        int uiScaleMode = GetPrivateProfileIntW(L"General", L"UIScaleMode", 0, iniPath.c_str());
+        uiScalePreset = (uiScaleMode == 1) ? 2 : 0;
+    }
+    if (uiScalePreset < 0 || uiScalePreset > 4) uiScalePreset = 0;
+    g_config.UIScalePreset = uiScalePreset;
 
     // View
     g_config.CanvasColor = GetPrivateProfileIntW(L"View", L"CanvasColor", 0, iniPath.c_str());
