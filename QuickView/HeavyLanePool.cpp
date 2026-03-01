@@ -630,8 +630,16 @@ void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, s
 
     std::lock_guard lock(m_poolMutex);
     uint32_t currentGen = m_generationID.load();
+    int addedCount = 0;
+
+    m_pendingJobs.reserve(m_pendingJobs.size() + batch.size());
 
     for (const auto& item : batch) {
+        uint64_t tileHash = MakeTileHash(item.first.col, item.first.row, item.first.lod);
+        if (m_inFlightTiles.count(tileHash)) {
+            continue;
+        }
+
         JobInfo job;
         job.type = JobType::Tile;
         job.path = path;
@@ -645,12 +653,17 @@ void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, s
         
         job.genID = currentGen;
         m_pendingJobs.push_back(job);
+        m_inFlightTiles.insert(tileHash);
+        addedCount++;
     }
+
+    if (addedCount == 0) return;
+
     // Bulk re-heapify
     std::make_heap(m_pendingJobs.begin(), m_pendingJobs.end());
 
     TryExpand();
-    m_activeTileJobs.fetch_add((int)batch.size());
+    m_activeTileJobs.fetch_add(addedCount);
     m_poolCv.notify_all();
 }
 // ============================================================================

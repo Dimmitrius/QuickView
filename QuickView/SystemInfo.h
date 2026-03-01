@@ -5,6 +5,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <winioctl.h>
+#include <intrin.h>
 #endif
 
 // ============================================================================
@@ -98,15 +99,32 @@ struct SystemInfo {
             info.availableRAM = static_cast<size_t>(memStatus.ullAvailPhys);
         }
 
-        // SIMD Detection (CPUID)
-        int cpuInfo[4];
+        // SIMD Detection (CPUID + XGETBV OS support gate)
+        int cpuInfo[4] = {};
         __cpuid(cpuInfo, 0);
-        int nIds = cpuInfo[0];
+        const int nIds = cpuInfo[0];
 
-        if (nIds >= 7) {
-            __cpuid(cpuInfo, 7); // EAX=7, ECX=0
-            info.hasAVX2 = (cpuInfo[1] & (1 << 5)) != 0;       // EBX bit 5
-            info.hasAVX512F = (cpuInfo[1] & (1 << 16)) != 0;   // EBX bit 16
+        bool ymmStateEnabled = false;
+        bool zmmStateEnabled = false;
+        if (nIds >= 1) {
+            __cpuid(cpuInfo, 1);
+            const bool hasOSXSAVE = (cpuInfo[2] & (1 << 27)) != 0;
+            const bool hasAVX = (cpuInfo[2] & (1 << 28)) != 0;
+            if (hasOSXSAVE && hasAVX) {
+                const unsigned long long xcr0 = _xgetbv(0);
+                // XMM(bit1)+YMM(bit2) must be enabled by OS for AVX/AVX2.
+                ymmStateEnabled = (xcr0 & 0x6) == 0x6;
+                // AVX-512 additionally requires opmask(bit5), ZMM_Hi256(bit6), Hi16_ZMM(bit7).
+                zmmStateEnabled = (xcr0 & 0xE0) == 0xE0;
+            }
+        }
+
+        if (nIds >= 7 && ymmStateEnabled) {
+            __cpuidex(cpuInfo, 7, 0);
+            const bool hasAVX2CPU = (cpuInfo[1] & (1 << 5)) != 0;       // EBX bit 5
+            const bool hasAVX512FCPU = (cpuInfo[1] & (1 << 16)) != 0;   // EBX bit 16
+            info.hasAVX2 = hasAVX2CPU;
+            info.hasAVX512F = hasAVX512FCPU && zmmStateEnabled;
         }
 #else
         // Fallback for non-Windows
