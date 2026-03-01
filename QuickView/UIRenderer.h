@@ -114,6 +114,7 @@ public:
     void SetControlsVisible(bool visible) { m_showControls = visible; MarkStaticDirty(); }
     void SetPinActive(bool active) { m_pinActive = active; MarkStaticDirty(); }
     void SetFullscreenState(bool isFullscreen) { m_isFullscreen = isFullscreen; }
+    void SetUIScale(float scale);
     void OnResize(UINT width, UINT height);
     
     // ===== Window Controls Hit Testing =====
@@ -218,6 +219,7 @@ private:
     
     UINT m_width = 0;
     UINT m_height = 0;
+    float m_uiScale = 1.0f;
     
     // [Edge Focus] Tile Decode Status Bar
     float m_decodeScanPhase = 0.0f;

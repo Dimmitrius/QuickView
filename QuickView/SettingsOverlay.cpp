@@ -573,19 +573,30 @@ void SettingsOverlay::Init(ID2D1RenderTarget* pRT, HWND hwnd) {
     BuildMenu();
 }
 
-void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
-    if (m_brushBg) return;
+void SettingsOverlay::SetUIScale(float scale) {
+    if (scale < 1.0f) scale = 1.0f;
+    if (scale > 4.0f) scale = 4.0f;
+    if (fabsf(m_uiScale - scale) < 0.001f) return;
+    m_uiScale = scale;
+    m_textFormatHeader.Reset();
+    m_textFormatItem.Reset();
+    m_textFormatIcon.Reset();
+    m_textFormatSymbol.Reset();
+}
 
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f), &m_brushBg);        // Dimmer (40% opacity)
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &m_brushText);             // White
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.6f, 0.6f, 0.6f), &m_brushTextDim);          // Gray
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.47f, 0.84f), &m_brushAccent);         // Windows Blue
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.25f, 0.25f, 0.25f), &m_brushControlBg);     // Control Dark
-    
-    // New Visuals
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.3f), &m_brushBorder);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.1f, 0.8f, 0.1f), &m_brushSuccess);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.8f, 0.1f, 0.1f), &m_brushError);
+void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
+    if (!m_brushBg) {
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f), &m_brushBg);        // Dimmer (40% opacity)
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &m_brushText);             // White
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.6f, 0.6f, 0.6f), &m_brushTextDim);          // Gray
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.47f, 0.84f), &m_brushAccent);         // Windows Blue
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.25f, 0.25f, 0.25f), &m_brushControlBg);     // Control Dark
+        
+        // New Visuals
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.3f), &m_brushBorder);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.1f, 0.8f, 0.1f), &m_brushSuccess);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.8f, 0.1f, 0.1f), &m_brushError);
+    }
 
     // Get System Message Font (e.g. Microsoft YaHei UI on CN, Segoe UI on EN)
     NONCLIENTMETRICSW ncm = { sizeof(NONCLIENTMETRICSW) };
@@ -604,10 +615,16 @@ void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
         fontSizeItem = 17.0f;
     }
 
-    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_dwriteFactory.GetAddressOf()));
+    if (!m_dwriteFactory) {
+        DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_dwriteFactory.GetAddressOf()));
+    }
 
-    m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeHeader, L"en-us", &m_textFormatHeader);
-    m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeItem, L"en-us", &m_textFormatItem);
+    if (!m_textFormatHeader || !m_textFormatItem || !m_textFormatIcon || !m_textFormatSymbol) {
+        fontSizeHeader *= m_uiScale;
+        fontSizeItem *= m_uiScale;
+        m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeHeader, L"en-us", &m_textFormatHeader);
+        m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeItem, L"en-us", &m_textFormatItem);
+    }
     
     // [v9.98] Font Fallback Logic (Unified)
     const wchar_t* fontCandidates[] = { 
@@ -630,8 +647,12 @@ void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
     }
 
     // Icon font
-    m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 18.0f, L"en-us", &m_textFormatIcon);
-    m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f, L"en-us", &m_textFormatSymbol); // For small button icons
+    if (!m_textFormatIcon) {
+        m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 18.0f * m_uiScale, L"en-us", &m_textFormatIcon);
+    }
+    if (!m_textFormatSymbol) {
+        m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f * m_uiScale, L"en-us", &m_textFormatSymbol); // For small button icons
+    }
 
     if (m_textFormatItem) {
         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -1285,8 +1306,8 @@ void SettingsOverlay::SetVisible(bool visible) {
              int w = rc.right - rc.left;
              int h = rc.bottom - rc.top;
              
-             int minW = (int)HUD_WIDTH + 50; // Padding
-             int minH = (int)HUD_HEIGHT + 50;
+             int minW = (int)(HUD_WIDTH * m_uiScale + 50.0f * m_uiScale); // Padding
+             int minH = (int)(HUD_HEIGHT * m_uiScale + 50.0f * m_uiScale);
              
              if (w < minW || h < minH) {
                  SetWindowPos(m_hwnd, NULL, 0, 0, std::max(w, minW), std::max(h, minH), SWP_NOMOVE | SWP_NOZORDER);
@@ -1299,7 +1320,7 @@ void SettingsOverlay::SetVisible(bool visible) {
 
 void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     if (!m_visible && !m_showUpdateToast) return;
-    if (!m_brushBg) CreateResources(pRT);
+    CreateResources(pRT);
     
     // Check for deferred rebuild before rendering
     if (m_pendingRebuild) {
@@ -1307,23 +1328,17 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         m_pendingRebuild = false;
     }
     
-    // Use passed window dimensions (Pixels) converted to DIPs
-    // This ensures we center based on the ACTUAL window size logic in main.cpp,
-    // avoiding potential lag if DComp Surface resize is async/delayed.
-    float dpiX, dpiY;
-    pRT->GetDpi(&dpiX, &dpiY);
-    
-    // Fallback if dpi is 0 (shouldn't happen on valid RT)
-    if (dpiX == 0) dpiX = 96.0f;
-    if (dpiY == 0) dpiY = 96.0f;
-
-    float inputWDips = winW * 96.0f / dpiX;
-    float inputHDips = winH * 96.0f / dpiY;
+    const float s = m_uiScale;
+    const float sidebarW = SIDEBAR_WIDTH * s;
+    const float itemH = ITEM_HEIGHT * s;
+    const float padding = PADDING * s;
+    const float hudW = HUD_WIDTH * s;
+    const float hudH = HUD_HEIGHT * s;
     
     // If input is valid, use it. Otherwise fallback to RT size.
     if (winW > 0 && winH > 0) {
-        m_windowWidth = inputWDips;
-        m_windowHeight = inputHDips;
+        m_windowWidth = winW;
+        m_windowHeight = winH;
     } else {
         D2D1_SIZE_F size = pRT->GetSize();
         m_windowWidth = size.width;
@@ -1335,8 +1350,8 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     pRT->FillRectangle(dimmerRect, m_brushBg.Get()); // 0.4 Alpha Black
 
     // 2. Calculate HUD Panel Position (Centered)
-    float hudX = (m_windowWidth - HUD_WIDTH) / 2.0f;
-    float hudY = (m_windowHeight - HUD_HEIGHT) / 2.0f;
+    float hudX = (m_windowWidth - hudW) / 2.0f;
+    float hudY = (m_windowHeight - hudH) / 2.0f;
     if (hudX < 0) hudX = 0;
     if (hudY < 0) hudY = 0;
     
@@ -1345,7 +1360,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
     // Helper: Draw Main HUD only if visible
     if (m_visible) {
-        D2D1_RECT_F hudRect = D2D1::RectF(hudX, hudY, hudX + HUD_WIDTH, hudY + HUD_HEIGHT);
+        D2D1_RECT_F hudRect = D2D1::RectF(hudX, hudY, hudX + hudW, hudY + hudH);
         m_finalHudRect = hudRect;
 
         // 3. Draw HUD Panel Background (Opaque Dark)
@@ -1377,13 +1392,13 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         pRT->PushLayer(layerParams, pLayer.Get());
 
         // Sidebar (Left portion of HUD)
-        D2D1_RECT_F sidebarRect = D2D1::RectF(hudX, hudY, hudX + SIDEBAR_WIDTH, hudY + HUD_HEIGHT);
+        D2D1_RECT_F sidebarRect = D2D1::RectF(hudX, hudY, hudX + sidebarW, hudY + hudH);
         pRT->FillRectangle(sidebarRect, m_brushControlBg.Get());
 
         pRT->PopLayer();
 
         // Sidebar Border (Right edge)
-        pRT->DrawLine(D2D1::Point2F(hudX + SIDEBAR_WIDTH, hudY), D2D1::Point2F(hudX + SIDEBAR_WIDTH, hudY + HUD_HEIGHT), m_brushTextDim.Get(), 0.5f);
+        pRT->DrawLine(D2D1::Point2F(hudX + sidebarW, hudY), D2D1::Point2F(hudX + sidebarW, hudY + hudH), m_brushTextDim.Get(), 0.5f * s);
 
         // Back Button (Top of Sidebar)
         // Back Button (Top of Sidebar)
@@ -1391,50 +1406,50 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         
-        D2D1_RECT_F backIconRect = D2D1::RectF(hudX + 15, hudY, hudX + 45, hudY + 50);
+        D2D1_RECT_F backIconRect = D2D1::RectF(hudX + 15.0f * s, hudY, hudX + 45.0f * s, hudY + 50.0f * s);
         pRT->DrawTextW(L"\xE72B", 1, m_textFormatIcon.Get(), backIconRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
         
         m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
-        D2D1_RECT_F backTextRect = D2D1::RectF(hudX + 55, hudY, hudX + SIDEBAR_WIDTH, hudY + 50);
+        D2D1_RECT_F backTextRect = D2D1::RectF(hudX + 55.0f * s, hudY, hudX + sidebarW, hudY + 50.0f * s);
         pRT->DrawTextW(L"Back", 4, m_textFormatItem.Get(), backTextRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
         // Draw Tabs
-        float tabY = hudY + 50.0f;
+        float tabY = hudY + 50.0f * s;
         for (int i = 0; i < (int)m_tabs.size(); ++i) {
             const auto& tab = m_tabs[i];
             
-            D2D1_RECT_F tabRect = D2D1::RectF(hudX, tabY, hudX + SIDEBAR_WIDTH, tabY + 40.0f);
+            D2D1_RECT_F tabRect = D2D1::RectF(hudX, tabY, hudX + sidebarW, tabY + 40.0f * s);
             
             bool isActive = (i == m_activeTab);
             
             // Highlight active
             if (isActive) {
-                pRT->FillRectangle(D2D1::RectF(hudX, tabY + 10, hudX + 3, tabY + 30), m_brushAccent.Get());
+                pRT->FillRectangle(D2D1::RectF(hudX, tabY + 10.0f * s, hudX + 3.0f * s, tabY + 30.0f * s), m_brushAccent.Get());
                 ComPtr<ID2D1SolidColorBrush> tint;
                 pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f), &tint);
                 pRT->FillRectangle(tabRect, tint.Get());
             }
 
             // Icon
-            D2D1_RECT_F iconRect = D2D1::RectF(hudX + 15, tabY, hudX + 15 + 40, tabY + 40);
+            D2D1_RECT_F iconRect = D2D1::RectF(hudX + 15.0f * s, tabY, hudX + 15.0f * s + 40.0f * s, tabY + 40.0f * s);
             m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             pRT->DrawTextW(tab.icon.c_str(), 1, m_textFormatIcon.Get(), iconRect, isActive ? m_brushAccent.Get() : m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
             // Text
-            D2D1_RECT_F textRect = D2D1::RectF(hudX + 65, tabY, hudX + SIDEBAR_WIDTH - 10, tabY + 40);
+            D2D1_RECT_F textRect = D2D1::RectF(hudX + 65.0f * s, tabY, hudX + sidebarW - 10.0f * s, tabY + 40.0f * s);
             m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             pRT->DrawTextW(tab.name.c_str(), (UINT32)tab.name.length(), m_textFormatItem.Get(), textRect, isActive ? m_brushText.Get() : m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
-            tabY += 45.0f;
+            tabY += 45.0f * s;
         }
 
         // 3. Content Area (Right portion of HUD)
-        float contentX = hudX + SIDEBAR_WIDTH + PADDING;
-        float contentY = hudY + 50.0f + m_scrollOffset;
-        float contentW = HUD_WIDTH - SIDEBAR_WIDTH - PADDING * 2; // Remaining width
+        float contentX = hudX + sidebarW + padding;
+        float contentY = hudY + 50.0f * s + m_scrollOffset;
+        float contentW = hudW - sidebarW - padding * 2; // Remaining width
         
         // Track content height for scrolling
         float startContentY = contentY; 
@@ -1445,7 +1460,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             auto& currentTab = m_tabs[m_activeTab];
 
             for (auto& item : currentTab.items) {
-                float rowHeight = ITEM_HEIGHT;
+                float rowHeight = itemH;
                 
                 // Pinned Check
                 bool isPinned = (item.type == OptionType::AboutSystemInfo || item.type == OptionType::CopyrightLabel);
@@ -1685,8 +1700,8 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             }
              else if (item.type == OptionType::AboutSystemInfo) {
                 // Absolute positioning from bottom
-                float bottomY = hudY + HUD_HEIGHT;
-                float sysY = bottomY - 110.0f; // System info line
+                float bottomY = hudY + hudH;
+                float sysY = bottomY - 110.0f * s; // System info line
                 
                  D2D1_RECT_F textRect = D2D1::RectF(contentX, sysY, contentX + contentW, sysY + 20);
                  
@@ -1698,7 +1713,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      pRT->DrawText(part1.c_str(), (UINT32)part1.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
                      
                      // Draw active part Green (Approx offset)
-                     D2D1_RECT_F avxRect = D2D1::RectF(contentX + 225, sysY, contentX + contentW, sysY + 20);
+                     D2D1_RECT_F avxRect = D2D1::RectF(contentX + 225.0f * s, sysY, contentX + contentW, sysY + 20.0f * s);
                      pRT->DrawText(L"SIMD: AVX2 [Active]", 19, m_textFormatItem.Get(), avxRect, m_brushSuccess.Get());
                  } else {
                      pRT->DrawText(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
@@ -1709,11 +1724,11 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
              }
              else if (item.type == OptionType::CopyrightLabel) {
                  // Copyright Absolute Bottom (Pinned)
-                 float bottomY = hudY + HUD_HEIGHT;
-                 float copyY = bottomY - 60.0f; 
+                 float bottomY = hudY + hudH;
+                 float copyY = bottomY - 60.0f * s; 
                  
                  // Copyright (Centered)
-                 D2D1_RECT_F infoRect = D2D1::RectF(contentX, copyY, contentX + contentW, copyY + 50);
+                 D2D1_RECT_F infoRect = D2D1::RectF(contentX, copyY, contentX + contentW, copyY + 50.0f * s);
                  m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                  pRT->DrawText(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), infoRect, m_brushTextDim.Get());
                  m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -1932,7 +1947,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
     // Draw Update Toast on Top (Always check)
     if (m_showUpdateToast) {
-        RenderUpdateToast(pRT, hudX, hudY, HUD_WIDTH, HUD_HEIGHT);
+        RenderUpdateToast(pRT, hudX, hudY, hudW, hudH);
     }
 
     // Draw Overlay Dropdowns (Z-Order Top)
@@ -1956,7 +1971,7 @@ bool SettingsOverlay::OnMouseWheel(float delta) {
     if (m_scrollOffset > 0.0f) m_scrollOffset = 0.0f;
     
     // Bottom Limit
-    float visibleH = HUD_HEIGHT - 60.0f;
+    float visibleH = HUD_HEIGHT * m_uiScale - 60.0f * m_uiScale;
     float overflow = m_settingsContentHeight - visibleH;
     if (overflow < 0) overflow = 0;
     float minScroll = -overflow;
@@ -2245,26 +2260,31 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         return SettingsAction::RepaintStatic;
     }
 
-    // 1. Sidebar Click (hudX <= x < hudX + SIDEBAR_WIDTH)
-    if (x >= hudX && x < hudX + SIDEBAR_WIDTH) {
+    const float sidebarW = SIDEBAR_WIDTH * m_uiScale;
+    const float backH = 50.0f * m_uiScale;
+    const float tabH = 40.0f * m_uiScale;
+    const float tabStep = 45.0f * m_uiScale;
+
+    // 1. Sidebar Click (hudX <= x < hudX + sidebarW)
+    if (x >= hudX && x < hudX + sidebarW) {
         // Convert to HUD-local Y
         float localY = y - hudY;
 
         // Back Button (Top 50px)
-        if (localY < 50.0f) {
+        if (localY < backH) {
             SetVisible(false);
             return SettingsAction::RepaintStatic;
         }
 
         // Tab Click
-        float tabY = 50.0f;
+        float tabY = backH;
         for (int i = 0; i < (int)m_tabs.size(); ++i) {
-            if (localY >= tabY && localY <= tabY + 40.0f) {
+            if (localY >= tabY && localY <= tabY + tabH) {
                 m_activeTab = i;
                 m_scrollOffset = 0.0f;
                 return SettingsAction::RepaintStatic;
             }
-            tabY += 45.0f;
+            tabY += tabStep;
         }
         return SettingsAction::RepaintStatic; // Clicked sidebar blank area - consume
     }

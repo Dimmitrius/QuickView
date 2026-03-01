@@ -13,25 +13,43 @@ void HelpOverlay::Init(ID2D1RenderTarget* pRT, HWND hwnd) {
     CreateResources(pRT);
 }
 
+void HelpOverlay::SetUIScale(float scale) {
+    if (scale < 1.0f) scale = 1.0f;
+    if (scale > 4.0f) scale = 4.0f;
+    if (fabsf(m_uiScale - scale) < 0.001f) return;
+    m_uiScale = scale;
+    m_fmtHeader.Reset();
+    m_fmtKey.Reset();
+    m_fmtDesc.Reset();
+    m_fmtTip.Reset();
+    m_fmtIcon.Reset();
+}
 
 
 void HelpOverlay::CreateResources(ID2D1RenderTarget* pRT) {
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.10f, 0.96f), &m_brushBg);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &m_brushText);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f, 1.0f), &m_brushHeader); 
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &m_brushKey);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f), &m_brushBorder);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), &m_brushScrollBg);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f), &m_brushScrollThumb);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.8f), &m_brushCloseBg);
+    if (!m_brushBg) {
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.10f, 0.96f), &m_brushBg);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &m_brushText);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f, 1.0f), &m_brushHeader);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &m_brushKey);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f), &m_brushBorder);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), &m_brushScrollBg);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f), &m_brushScrollThumb);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.8f), &m_brushCloseBg);
+    }
 
-    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_dwriteFactory.GetAddressOf()));
+    if (!m_dwriteFactory) {
+        DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_dwriteFactory.GetAddressOf()));
+    }
 
-    m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f, L"", &m_fmtHeader);
-    m_dwriteFactory->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"", &m_fmtKey);
-    m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 15.0f, L"", &m_fmtDesc);
-    m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"", &m_fmtTip);
-    m_dwriteFactory->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"", &m_fmtIcon);
+    if (!m_dwriteFactory) return;
+    if (!m_fmtHeader || !m_fmtKey || !m_fmtDesc || !m_fmtTip || !m_fmtIcon) {
+        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f * m_uiScale, L"", &m_fmtHeader);
+        m_dwriteFactory->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f * m_uiScale, L"", &m_fmtKey);
+        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 15.0f * m_uiScale, L"", &m_fmtDesc);
+        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f * m_uiScale, L"", &m_fmtTip);
+        m_dwriteFactory->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f * m_uiScale, L"", &m_fmtIcon);
+    }
 }
 
 void HelpOverlay::RebuildList() {
@@ -130,8 +148,8 @@ void HelpOverlay::SetVisible(bool visible) {
                 RECT rc; GetClientRect(m_hwnd, &rc);
                 int curW = rc.right - rc.left;
                 int curH = rc.bottom - rc.top;
-                int minW = (int)WIDTH + 50; 
-                int minH = (int)MAX_HEIGHT + 50;
+                int minW = (int)(WIDTH * m_uiScale + 50.0f * m_uiScale);
+                int minH = (int)(MAX_HEIGHT * m_uiScale + 50.0f * m_uiScale);
                 if (curW < minW || curH < minH) {
                      SetWindowPos(m_hwnd, nullptr, 0, 0, std::max(curW, minW), std::max(curH, minH), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
                 }
@@ -143,7 +161,11 @@ void HelpOverlay::SetVisible(bool visible) {
 
 void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     if (!m_visible) return;
-    if (!m_brushBg) CreateResources(pRT);
+    CreateResources(pRT);
+    const float s = m_uiScale;
+    const float panelW = WIDTH * s;
+    const float panelH = MAX_HEIGHT * s;
+    const float rowH = ROW_HEIGHT * s;
 
     // Dimmer
     ComPtr<ID2D1SolidColorBrush> dimmer;
@@ -151,22 +173,22 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     pRT->FillRectangle(D2D1::RectF(0, 0, winW, winH), dimmer.Get());
 
     // Layout
-    float x = (winW - WIDTH) / 2.0f;
-    float y = (winH - MAX_HEIGHT) / 2.0f;
-    if (y < 30) y = 30; // Min top margin
+    float x = (winW - panelW) / 2.0f;
+    float y = (winH - panelH) / 2.0f;
+    if (y < 30.0f * s) y = 30.0f * s; // Min top margin
     if (x < 0) x = 0;
 
-    m_finalRect = D2D1::RectF(x, y, x + WIDTH, y + MAX_HEIGHT);
+    m_finalRect = D2D1::RectF(x, y, x + panelW, y + panelH);
 
     // Panel Bg
-    pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8, 8), m_brushBg.Get());
-    pRT->DrawRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8, 8), m_brushBorder.Get(), 1.0f);
+    pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBg.Get());
+    pRT->DrawRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBorder.Get(), 1.0f * s);
 
     // Header Title
-    pRT->DrawTextW(L"QuickView Help", 14, m_fmtHeader.Get(), D2D1::RectF(x + 24, y + 16, x + WIDTH, y + 60), m_brushText.Get());
+    pRT->DrawTextW(L"QuickView Help", 14, m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, y + 16.0f * s, x + panelW, y + 60.0f * s), m_brushText.Get());
     
     // Close Button [ X ]
-    m_closeRect = D2D1::RectF(x + WIDTH - 40, y + 12, x + WIDTH - 12, y + 40);
+    m_closeRect = D2D1::RectF(x + panelW - 40.0f * s, y + 12.0f * s, x + panelW - 12.0f * s, y + 40.0f * s);
     
     // Icon font for X
     m_fmtIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -174,7 +196,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     
     // Check hover
     if (m_hoverClose) {
-        pRT->FillRoundedRectangle(D2D1::RoundedRect(m_closeRect, 4, 4), m_brushCloseBg.Get());
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(m_closeRect, 4.0f * s, 4.0f * s), m_brushCloseBg.Get());
     }
     
     // \xE8BB is Cancel/Clear in MDL2 Assets
@@ -185,24 +207,24 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     m_fmtHeader->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 
     // Separator
-    pRT->DrawLine(D2D1::Point2F(x + 20, y + 50), D2D1::Point2F(x + WIDTH - 20, y + 50), m_brushBorder.Get());
+    pRT->DrawLine(D2D1::Point2F(x + 20.0f * s, y + 50.0f * s), D2D1::Point2F(x + panelW - 20.0f * s, y + 50.0f * s), m_brushBorder.Get());
 
     // Content List
-    float contentTop = y + 60;
-    float contentBottom = y + MAX_HEIGHT - 10;
+    float contentTop = y + 60.0f * s;
+    float contentBottom = y + panelH - 10.0f * s;
     float visibleH = contentBottom - contentTop;
     
     float contentY = contentTop + m_scrollOffset;
     float startY = contentY;
     
     // Clip
-    pRT->PushAxisAlignedClip(D2D1::RectF(x, contentTop, x + WIDTH, contentBottom), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    pRT->PushAxisAlignedClip(D2D1::RectF(x, contentTop, x + panelW, contentBottom), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 
     for (const auto& item : m_items) {
         if (item.isHeader) {
             contentY += 20;
-            pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtHeader.Get(), D2D1::RectF(x + 24, contentY, x + WIDTH - 24, contentY + 30), m_brushHeader.Get());
-            contentY += 35;
+            pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, contentY, x + panelW - 24.0f * s, contentY + 30.0f * s), m_brushHeader.Get());
+            contentY += 35.0f * s;
         } 
         else if (item.desc.empty()) {
             // Full Width Text (Tip)
@@ -210,7 +232,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             const wchar_t* pStr = item.key.c_str();
             UINT32 sLen = (UINT32)item.key.length();
             IDWriteTextFormat* pFmt = m_fmtTip.Get();
-            FLOAT maxWidth = 550.0f; // WIDTH (600) - 50
+            FLOAT maxWidth = 550.0f * s; // WIDTH (600) - 50
             FLOAT maxHeight = 1000.0f;
             
             HRESULT hr = m_dwriteFactory->CreateTextLayout(pStr, sLen, pFmt, maxWidth, maxHeight, layout.GetAddressOf());
@@ -219,21 +241,21 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 DWRITE_TEXT_METRICS metrics;
                 layout->GetMetrics(&metrics);
                 float h = metrics.height;
-                pRT->DrawTextLayout(D2D1::Point2F(x + 24, contentY), layout.Get(), m_brushText.Get());
-                contentY += h + 15; // Padding
+                pRT->DrawTextLayout(D2D1::Point2F(x + 24.0f * s, contentY), layout.Get(), m_brushText.Get());
+                contentY += h + 15.0f * s; // Padding
             }
         }
         else {
             // Key - Value Pair
-            float keyW = 180.0f;
+            float keyW = 180.0f * s;
             // Key (Right Aligned in Col 1)
             // Actually Left aligned is better for keys like "Ctrl + Shift + ..."
-            pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtKey.Get(), D2D1::RectF(x + 40, contentY, x + 40 + keyW, contentY + ROW_HEIGHT), m_brushKey.Get());
+            pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtKey.Get(), D2D1::RectF(x + 40.0f * s, contentY, x + 40.0f * s + keyW, contentY + rowH), m_brushKey.Get());
             
             // Value
-            pRT->DrawTextW(item.desc.c_str(), (UINT32)item.desc.length(), m_fmtDesc.Get(), D2D1::RectF(x + 50 + keyW, contentY, x + WIDTH - 24, contentY + ROW_HEIGHT), m_brushText.Get());
+            pRT->DrawTextW(item.desc.c_str(), (UINT32)item.desc.length(), m_fmtDesc.Get(), D2D1::RectF(x + 50.0f * s + keyW, contentY, x + panelW - 24.0f * s, contentY + rowH), m_brushText.Get());
             
-            contentY += 28;
+            contentY += 28.0f * s;
         }
     }
     
@@ -246,7 +268,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         // Ensure bottom padding in scroll calc?
         // Add 20px padding to bottom of content
         m_contentHeight += 20; 
-        DrawScrollbar(pRT, x + WIDTH - 8, contentTop, visibleH, m_contentHeight, visibleH);
+        DrawScrollbar(pRT, x + panelW - 8.0f * s, contentTop, visibleH, m_contentHeight, visibleH);
     }
 }
 
@@ -274,7 +296,7 @@ bool HelpOverlay::OnMouseWheel(float delta) {
     
     m_scrollOffset += delta * 0.5f; 
     
-    float visibleH = MAX_HEIGHT - 70.0f; // Adjusted for margins
+    float visibleH = MAX_HEIGHT * m_uiScale - 70.0f * m_uiScale; // Adjusted for margins
     float overflow = m_contentHeight - visibleH;
     
     if (m_scrollOffset > 0) m_scrollOffset = 0;

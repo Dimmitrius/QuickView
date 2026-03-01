@@ -16,6 +16,7 @@ public:
 
     void Init(ID2D1RenderTarget* pRT, HWND hwnd);
     void Render(ID2D1RenderTarget* pRT, float winW, float winH);
+    void SetUIScale(float scale);
 
     void SetVisible(bool visible);
     bool IsVisible() const { return m_visible; }
@@ -37,6 +38,7 @@ private:
     float m_opacity = 0.0f;
     float m_scrollOffset = 0.0f;
     float m_contentHeight = 0.0f;
+    float m_uiScale = 1.0f;
     
     // Interaction
     bool m_hoverClose = false;

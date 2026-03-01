@@ -85,6 +85,7 @@ public:
 
     void Init(ID2D1RenderTarget* pRT, HWND hwnd);
     void Render(ID2D1RenderTarget* pRT, float winW, float winH);
+    void SetUIScale(float scale);
     
     // Interaction
     SettingsAction OnMouseMove(float x, float y);
@@ -198,6 +199,7 @@ private:
     float m_windowHeight = 0.0f;
     D2D1_RECT_F m_finalHudRect = {}; // Cache for hit-testing
     float m_settingsContentHeight = 0.0f;
+    float m_uiScale = 1.0f;
     
     // Toast Scrolling
     float m_toastScrollY = 0.0f;

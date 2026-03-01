@@ -250,6 +250,8 @@ Toolbar g_toolbar;  // Non-static for extern access from UIRenderer
 SettingsOverlay g_settingsOverlay;  // Non-static for extern access from UIRenderer
 HelpOverlay g_helpOverlay; // Non-static for extern access
 CImageLoader::ImageMetadata g_currentMetadata;  // Non-static for extern access from UIRenderer
+static UINT g_windowDpi = USER_DEFAULT_SCREEN_DPI;
+static float g_uiScale = 1.0f;
 
 static ComPtr<IDWriteTextFormat> g_pPanelTextFormat;
 static D2D1_RECT_F g_gpsLinkRect = {}; 
@@ -341,6 +343,30 @@ static SavedWindowState g_savedState;
 // Forward declarations for helper functions
 static void SaveOverlayWindowState(HWND hwnd);
 static void RestoreOverlayWindowState(HWND hwnd);
+
+static void ApplyUIScale(float scale) {
+    if (scale < 1.0f) scale = 1.0f;
+    if (scale > 4.0f) scale = 4.0f;
+    if (fabsf(g_uiScale - scale) < 0.001f) return;
+    g_uiScale = scale;
+
+    if (g_uiRenderer) {
+        g_uiRenderer->SetUIScale(g_uiScale);
+    }
+    g_toolbar.SetUIScale(g_uiScale);
+    g_settingsOverlay.SetUIScale(g_uiScale);
+    g_helpOverlay.SetUIScale(g_uiScale);
+}
+
+static void RefreshWindowDpi(HWND hwnd, UINT dpiHint = 0) {
+    UINT dpi = dpiHint;
+    if (dpi == 0 && hwnd) {
+        dpi = GetDpiForWindow(hwnd);
+    }
+    if (dpi == 0) dpi = USER_DEFAULT_SCREEN_DPI;
+    g_windowDpi = dpi;
+    ApplyUIScale((float)dpi / 96.0f);
+}
 
 // [DComp] Render bitmap to DComp Pending Surface and trigger cross-fade
 static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent, bool isFastUpgrade = false); // fwd decl
@@ -2932,6 +2958,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
 
     HWND hwnd = CreateWindowExW(0, g_szClassName, g_szWindowTitle, WS_OVERLAPPEDWINDOW, xPos, yPos, winW, winH, nullptr, nullptr, hInstance, nullptr);
     if (!hwnd) return 0;
+    RefreshWindowDpi(hwnd);
 
     // [Phase 0] Start Named Pipe server on Master process.
     // SingleInstance ON  → replace current image in Master's window
@@ -3009,6 +3036,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
         // Initialize UI Renderer (renders to independent DComp Surface)
         g_uiRenderer = std::make_unique<UIRenderer>();
         g_uiRenderer->Initialize(g_compEngine, g_renderEngine->GetDWriteFactory());
+        g_uiRenderer->SetUIScale(g_uiScale);
     }
     
     // Init Gallery
@@ -3433,14 +3461,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         // Handle DPI change (e.g., window dragged to different monitor)
         // wParam: LOWORD = new X DPI, HIWORD = new Y DPI
         // lParam: pointer to RECT with suggested new window size/position
+        const UINT newDpiX = LOWORD(wParam);
+        RefreshWindowDpi(hwnd, newDpiX);
+
         RECT* pNewRect = (RECT*)lParam;
         SetWindowPos(hwnd, nullptr, 
                      pNewRect->left, pNewRect->top,
                      pNewRect->right - pNewRect->left,
                      pNewRect->bottom - pNewRect->top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
-        // WM_SIZE will be triggered by SetWindowPos, which calls OnResize
-        // No additional action needed - D2D handles DPI internally
+        // WM_SIZE will be triggered by SetWindowPos and refresh layout using the new scale.
         return 0;
     }
     
@@ -5188,8 +5218,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                          int h = rcClient.bottom - rcClient.top;
                          
                          // Target HUD Size
-                         int minW = 800;
-                         int minH = 650;
+                         int minW = (int)(800.0f * g_uiScale);
+                         int minH = (int)(650.0f * g_uiScale);
                          
                          if (w < minW || h < minH) {
                              int targetW = std::max(w, minW);

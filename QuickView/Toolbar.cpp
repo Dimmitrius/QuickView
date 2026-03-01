@@ -43,6 +43,14 @@ Toolbar::Toolbar() {
 
 Toolbar::~Toolbar() {}
 
+void Toolbar::SetUIScale(float scale) {
+    if (scale < 1.0f) scale = 1.0f;
+    if (scale > 4.0f) scale = 4.0f;
+    if (fabsf(m_uiScale - scale) < 0.001f) return;
+    m_uiScale = scale;
+    m_textFormatIcon.Reset();
+}
+
 void Toolbar::CreateResources(ID2D1RenderTarget* pRT) {
     if (!m_brushBg) {
         pRT->CreateSolidColorBrush(D2D1::ColorF(0.1f, 0.1f, 0.1f, 0.85f), &m_brushBg); // Dark background
@@ -54,46 +62,45 @@ void Toolbar::CreateResources(ID2D1RenderTarget* pRT) {
         
         // Font
         DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_dwriteFactory.GetAddressOf()));
-        if (m_dwriteFactory) {
-            // [v9.98] Font Fallback Logic
-            const wchar_t* fontCandidates[] = { 
-                L"Segoe Fluent Icons", 
-                L"Segoe MDL2 Assets", 
-                L"Segoe UI Symbol" 
-            };
-            const wchar_t* selectedFont = L"Segoe UI Symbol";
+    }
 
-            ComPtr<IDWriteFontCollection> sysFonts;
-            if (SUCCEEDED(m_dwriteFactory->GetSystemFontCollection(&sysFonts, FALSE))) {
-                for (const auto& name : fontCandidates) {
-                    UINT32 index;
-                    BOOL exists;
-                    if (SUCCEEDED(sysFonts->FindFamilyName(name, &index, &exists)) && exists) {
-                        selectedFont = name;
-                        break;
-                    }
-                }
-            }
+    if (!m_dwriteFactory) return;
+    if (m_textFormatIcon && fabsf(m_iconFontScale - m_uiScale) < 0.001f) return;
 
-            m_dwriteFactory->CreateTextFormat(
-                selectedFont,
-                NULL,
-                DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL,
-                20.0f, // Icon Size
-                L"en-us",
-                &m_textFormatIcon
-            );
-            // Fallback for Win10? "Segoe MDL2 Assets"
-            // If Segoe Fluent Icons not found, it shows box.
-            // We can try to detect or just use MDL2 if simpler?
-            // Users requested Fluent. Keep Fluent.
-            if (m_textFormatIcon) {
-                m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-                m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    const wchar_t* fontCandidates[] = {
+        L"Segoe Fluent Icons",
+        L"Segoe MDL2 Assets",
+        L"Segoe UI Symbol"
+    };
+    const wchar_t* selectedFont = L"Segoe UI Symbol";
+
+    ComPtr<IDWriteFontCollection> sysFonts;
+    if (SUCCEEDED(m_dwriteFactory->GetSystemFontCollection(&sysFonts, FALSE))) {
+        for (const auto& name : fontCandidates) {
+            UINT32 index;
+            BOOL exists;
+            if (SUCCEEDED(sysFonts->FindFamilyName(name, &index, &exists)) && exists) {
+                selectedFont = name;
+                break;
             }
         }
+    }
+
+    m_textFormatIcon.Reset();
+    m_dwriteFactory->CreateTextFormat(
+        selectedFont,
+        NULL,
+        DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        20.0f * m_uiScale,
+        L"en-us",
+        &m_textFormatIcon
+    );
+    if (m_textFormatIcon) {
+        m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        m_iconFontScale = m_uiScale;
     }
 }
 
@@ -107,6 +114,11 @@ void Toolbar::UpdateLayout(float winW, float winH) {
     
     // [Phase 3] Check if window is too narrow for toolbar
     m_windowTooNarrow = (winW < GetMinWidth());
+    const float buttonSize = BUTTON_SIZE * m_uiScale;
+    const float gap = GAP * m_uiScale;
+    const float padX = PADDING_X * m_uiScale;
+    const float padY = PADDING_Y * m_uiScale;
+    const float bottomMargin = BOTTOM_MARGIN * m_uiScale;
     
     // [Fix] Always update layout to ensure Button State (e.g. Pin Toggle) is synced.
     // Optimization removed: static float s_lastW... inhibited state updates.
@@ -121,20 +133,20 @@ void Toolbar::UpdateLayout(float winW, float winH) {
     }
     
     // Calculate total width: padding + buttons + gaps between buttons
-    float totalW = PADDING_X * 2 + (visibleCount * BUTTON_SIZE);
-    if (visibleCount > 1) totalW += (visibleCount - 1) * GAP;
+    float totalW = padX * 2 + (visibleCount * buttonSize);
+    if (visibleCount > 1) totalW += (visibleCount - 1) * gap;
 
     float startX = (winW - totalW) / 2.0f;
-    float startY = winH - BOTTOM_MARGIN - BUTTON_SIZE - PADDING_Y * 2; 
+    float startY = winH - bottomMargin - buttonSize - padY * 2;
 
     m_bgRect = D2D1::RoundedRect(
-        D2D1::RectF(startX, startY, startX + totalW, startY + BUTTON_SIZE + PADDING_Y * 2),
-        20.0f, 20.0f // Capsule radius
+        D2D1::RectF(startX, startY, startX + totalW, startY + buttonSize + padY * 2),
+        20.0f * m_uiScale, 20.0f * m_uiScale // Capsule radius
     );
     
     // Layout Buttons
-    float cx = startX + PADDING_X;
-    float cy = startY + PADDING_Y;
+    float cx = startX + padX;
+    float cy = startY + padY;
     
     for (auto& btn : m_buttons) {
         bool visible = true;
@@ -148,8 +160,8 @@ void Toolbar::UpdateLayout(float winW, float winH) {
         }
         
         if (visible) {
-            btn.rect = D2D1::RectF(cx, cy, cx + BUTTON_SIZE, cy + BUTTON_SIZE);
-            cx += BUTTON_SIZE + GAP;
+            btn.rect = D2D1::RectF(cx, cy, cx + buttonSize, cy + buttonSize);
+            cx += buttonSize + gap;
         } else {
             btn.rect = D2D1::RectF(0,0,0,0); // Hide
         }
@@ -204,7 +216,7 @@ void Toolbar::Render(ID2D1RenderTarget* pRT) {
             
             // Hover effect with rounded corners
             if (btn.isHovered) {
-                D2D1_ROUNDED_RECT hoverRect = D2D1::RoundedRect(btn.rect, 6.0f, 6.0f);
+                D2D1_ROUNDED_RECT hoverRect = D2D1::RoundedRect(btn.rect, 6.0f * m_uiScale, 6.0f * m_uiScale);
                 pRT->FillRoundedRectangle(hoverRect, m_brushHover.Get());
             }
             
@@ -247,14 +259,19 @@ void Toolbar::Render(ID2D1RenderTarget* pRT) {
         const wchar_t* tipText = GetTooltipText(btn);
         if (btn.isHovered && tipText && tipText[0] != 0) {
             static ComPtr<IDWriteTextFormat> tooltipFormat;
+            static float tooltipScale = 0.0f;
+            if (tooltipFormat && fabsf(tooltipScale - m_uiScale) >= 0.001f) {
+                tooltipFormat.Reset();
+            }
             if (!tooltipFormat && m_dwriteFactory) {
                 m_dwriteFactory->CreateTextFormat(
                     L"Segoe UI", NULL,
                     DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                    12.0f, L"en-us", &tooltipFormat);
+                    12.0f * m_uiScale, L"en-us", &tooltipFormat);
                 if (tooltipFormat) {
                     tooltipFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                     tooltipFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                    tooltipScale = m_uiScale;
                 }
             }
             
@@ -263,26 +280,26 @@ void Toolbar::Render(ID2D1RenderTarget* pRT) {
                 
                 // Measure actual text width using DirectWrite for proper Unicode support
                 ComPtr<IDWriteTextLayout> textLayout;
-                float tipWidth = tipLen * 10.0f + 16.0f; // Fallback
+                float tipWidth = tipLen * 10.0f * m_uiScale + 16.0f * m_uiScale; // Fallback
                 if (m_dwriteFactory) {
-                    m_dwriteFactory->CreateTextLayout(tipText, (UINT32)tipLen, tooltipFormat.Get(), 500.0f, 30.0f, &textLayout);
+                    m_dwriteFactory->CreateTextLayout(tipText, (UINT32)tipLen, tooltipFormat.Get(), 500.0f * m_uiScale, 40.0f * m_uiScale, &textLayout);
                     if (textLayout) {
                         DWRITE_TEXT_METRICS metrics;
                         textLayout->GetMetrics(&metrics);
-                        tipWidth = metrics.width + 16.0f; // Add padding
+                        tipWidth = metrics.width + 16.0f * m_uiScale; // Add padding
                     }
                 }
                 
-                float tipHeight = 22.0f;
+                float tipHeight = 22.0f * m_uiScale;
                 float tipX = (btn.rect.left + btn.rect.right) / 2 - tipWidth / 2;
-                float tipY = m_bgRect.rect.top - tipHeight - 8.0f;
-                if (tipX < 5) tipX = 5;
+                float tipY = m_bgRect.rect.top - tipHeight - 8.0f * m_uiScale;
+                if (tipX < 5.0f * m_uiScale) tipX = 5.0f * m_uiScale;
                 
                 D2D1_RECT_F tipRect = D2D1::RectF(tipX, tipY, tipX + tipWidth, tipY + tipHeight);
                 
                 ComPtr<ID2D1SolidColorBrush> tipBg;
                 pRT->CreateSolidColorBrush(D2D1::ColorF(0.15f, 0.15f, 0.15f, 0.95f), &tipBg);
-                pRT->FillRoundedRectangle(D2D1::RoundedRect(tipRect, 4.0f, 4.0f), tipBg.Get());
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(tipRect, 4.0f * m_uiScale, 4.0f * m_uiScale), tipBg.Get());
                 pRT->DrawText(tipText, (UINT32)tipLen, tooltipFormat.Get(), tipRect, m_brushIcon.Get());
             }
             break;

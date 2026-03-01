@@ -31,6 +31,7 @@ public:
     void Init(ID2D1RenderTarget* pRT);
     void UpdateLayout(float winW, float winH);
     void Render(ID2D1RenderTarget* pRT);
+    void SetUIScale(float scale);
 
     // Interaction
     bool OnMouseMove(float x, float y);
@@ -54,7 +55,7 @@ public:
     void SetExtensionWarning(bool hasMismatch);
     
     // [Phase 3] Get minimum required width for toolbar
-    float GetMinWidth() const { return PADDING_X * 2 + 8 * BUTTON_SIZE + 7 * GAP; } // ~400px for 8 buttons
+    float GetMinWidth() const { return (PADDING_X * 2 + 8 * BUTTON_SIZE + 7 * GAP) * m_uiScale; } // ~400px for 8 buttons
     bool IsWindowTooNarrow() const { return m_windowTooNarrow; }
 
 private:
@@ -67,6 +68,8 @@ private:
 
     // Animation
     float m_opacity = 0.0f;
+    float m_uiScale = 1.0f;
+    float m_iconFontScale = 0.0f;
 
     bool m_targetVisible = false;
     bool m_isPinned = false;
