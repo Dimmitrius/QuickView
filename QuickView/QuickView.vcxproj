@@ -75,6 +75,9 @@
       <AdditionalLibraryDirectories>vcpkg_installed\x64-windows-static-opt\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>dav1d.lib;avif.lib;mimalloc-debug.lib;brotlicommon.lib;brotlidec.lib;brotlienc.lib;hwy.lib;jasperd.lib;jpeg.lib;jxl_cms.lib;jxl_threads.lib;jxl.lib;lcms2.lib;libsharpyuv.lib;libwebp.lib;libwebpdecoder.lib;libwebpdemux.lib;libwebpmux.lib;raw_rd.lib;turbojpeg.lib;yuv.lib;zlibstaticd.lib;dwrite.lib;windowscodecs.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)QuickView.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -104,6 +107,9 @@
       <AdditionalLibraryDirectories>vcpkg_installed\x64-windows-static-opt\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>dav1d.lib;avif.lib;mimalloc.lib;brotlicommon.lib;brotlidec.lib;brotlienc.lib;hwy.lib;jasper.lib;jpeg.lib;jxl_cms.lib;jxl_threads.lib;jxl.lib;lcms2.lib;libsharpyuv.lib;libwebp.lib;libwebpdecoder.lib;libwebpdemux.lib;libwebpmux.lib;raw_r.lib;turbojpeg.lib;yuv.lib;zlibstatic.lib;dwrite.lib;windowscodecs.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)QuickView.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

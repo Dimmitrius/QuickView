@@ -54,6 +54,7 @@ using namespace Microsoft::WRL;
 #include <dwmapi.h>
 #include <ShellScalingApi.h>
 #include <winspool.h>
+#include <intrin.h>
 #include <shellapi.h>
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "Shcore.lib")
@@ -148,6 +149,27 @@ static std::string GetAppVersionUTF8() {
         }
     }
     return "2.1.0";
+}
+
+static bool SupportsAvx2ByCpuid() {
+#if defined(_M_X64) || defined(_M_IX86)
+    int cpuInfo[4] = {};
+    __cpuid(cpuInfo, 0);
+    if (cpuInfo[0] < 7) return false;
+
+    __cpuid(cpuInfo, 1);
+    const bool hasOsxsave = (cpuInfo[2] & (1 << 27)) != 0;
+    const bool hasAvx = (cpuInfo[2] & (1 << 28)) != 0;
+    if (!hasOsxsave || !hasAvx) return false;
+
+    const unsigned long long xcr0 = _xgetbv(0);
+    if ((xcr0 & 0x6) != 0x6) return false;
+
+    __cpuidex(cpuInfo, 7, 0);
+    return (cpuInfo[1] & (1 << 5)) != 0;
+#else
+    return false;
+#endif
 }
 
 // Function Prototypes
@@ -2858,7 +2880,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     }
 
     // [v3.2.3] AVX2 Check - Critical: App compiled with /arch:AVX2, will crash without it
-    if (!IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE)) {
+    const bool hasAvx2 = IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE) || SupportsAvx2ByCpuid();
+    if (!hasAvx2) {
         MessageBoxW(nullptr, 
             L"QuickView requires a CPU with AVX2 support.\n\n"
             L"Minimum Requirements:\n"
@@ -2872,9 +2895,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     
     AppStrings::Init();
 
-    // Enable Per-Monitor DPI Awareness V2 for proper multi-monitor support
-    // This enables WM_DPICHANGED messages when window is dragged across monitors
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    // DPI mode is controlled by the embedded application manifest.
+    // Keeping this out of runtime code avoids forcing a DPI-aware mode that
+    // can shrink the current pixel-based UI on 4K/HiDPI systems.
     
     // Load config (full load for all settings)
     LoadConfig();
