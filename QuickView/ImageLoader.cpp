@@ -4804,13 +4804,17 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
         // For simplicity in Fast Path, if 64KB isn't enough, we might fail or assume default?
         // But let's try strict check on available buffer
         if (tj3DecompressHeader(tj, data, size) == 0) {
-             pInfo->width = tj3Get(tj, TJPARAM_JPEGWIDTH);
-             pInfo->height = tj3Get(tj, TJPARAM_JPEGHEIGHT);
-             int subsamp = tj3Get(tj, TJPARAM_SUBSAMP);
-             pInfo->channels = (subsamp == TJSAMP_GRAY) ? 1 : 3;
-             pInfo->bitDepth = 8;
-             tj3Destroy(tj);
-             return S_OK;
+             int w = tj3Get(tj, TJPARAM_JPEGWIDTH);
+             int h = tj3Get(tj, TJPARAM_JPEGHEIGHT);
+             if (w > 0 && h > 0) {
+                 pInfo->width = w;
+                 pInfo->height = h;
+                 int subsamp = tj3Get(tj, TJPARAM_SUBSAMP);
+                 pInfo->channels = (subsamp == TJSAMP_GRAY) ? 1 : 3;
+                 pInfo->bitDepth = 8;
+                 tj3Destroy(tj);
+                 return S_OK;
+             }
         }
         tj3Destroy(tj);
         // If not found in 64KB, we could loop read more, but let's keep "Fast" fast.
