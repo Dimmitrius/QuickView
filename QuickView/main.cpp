@@ -6657,6 +6657,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
     int finalWinW = 0;
     int finalWinH = 0;
     bool willResizeWindow = false;
+    bool resizeIsScreenLimited = false;
 
     if (canResizeConfig) {
          // Calculate Target Dimensions
@@ -6717,6 +6718,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
                     if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
                     if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
                  }
+                 resizeIsScreenLimited = capped;
                  
                  if (finalWinW < 200) finalWinW = 200;
                  if (finalWinH < 200) finalWinH = 200;
@@ -6728,6 +6730,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
     
     if (willResizeWindow) {
          // --- Resize Window Path ---
+         float oldZoom = g_viewState.Zoom;
          
          float baseFit_next = std::min((float)finalWinW / imgW, (float)finalWinH / imgH);
          if (imgW < 200.0f && imgH < 200.0f) {
@@ -6747,6 +6750,23 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
 
          if (g_compEngine && g_compEngine->IsInitialized()) {
              RECT rc; GetClientRect(hwnd, &rc);
+
+             // Smart mouse-anchor: when resize is capped by screen bounds, keep zoom centered at cursor.
+             // This extends lock-window behavior into normal mode once the image effectively exceeds screen space.
+             if (centerPt && resizeIsScreenLimited && oldZoom > 0.0001f) {
+                 float winW = (float)rc.right;
+                 float winH = (float)rc.bottom;
+                 float zoomRatio = g_viewState.Zoom / oldZoom;
+
+                 POINT pt = *centerPt;
+                 ScreenToClient(hwnd, &pt);
+
+                 float dx = (float)pt.x - winW / 2.0f;
+                 float dy = (float)pt.y - winH / 2.0f;
+                 g_viewState.PanX = g_viewState.PanX * zoomRatio + dx * (1.0f - zoomRatio);
+                 g_viewState.PanY = g_viewState.PanY * zoomRatio + dy * (1.0f - zoomRatio);
+             }
+
              SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
              g_compEngine->Commit();
          }
