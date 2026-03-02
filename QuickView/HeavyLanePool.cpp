@@ -90,7 +90,7 @@ void HeavyLanePool::SetTitanMode(bool enabled, int srcW, int srcH, const std::ws
     m_isTitanMode = enabled;
     m_titanSrcW = srcW;
     m_titanSrcH = srcH;
-    m_titanFormat = format;
+    m_titanFormat.store(QuickView::ParseTitanFormat(format));
     if (enabled) {
         // Titan image switch must always clear per-image decode state.
         // Baseline cache hit is concurrency-only optimization and must not
@@ -99,7 +99,7 @@ void HeavyLanePool::SetTitanMode(bool enabled, int srcW, int srcH, const std::ws
 
         // [Baseline Cache] Check if we've seen this image size before
         if (srcW > 0 && srcH > 0) {
-            uint64_t dimHash = MakeBaselineCacheKey(srcW, srcH, format);
+            uint64_t dimHash = MakeBaselineCacheKey(srcW, srcH, QuickView::ParseTitanFormat(format));
             auto it = m_baselineCache.find(dimHash);
             if (it != m_baselineCache.end()) {
                 // Cache HIT — skip PENDING phase, apply stored result directly
@@ -320,7 +320,7 @@ void HeavyLanePool::ApplyBaselineConcurrency(double decodeMPS, int srcWidth, int
     
     // [Baseline Cache] Store result for future re-visits
     {
-        uint64_t dimHash = MakeBaselineCacheKey(srcWidth, srcHeight, m_titanFormat);
+        uint64_t dimHash = MakeBaselineCacheKey(srcWidth, srcHeight, m_titanFormat.load());
         m_baselineCache[dimHash] = { decodeMPS, bestThreads, isProgressiveJPEG };
     }
 }
@@ -932,14 +932,21 @@ void HeavyLanePool::TryExpand() {
              if (i < targetFn) {
                  // Spawn/Preheat if needed
                  if (m_workers[i].state == WorkerState::SLEEPING) {
-                     m_workers[i].threadStopSource = std::stop_source();
-                     m_workers[i].thread = std::thread([this, i](std::stop_token st) {
+                      // [Fix] Must clean up old thread before reuse — destroying a joinable
+                      // std::thread calls std::terminate(). Use detach() instead of join()
+                      // because TryExpand runs on UI thread and join() would block rendering.
+                      // Worker is already SLEEPING (WorkerLoop exited), detach is safe.
+                      if (m_workers[i].thread.joinable()) {
+                          m_workers[i].thread.detach();
+                      }
+                      m_workers[i].threadStopSource = std::stop_source();
+                      m_workers[i].thread = std::thread([this, i](std::stop_token st) {
                         WorkerLoop(i, st);
-                     }, m_workers[i].threadStopSource.get_token());
-                     m_workers[i].state = WorkerState::STANDBY;
-                     m_workers[i].lastActiveTime = std::chrono::steady_clock::now();
-                     m_activeCount.fetch_add(1);
-                 }
+                      }, m_workers[i].threadStopSource.get_token());
+                      m_workers[i].state = WorkerState::STANDBY;
+                      m_workers[i].lastActiveTime = std::chrono::steady_clock::now();
+                      m_activeCount.fetch_add(1);
+                  }
              } else {
                  // [Titan Strict] Kill Excess Workers (i >= Target)
                  // If we switched from 14 -> 2, we must kill 12.
@@ -993,6 +1000,12 @@ void HeavyLanePool::TryExpand() {
         if (m_workers[i].state == WorkerState::SLEEPING) {
             // Found a slot! Spawn.
             // [Fast Exit] Use std::thread with explicit stop_source
+            // [Fix] Must clean up old thread before reuse — destroying a joinable
+            // std::thread calls std::terminate(). Use detach() (not join) to avoid
+            // blocking the UI thread. Worker is SLEEPING so detach is safe.
+            if (m_workers[i].thread.joinable()) {
+                m_workers[i].thread.detach();
+            }
             m_workers[i].threadStopSource = std::stop_source();
             m_workers[i].thread = std::thread([this, i](std::stop_token st) {
                 WorkerLoop(i, st);
@@ -1212,7 +1225,7 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
               // Only use memory loader for formats that have true Zero-Copy memory decoders (JPEG).
               // For WIC formats (TIFF, AVIF, etc), loading from MMF via SHCreateMemStream COPIES the file,
               // leading to massive memory bloat/OOM for 1GB+ large files. Pass directly to file loader instead.
-              if (job.mmf && job.mmf->IsValid() && m_titanFormat == L"JPEG") {
+              if (job.mmf && job.mmf->IsValid() && m_titanFormat.load() == QuickView::TitanFormat::JPEG) {
                    hr = m_loader->LoadToFrameFromMemory(job.mmf->data(), job.mmf->size(), &rawFrame, &arena, targetW, targetH, &loaderName, &meta);
                    if (FAILED(hr)) {
                        // Fallback to file if MMF fails (shouldn't happen if valid)
@@ -1262,7 +1275,7 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                        
                        // [JXL] Check if base layer is a true progressive DC preview.
                        // Do not treat "Fake Base Prog" as native-region capable.
-                       if (m_titanFormat == L"JXL") {
+                       if (m_titanFormat.load() == QuickView::TitanFormat::JXL) {
                            if (loaderName.find(L"Prog DC") != std::wstring::npos) {
                                m_isProgressiveJXL = true;
                                OutputDebugStringW(L"[HeavyPool] Detected Progressive JXL. Enabling native Region Decoding!\n");
@@ -1312,9 +1325,10 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                     // - WebP: LOD0 may prefer decode-once (memory-guarded); higher LOD keeps ROI.
                     // - JXL non-progressive: decode-once mandatory.
                     // - PNG/TIFF/AVIF/HEIC/etc: decode-once mandatory (no practical native ROI).
-                    const bool isJpeg = (m_titanFormat == L"JPEG");
-                    const bool isWebp = (m_titanFormat == L"WEBP");
-                    const bool isJxl = (m_titanFormat == L"JXL");
+                    const auto titanFmt = m_titanFormat.load();
+                    const bool isJpeg = (titanFmt == QuickView::TitanFormat::JPEG);
+                    const bool isWebp = (titanFmt == QuickView::TitanFormat::WEBP);
+                    const bool isJxl = (titanFmt == QuickView::TitanFormat::JXL);
                     const bool isProgressiveJpeg = isJpeg && m_isProgressiveJPEG;
                     const bool hasNativeRegionDecoder =
                         (isJpeg && !isProgressiveJpeg) ||
@@ -1350,7 +1364,7 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                             swprintf_s(
                                 strat,
                                 L"[HeavyPool] Strategy: fmt=%s lod=%d single=%s nativeROI=%s mandatory=%s webpOnce=%s jpgProgOnce=%s progressiveJXL=%s\n",
-                                m_titanFormat.c_str(),
+                                QuickView::TitanFormatToString(m_titanFormat.load()),
                                 job.tileCoord.lod,
                                 wantsSingleDecode ? L"Y" : L"N",
                                 hasNativeRegionDecoder ? L"Y" : L"N",
@@ -1472,20 +1486,20 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                   // [Native Region Processing Framework]
                   if (job.mmf && job.mmf->IsValid()) {
                       // Zero-Copy Direct Memory Parsing
-                      if (m_titanFormat == L"JPEG") {
+                      if (titanFmt == QuickView::TitanFormat::JPEG) {
                           hr = CImageLoader::LoadTileFromMemory(
                               job.mmf->data(), job.mmf->size(), 
                               rect, scale, &rawFrame, &m_tileMemory, targetTileSize, targetTileSize
                           );
                           loaderName = SUCCEEDED(hr) ? L"TurboJPEG (MMF)" : L"MMF Failed -> Fallback";
-                      } else if (m_titanFormat == L"WEBP") {
+                      } else if (titanFmt == QuickView::TitanFormat::WEBP) {
                           // [Native ROI] WebP Memory Decode
                           hr = m_loader->LoadWebPRegionToFrame(
                               job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr, cancelPred, targetTileSize, targetTileSize,
                               job.mmf->data(), job.mmf->size()
                           );
                           loaderName = SUCCEEDED(hr) ? L"WebP ROI (MMF)" : L"WebP Failed -> Fallback";
-                      } else if (m_titanFormat == L"JXL") {
+                      } else if (titanFmt == QuickView::TitanFormat::JXL) {
                           // [Native ROI] JXL Memory Decode (using underlying file mapped within loader for now)
                           hr = m_loader->LoadJxlRegionToFrame(
                               job.path.c_str(), rect, scale, &rawFrame, &m_tileMemory, nullptr, cancelPred, targetTileSize, targetTileSize,
@@ -1560,8 +1574,8 @@ tile_decode_done: ; // [P14] Jump target for fast path (skip legacy TJ decode)
                 meta.Width = (UINT)rawFrame.width;
                 meta.Height = (UINT)rawFrame.height;
             }
-            if (meta.Format.empty() && !m_titanFormat.empty()) {
-                meta.Format = m_titanFormat;
+            if (meta.Format.empty() && m_titanFormat.load() != QuickView::TitanFormat::Unknown) {
+                meta.Format = QuickView::TitanFormatToString(m_titanFormat.load());
             }
             // Use actual decode-path loader tag (e.g. "libjxl (Fake Base)").
             if (!loaderName.empty()) {
@@ -1817,12 +1831,11 @@ bool HeavyLanePool::ShouldWarmupMasterBacking() const {
     // [Tier 3: Ultra-Large] > 1.5 GB
     // For formats lacking native scaling/region decode, we STILL must do a full decode to MMF
     // to prevent DecodeWorker from doing repeated OOM full-decodes.
-    return (m_titanFormat == L"PNG" ||
-            m_titanFormat == L"TIFF" ||
-            m_titanFormat == L"TIF" ||
-            m_titanFormat == L"AVIF" ||
-            m_titanFormat == L"HEIC" ||
-            m_titanFormat == L"JXL");
+    const auto fmt = m_titanFormat.load();
+    return (fmt == QuickView::TitanFormat::PNG ||
+            fmt == QuickView::TitanFormat::TIFF ||
+            fmt == QuickView::TitanFormat::AVIF ||
+            fmt == QuickView::TitanFormat::JXL);
 }
 
 void HeavyLanePool::StopMasterWarmup() {
@@ -1926,7 +1939,7 @@ void HeavyLanePool::EnsureMasterWarmup(const std::wstring& path, ImageID imageId
                 m_masterLOD0Cache = {};
 
                 wchar_t ok[192];
-                swprintf_s(ok, L"[MMF] Master warmup direct-to-MMF ready: %dx%d (%s)\n", decW, decH, m_titanFormat.c_str());
+                swprintf_s(ok, L"[MMF] Master warmup direct-to-MMF ready: %dx%d (%s)\n", decW, decH, QuickView::TitanFormatToString(m_titanFormat.load()));
                 OutputDebugStringW(ok);
 
                 m_masterWarmupReady.store(true, std::memory_order_release);
@@ -1955,7 +1968,7 @@ void HeavyLanePool::EnsureMasterWarmup(const std::wstring& path, ImageID imageId
             if (m_generationID.load(std::memory_order_acquire) != warmupGen) return;
             if (FAILED(hr) || !fullFrame.IsValid()) {
                 wchar_t fail[192];
-                swprintf_s(fail, L"[HeavyPool] Master warmup failed: hr=0x%X (%s)\n", hr, m_titanFormat.c_str());
+                swprintf_s(fail, L"[HeavyPool] Master warmup failed: hr=0x%X (%s)\n", hr, QuickView::TitanFormatToString(m_titanFormat.load()));
                 OutputDebugStringW(fail);
                 return;
             }
@@ -1966,14 +1979,14 @@ void HeavyLanePool::EnsureMasterWarmup(const std::wstring& path, ImageID imageId
                 m_masterLOD0Cache = {};
 
                 wchar_t ok[192];
-                swprintf_s(ok, L"[HeavyPool] Master warmup ready (heap fallback): %dx%d (%s)\n", fullFrame.width, fullFrame.height, m_titanFormat.c_str());
+                swprintf_s(ok, L"[HeavyPool] Master warmup ready (heap fallback): %dx%d (%s)\n", fullFrame.width, fullFrame.height, QuickView::TitanFormatToString(m_titanFormat.load()));
                 OutputDebugStringW(ok);
 
                 m_masterWarmupReady.store(true, std::memory_order_release);
                 m_lodCacheCond.notify_all();
             } else {
                 wchar_t fail[192];
-                swprintf_s(fail, L"[HeavyPool] Master warmup MMF build failed: hr=0x%X (%s)\n", hr, m_titanFormat.c_str());
+                swprintf_s(fail, L"[HeavyPool] Master warmup MMF build failed: hr=0x%X (%s)\n", hr, QuickView::TitanFormatToString(m_titanFormat.load()));
                 OutputDebugStringW(fail);
             }
         }
@@ -2230,17 +2243,18 @@ bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
     
     // [P15] Format-aware decoder overhead estimation
     size_t decoderOverhead = 0;
-    if (m_titanFormat == L"JPEG") {
+    const auto singleFmt = m_titanFormat.load();
+    if (singleFmt == QuickView::TitanFormat::JPEG) {
         // Progressive JPEG: TJ coefficient buffer ~srcPixels * 6
         // Baseline JPEG: ~200 MB working memory
         decoderOverhead = m_isProgressiveJPEG 
             ? ((size_t)m_titanSrcW * m_titanSrcH * 6)
             : ((size_t)m_titanSrcW * 96 + 200 * 1024 * 1024);
-    } else if (m_titanFormat == L"PNG") {
+    } else if (singleFmt == QuickView::TitanFormat::PNG) {
         // Wuffs PNG: streaming decode — scanline filter buffer ~width*64
         // The BGRA output buffer IS the decode target, no separate full-res copy needed.
         decoderOverhead = (size_t)m_titanSrcW * 64;
-    } else if (m_titanFormat == L"JXL") {
+    } else if (singleFmt == QuickView::TitanFormat::JXL) {
         // libjxl: group-based decode — ~2 bytes/pixel scratch (group buffers + color transform)
         // The output buffer is separate, so peak = output + scratch
         decoderOverhead = (size_t)m_titanSrcW * m_titanSrcH * 2;
@@ -2251,7 +2265,7 @@ bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
     
     // For non-JPEG formats at LOD>0, we decode at full resolution first
     // then software-downscale, so peak = full-res BGRA + decoder overhead
-    size_t fullResBytes = (m_titanFormat != L"JPEG" && lod > 0)
+    size_t fullResBytes = (singleFmt != QuickView::TitanFormat::JPEG && lod > 0)
         ? (size_t)m_titanSrcW * m_titanSrcH * 4  // full-res decode buffer
         : outputBytes;                             // JPEG scales during decode
     
@@ -2269,7 +2283,7 @@ bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
     // StrategyB will allocate the ENTIRE fullFrame for EVERY tile thread, virtually guaranteeing an OOM crash!
     // Therefore, for these formats, we MUST force Single Decode and Cache, regardless of RAM limits,
     // so it at least only decodes once and relies on OS pagefile if it exceeds Physical RAM.
-    if (m_titanFormat == L"PNG" || m_titanFormat == L"BMP" || m_titanFormat == L"TGA" || m_titanFormat == L"GIF") {
+    if (singleFmt == QuickView::TitanFormat::PNG || singleFmt == QuickView::TitanFormat::BMP || singleFmt == QuickView::TitanFormat::TGA || singleFmt == QuickView::TitanFormat::GIF) {
         fits = true;
     }
     
@@ -2286,10 +2300,10 @@ bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
             wchar_t buf[256];
             if (!fits) {
                 swprintf_s(buf, L"[HeavyPool] P14: LOD=%d fmt=%s SKIPPED (peak=%zu MB, avail=%zu MB)\n",
-                    lod, m_titanFormat.c_str(), peakBytes / (1024*1024), (size_t)(available / (1024*1024)));
+                    lod, QuickView::TitanFormatToString(singleFmt), peakBytes / (1024*1024), (size_t)(available / (1024*1024)));
             } else {
                 swprintf_s(buf, L"[HeavyPool] P14: LOD=%d fmt=%s OK (output=%zu MB, peak=%zu MB, avail=%zu MB)\n",
-                    lod, m_titanFormat.c_str(), outputBytes / (1024*1024), peakBytes / (1024*1024), (size_t)(available / (1024*1024)));
+                    lod, QuickView::TitanFormatToString(singleFmt), outputBytes / (1024*1024), peakBytes / (1024*1024), (size_t)(available / (1024*1024)));
             }
             OutputDebugStringW(buf);
         }
@@ -2300,7 +2314,7 @@ bool HeavyLanePool::ShouldUseSingleDecode(int lod) const {
 
 bool HeavyLanePool::ShouldUseSingleDecodeForWebP(int lod) const {
     // Keep ROI for higher LODs (already fast); optimize the expensive LOD0 path.
-    if (m_titanFormat != L"WEBP") return false;
+    if (m_titanFormat.load() != QuickView::TitanFormat::WEBP) return false;
     if (lod != 0) return false;
     if (m_titanSrcW <= 0 || m_titanSrcH <= 0) return false;
 
@@ -2608,7 +2622,7 @@ HRESULT HeavyLanePool::FullDecodeAndCacheLOD(Worker& worker, const JobInfo& job,
     QuickView::RawImageFrame fullFrame;
     HRESULT hr;
     
-    if (m_titanFormat == L"JPEG") {
+    if (m_titanFormat.load() == QuickView::TitanFormat::JPEG) {
         // JPEG: use TurboJPEG with IDCT scaling (scale parameter is used)
         hr = CImageLoader::LoadTileFromMemory(
             job.mmf->data(), job.mmf->size(),
@@ -2637,8 +2651,10 @@ HRESULT HeavyLanePool::FullDecodeAndCacheLOD(Worker& worker, const JobInfo& job,
         
         if (masterPixelsView) {
             // WE HAVE A MASTER CACHE! Instant downscale!
-            int targetW = (m_titanSrcW + (1 << lod) - 1) / (1 << lod);
-            int targetH = (m_titanSrcH + (1 << lod) - 1) / (1 << lod);
+            // [Fix] Use masterW/masterH (from verified imageId match) instead of
+            // m_titanSrcW/m_titanSrcH which may already be updated for a different image.
+            int targetW = (masterW + (1 << lod) - 1) / (1 << lod);
+            int targetH = (masterH + (1 << lod) - 1) / (1 << lod);
             
             size_t dstStride = (size_t)targetW * 4;
             
@@ -2815,9 +2831,9 @@ HRESULT HeavyLanePool::FullDecodeAndCacheLOD(Worker& worker, const JobInfo& job,
 
                 if (expectsMasterCache) {
                     bool shouldBuildBacking =
-                        (m_titanFormat == L"PNG" || m_titanFormat == L"TIFF" ||
-                         m_titanFormat == L"AVIF" || m_titanFormat == L"HEIC" ||
-                         m_titanFormat == L"JXL") &&
+                        (m_titanFormat.load() == QuickView::TitanFormat::PNG || m_titanFormat.load() == QuickView::TitanFormat::TIFF ||
+                         m_titanFormat.load() == QuickView::TitanFormat::AVIF ||
+                         m_titanFormat.load() == QuickView::TitanFormat::JXL) &&
                         ((size_t)fullFrame.width >= 8000 || (size_t)fullFrame.height >= 8000);
                     bool backedByMmf = false;
                     if (shouldBuildBacking) {

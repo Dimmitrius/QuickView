@@ -584,10 +584,13 @@ std::vector<EngineEvent> ImageEngine::PollState() {
     // 2. Harvest Heavy Events
     while (auto e = m_heavyPool->TryPopResult()) {
          if (e->type == EventType::TileReady && e->tileCoord.has_value() && e->rawFrame) {
-             // [Infinity Engine] Route to TileManager
-             // Map Legacy TileCoord -> TileKey
-             auto key = QuickView::TileKey::From(e->tileCoord->col, e->tileCoord->row, e->tileCoord->lod);
-             m_tileManager->OnTileReady(key, e->rawFrame);
+             // [Fix] Only route tiles belonging to the CURRENT image to TileManager.
+             // Stale tiles from a previous image (decoded after navigation) must be
+             // discarded here to prevent old tile data overlaying the new image's preview.
+             if (e->imageId == m_currentImageId.load()) {
+                 auto key = QuickView::TileKey::From(e->tileCoord->col, e->tileCoord->row, e->tileCoord->lod);
+                 m_tileManager->OnTileReady(key, e->rawFrame);
+             }
              
              // Still pass to batch? 
              // Yes, Main Thread might want to trigger Repaint.

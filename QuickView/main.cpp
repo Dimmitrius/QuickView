@@ -6460,12 +6460,15 @@ void OnPaint(HWND hwnd) {
         // Background clearing and grid drawing are moved to CompositionEngine surfaces.
         SyncDCompState(hwnd, winPixelsW, winPixelsH);
 
+        // [Fix] Snapshot metadata to avoid dangling .c_str() if coroutine resets g_currentMetadata mid-paint.
+        const auto titanMeta = g_currentMetadata; // Value copy — safe from concurrent reset
+
         // [Infinity Engine] Cascade Rendering Path
-        bool isTitan = g_imageEngine && (g_currentMetadata.Width > 8192 || g_currentMetadata.Height > 8192);
+        bool isTitan = g_imageEngine && (titanMeta.Width > 8192 || titanMeta.Height > 8192);
         if (isTitan) {
              // 1. Calculate Dimensions
-             float imgFullW = (float)g_currentMetadata.Width;
-             float imgFullH = (float)g_currentMetadata.Height;
+             float imgFullW = (float)titanMeta.Width;
+             float imgFullH = (float)titanMeta.Height;
 
              // 2. Calculate Absolute Scale
              float fitScale = std::min(logicW / imgFullW, logicH / imgFullH);
@@ -6489,12 +6492,12 @@ void OnPaint(HWND hwnd) {
              // Calculate Base Preview Ratio (Preview / Original)
              float baseRatio = 0.0f;
              float previewW = g_imageResource.GetSize().width;
-             if (g_currentMetadata.Width > 0) {
-                 baseRatio = previewW / (float)g_currentMetadata.Width;
+             if (titanMeta.Width > 0) {
+                 baseRatio = previewW / (float)titanMeta.Width;
              }
 
              // [No-DC JXL Guard] For fake/tiny placeholder bases, force tile scheduling immediately.
-             std::wstring fmtUpper = g_currentMetadata.Format;
+             std::wstring fmtUpper = titanMeta.Format;
              std::transform(fmtUpper.begin(), fmtUpper.end(), fmtUpper.begin(), ::towupper);
              bool isJxlLike = (fmtUpper.find(L"JXL") != std::wstring::npos || fmtUpper.find(L"JPEG XL") != std::wstring::npos);
              if (!isJxlLike && !g_imagePath.empty()) {
@@ -6505,7 +6508,7 @@ void OnPaint(HWND hwnd) {
 
              constexpr float kVirtualNoDcRatio = 0.125f; // 1:8
              float previewH = g_imageResource.GetSize().height;
-             bool fakeBase = (g_currentMetadata.LoaderName.find(L"Fake Base") != std::wstring::npos);
+             bool fakeBase = (titanMeta.LoaderName.find(L"Fake Base") != std::wstring::npos);
              bool tinyPreview = (previewW <= 2.0f || previewH <= 2.0f);
              bool weakPreview = (previewW <= 16.0f || previewH <= 16.0f); // Expanded threshold for 4x4 or 8x8
 
@@ -6542,16 +6545,16 @@ void OnPaint(HWND hwnd) {
                       swprintf_s(tileDbg,
                           L"[Main] Titan schedule seed: id=%llu fmt=%s loader=%s meta=%dx%d previewW=%.1f baseRatio=%.4f zoom=%.4f\n",
                          curTileImageId,
-                         g_currentMetadata.Format.c_str(),
-                         g_currentMetadata.LoaderName.c_str(),
-                         g_currentMetadata.Width,
-                         g_currentMetadata.Height,
+                         titanMeta.Format.c_str(),
+                         titanMeta.LoaderName.c_str(),
+                         titanMeta.Width,
+                         titanMeta.Height,
                          previewW,
                          baseRatio,
                          absoluteZoom);
                      OutputDebugStringW(tileDbg);
                  }
-                 g_imageEngine->UpdateTileViewport(vp, absoluteZoom, g_currentMetadata.Width, g_currentMetadata.Height, baseRatio, 0.0f, 0.0f);
+                 g_imageEngine->UpdateTileViewport(vp, absoluteZoom, titanMeta.Width, titanMeta.Height, baseRatio, 0.0f, 0.0f);
                  lastVP = vp;
                  lastAbsZoom = absoluteZoom;
              }

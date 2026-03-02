@@ -175,4 +175,53 @@ namespace QuickView {
         }
     };
 
+    // ============================================================================
+    // [P15] Titan Format Classification (Thread-Safe)
+    // ============================================================================
+    // Replaces std::wstring m_titanFormat with atomic-friendly enum.
+    // Eliminates data races between SetTitanMode (main thread) and
+    // PerformDecode (worker threads) that caused EXCEPTION_STACK_BUFFER_OVERRUN.
+    enum class TitanFormat : uint8_t {
+        Unknown = 0,
+        JPEG,
+        PNG,
+        JXL,
+        WEBP,
+        AVIF,
+        TIFF,
+        BMP,
+        TGA,
+        GIF,
+        Other
+    };
+
+    inline TitanFormat ParseTitanFormat(const std::wstring& fmt) {
+        if (fmt == L"JPEG") return TitanFormat::JPEG;
+        if (fmt == L"PNG")  return TitanFormat::PNG;
+        if (fmt == L"JXL")  return TitanFormat::JXL;
+        if (fmt == L"WEBP") return TitanFormat::WEBP;
+        if (fmt == L"AVIF") return TitanFormat::AVIF;
+        if (fmt == L"TIFF") return TitanFormat::TIFF;
+        if (fmt == L"BMP")  return TitanFormat::BMP;
+        if (fmt == L"TGA")  return TitanFormat::TGA;
+        if (fmt == L"GIF")  return TitanFormat::GIF;
+        return TitanFormat::Other;
+    }
+
+    inline const wchar_t* TitanFormatToString(TitanFormat f) {
+        switch (f) {
+            case TitanFormat::JPEG: return L"JPEG";
+            case TitanFormat::PNG:  return L"PNG";
+            case TitanFormat::JXL:  return L"JXL";
+            case TitanFormat::WEBP: return L"WEBP";
+            case TitanFormat::AVIF: return L"AVIF";
+            case TitanFormat::TIFF: return L"TIFF";
+            case TitanFormat::BMP:  return L"BMP";
+            case TitanFormat::TGA:  return L"TGA";
+            case TitanFormat::GIF:  return L"GIF";
+            default: return L"Other";
+        }
+    }
+
 } // namespace QuickView
+

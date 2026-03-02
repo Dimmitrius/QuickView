@@ -163,7 +163,7 @@ private:
     // [Titan] Mode Flag & IO Control
     std::atomic<bool> m_isTitanMode = false;
     int m_titanSrcW = 0, m_titanSrcH = 0; // Source image dimensions (set in SetTitanMode)
-    std::wstring m_titanFormat;            // [P15] Image format (JPEG/PNG/JXL/WebP/...)
+    std::atomic<QuickView::TitanFormat> m_titanFormat{QuickView::TitanFormat::Unknown}; // [P15] Thread-safe format enum
     std::counting_semaphore<std::numeric_limits<std::ptrdiff_t>::max()> m_ioSemaphore{ 0 }; // Initialized in constructor
     int m_ioLimit = 0; // Dynamic limit based on HDD/SSD
 
@@ -207,9 +207,9 @@ private:
         bool isProgressive = false; // JPEG type for memory estimate
     };
     std::unordered_map<uint64_t, BaselineCacheEntry> m_baselineCache;
-    static uint64_t MakeBaselineCacheKey(int w, int h, const std::wstring& format) {
+    static uint64_t MakeBaselineCacheKey(int w, int h, QuickView::TitanFormat format) {
         uint64_t dim = ((uint64_t)(uint32_t)w << 32) | (uint64_t)(uint32_t)h;
-        uint64_t fmt = (uint64_t)std::hash<std::wstring>{}(format);
+        uint64_t fmt = static_cast<uint64_t>(format);
         return dim ^ (fmt + 0x9e3779b97f4a7c15ULL + (dim << 6) + (dim >> 2));
     }
     
