@@ -100,6 +100,7 @@ struct AppConfig {
 
     // --- Control ---
     bool InvertWheel = false;
+    int WheelActionMode = 0;            // 0=Zoom, 1=Navigate
     bool InvertXButton = false;          // Invert mouse forward/back buttons for navigation
     // [v3.2.2] Zoom Snap Damping (Time Lock)
     bool EnableZoomSnapDamping = true;

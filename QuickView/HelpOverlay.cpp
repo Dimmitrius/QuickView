@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "HelpOverlay.h"
 #include "AppStrings.h"
+#include "EditState.h"
+
+extern AppConfig g_config;
 
 HelpOverlay::HelpOverlay() {
 }
@@ -61,8 +64,9 @@ void HelpOverlay::RebuildList() {
     // Section: Navigation
     m_items.push_back({ true, AppStrings::Help_Header_Mouse, L"" }); // "Mouse Actions"
     m_items.push_back({ false, L"\x2190 / \x2192 (Space)", AppStrings::Help_Action_NextPrev });
-    m_items.push_back({ false, AppStrings::Help_Mouse_Wheel, AppStrings::Help_Item_Zoom });
-    m_items.push_back({ false, L"Ctrl + Scroll", L"Zoom (Temporary Window Lock)" });
+    bool wheelPrimaryNavigate = (g_config.WheelActionMode == 1);
+    m_items.push_back({ false, AppStrings::Help_Mouse_Wheel, wheelPrimaryNavigate ? AppStrings::Help_Action_NextPrev : AppStrings::Help_Action_Zoom });
+    m_items.push_back({ false, L"Ctrl + Scroll", wheelPrimaryNavigate ? AppStrings::Help_Action_Zoom : AppStrings::Help_Action_NextPrev });
     m_items.push_back({ false, AppStrings::Settings_Label_LeftDrag, AppStrings::Help_Action_MoveWindow });
     m_items.push_back({ false, AppStrings::Settings_Label_MiddleDrag, AppStrings::Help_Action_PanImage });
     // Ctrl+Left Drag = Middle Drag (Pan)

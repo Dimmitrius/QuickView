@@ -2078,6 +2078,7 @@ void SaveConfig() {
 
     // Control
     WritePrivateProfileStringW(L"Controls", L"InvertWheel", g_config.InvertWheel ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"Controls", L"WheelActionMode", std::to_wstring(g_config.WheelActionMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"InvertXButton", g_config.InvertXButton ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"EnableZoomSnapDamping", g_config.EnableZoomSnapDamping ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"LeftDragAction", std::to_wstring((int)g_config.LeftDragAction).c_str(), iniPath.c_str());
@@ -2171,6 +2172,8 @@ void LoadConfig() {
 
     // Control
     g_config.InvertWheel = GetPrivateProfileIntW(L"Controls", L"InvertWheel", 0, iniPath.c_str()) != 0;
+    g_config.WheelActionMode = GetPrivateProfileIntW(L"Controls", L"WheelActionMode", 0, iniPath.c_str());
+    if (g_config.WheelActionMode < 0 || g_config.WheelActionMode > 1) g_config.WheelActionMode = 0;
     g_config.InvertXButton = GetPrivateProfileIntW(L"Controls", L"InvertXButton", 0, iniPath.c_str()) != 0;
     g_config.EnableZoomSnapDamping = GetPrivateProfileIntW(L"Controls", L"EnableZoomSnapDamping", 1, iniPath.c_str()) != 0;
     g_config.LeftDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"LeftDragAction", (int)MouseAction::WindowDrag, iniPath.c_str());
@@ -4379,6 +4382,20 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         if (!g_imageResource) return 0;
         
+        float delta = GET_WHEEL_DELTA_WPARAM(wParam) / 120.0f;
+        if (g_config.InvertWheel) delta = -delta;
+
+        bool isCtrl = (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) != 0;
+        bool wheelPrimaryNavigate = (g_config.WheelActionMode == 1);
+        bool shouldNavigate = wheelPrimaryNavigate ? !isCtrl : isCtrl;
+        if (shouldNavigate) {
+            int direction = (delta > 0.0f) ? -1 : 1;
+            if (delta != 0.0f && CheckUnsavedChanges(hwnd)) {
+                Navigate(hwnd, direction);
+            }
+            return 0;
+        }
+
         // Magnetic Snap Time Lock is now handled inside CalculateTargetZoom
         
         // Enable interaction mode during zoom (use LINEAR interpolation)
@@ -4387,18 +4404,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         static const UINT_PTR INTERACTION_TIMER_ID = 1001;
         SetTimer(hwnd, INTERACTION_TIMER_ID, 150, nullptr);
         
-        float delta = GET_WHEEL_DELTA_WPARAM(wParam) / 120.0f;
-        if (g_config.InvertWheel) delta = -delta;
-        
         // [Shared Logic]
         float newTotalScale = CalculateTargetZoom(hwnd, delta, false);
 
-        // [Feature] Ctrl+Wheel = Temporary Lock Window
-        bool isCtrl = (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL);
-
         // Use Centralized Helper
         POINT mousePt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        PerformSmartZoom(hwnd, newTotalScale, &mousePt, isCtrl);
+        PerformSmartZoom(hwnd, newTotalScale, &mousePt, false);
         RequestRepaint(PaintLayer::Dynamic);
 
              
