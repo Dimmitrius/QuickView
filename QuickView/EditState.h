@@ -88,6 +88,7 @@ struct AppConfig {
     float CanvasCustomB = 0.2f;
     bool CanvasShowGrid = false; // Overlay grid
     bool AlwaysOnTop = false;
+    int OpenFullScreenMode = 0;         // 0=Off, 1=Large Only, 2=All
     bool ResizeWindowOnZoom = true;
     bool AutoHideWindowControls = true;
     bool LockBottomToolbar = false;

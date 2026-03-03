@@ -183,6 +183,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_LockToolbar;
     extern const wchar_t* Settings_Label_ExifMode;
     extern const wchar_t* Settings_Label_ToolbarInfoDefault;
+    extern const wchar_t* Settings_Label_OpenFullScreenMode;
     
     extern const wchar_t* Settings_Option_Black;
     extern const wchar_t* Settings_Option_White;
@@ -191,6 +192,8 @@ namespace AppStrings {
     extern const wchar_t* Settings_Option_Off;
     extern const wchar_t* Settings_Option_Lite;
     extern const wchar_t* Settings_Option_Full;
+    extern const wchar_t* Settings_Option_LargeOnly;
+    extern const wchar_t* Settings_Option_All;
 
     // Controls
     extern const wchar_t* Settings_Header_Mouse;

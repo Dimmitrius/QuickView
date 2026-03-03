@@ -167,6 +167,7 @@ namespace AppStrings {
     const wchar_t* Settings_Label_LockToolbar = nullptr;
     const wchar_t* Settings_Label_ExifMode = nullptr;
     const wchar_t* Settings_Label_ToolbarInfoDefault = nullptr;
+    const wchar_t* Settings_Label_OpenFullScreenMode = nullptr;
     const wchar_t* Settings_Label_InvertWheel = nullptr;
     const wchar_t* Settings_Label_ZoomSnapDamping = nullptr; // New
     const wchar_t* Settings_Label_InvertButtons = nullptr;
@@ -218,6 +219,8 @@ namespace AppStrings {
     const wchar_t* Settings_Option_Off = nullptr;
     const wchar_t* Settings_Option_Lite = nullptr;
     const wchar_t* Settings_Option_Full = nullptr;
+    const wchar_t* Settings_Option_LargeOnly = nullptr;
+    const wchar_t* Settings_Option_All = nullptr;
     const wchar_t* Settings_Option_Window = nullptr;
     const wchar_t* Settings_Option_Pan = nullptr;
     const wchar_t* Settings_Option_None = nullptr;
@@ -427,6 +430,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Lock Bottom Toolbar";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF Panel Mode";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Toolbar Info Default";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"Open Fullscreen";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Invert Wheel";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Zoom 100% Snap Damping";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Invert Side Buttons";
@@ -479,6 +483,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"Off";
         static constexpr const wchar_t* Settings_Option_Lite = L"Lite";
         static constexpr const wchar_t* Settings_Option_Full = L"Full";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"Large Only";
+        static constexpr const wchar_t* Settings_Option_All = L"All";
         static constexpr const wchar_t* Settings_Option_Window = L"Window";
         static constexpr const wchar_t* Settings_Option_Pan = L"Pan";
         static constexpr const wchar_t* Settings_Option_None = L"None";
@@ -608,6 +614,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"锁定底部工具栏";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF 面板模式";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"工具栏信息默认值";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"打开时全屏";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"反转滚轮";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"缩放 100% 吸附阻尼";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"反转侧键";
@@ -651,6 +658,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"关闭";
         static constexpr const wchar_t* Settings_Option_Lite = L"简略";
         static constexpr const wchar_t* Settings_Option_Full = L"详细";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"仅大图";
+        static constexpr const wchar_t* Settings_Option_All = L"全部";
         static constexpr const wchar_t* Settings_Option_Window = L"窗口";
         static constexpr const wchar_t* Settings_Option_Pan = L"平移";
         static constexpr const wchar_t* Settings_Option_None = L"无";
@@ -931,6 +940,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"鎖定底部工具列";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF 面板模式";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"工具列資訊預設值";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"開啟時全螢幕";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"反轉滾輪";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"縮放 100% 吸附阻尼";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"反轉側鍵";
@@ -980,6 +990,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"關閉";
         static constexpr const wchar_t* Settings_Option_Lite = L"簡略";
         static constexpr const wchar_t* Settings_Option_Full = L"詳細";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"僅大圖";
+        static constexpr const wchar_t* Settings_Option_All = L"全部";
         static constexpr const wchar_t* Settings_Option_Window = L"視窗";
         static constexpr const wchar_t* Settings_Option_Pan = L"平移";
         static constexpr const wchar_t* Settings_Option_None = L"無";
@@ -1169,6 +1181,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"下部ツールバー固定";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIFパネルモード";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"ツールバー情報デフォルト";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"開くときに全画面表示";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"ホイール反転";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"100%ズーム吸着ダンピング";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"サイドボタン反転";
@@ -1218,6 +1231,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"オフ";
         static constexpr const wchar_t* Settings_Option_Lite = L"簡易";
         static constexpr const wchar_t* Settings_Option_Full = L"詳細";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"大きい画像のみ";
+        static constexpr const wchar_t* Settings_Option_All = L"すべて";
         static constexpr const wchar_t* Settings_Option_Window = L"ウィンドウ";
         static constexpr const wchar_t* Settings_Option_Pan = L"パン";
         static constexpr const wchar_t* Settings_Option_None = L"なし";
@@ -1407,6 +1422,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Закрепить нижнюю панель";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"Режим панели EXIF";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Инфо. в панели по умолчанию";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"Полноэкранный режим при открытии";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Инвертировать колесо";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Задержка привязки зума (100%)";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Инвертировать боковые кнопки";
@@ -1456,6 +1472,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"Выкл";
         static constexpr const wchar_t* Settings_Option_Lite = L"Кратко";
         static constexpr const wchar_t* Settings_Option_Full = L"Полностью";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"Только большие";
+        static constexpr const wchar_t* Settings_Option_All = L"Все";
         static constexpr const wchar_t* Settings_Option_Window = L"Окно";
         static constexpr const wchar_t* Settings_Option_Pan = L"Панорама";
         static constexpr const wchar_t* Settings_Option_None = L"Нет";
@@ -1645,6 +1663,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Untere Symbolleiste sperren";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"EXIF-Panel-Modus";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Symbolleisten-Info Standard";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"Im Vollbildmodus öffnen";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Mausrad invertieren";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Zoom 100% Einrast-Dämpfung";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Seitentasten invertieren";
@@ -1694,6 +1713,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"Aus";
         static constexpr const wchar_t* Settings_Option_Lite = L"Kompakt";
         static constexpr const wchar_t* Settings_Option_Full = L"Vollständig";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"Nur Große";
+        static constexpr const wchar_t* Settings_Option_All = L"Alle";
         static constexpr const wchar_t* Settings_Option_Window = L"Fenster";
         static constexpr const wchar_t* Settings_Option_Pan = L"Schwenken";
         static constexpr const wchar_t* Settings_Option_None = L"Keine";
@@ -1883,6 +1904,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Bloquear barra inferior";
         static constexpr const wchar_t* Settings_Label_ExifMode = L"Modo panel EXIF";
         static constexpr const wchar_t* Settings_Label_ToolbarInfoDefault = L"Info de barra por defecto";
+        static constexpr const wchar_t* Settings_Label_OpenFullScreenMode = L"Abrir en pantalla completa";
         static constexpr const wchar_t* Settings_Label_InvertWheel = L"Invertir rueda";
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Amortiguación de ajuste 100%";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Invertir botones laterales";
@@ -1932,6 +1954,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Off = L"Desactivado";
         static constexpr const wchar_t* Settings_Option_Lite = L"Compacto";
         static constexpr const wchar_t* Settings_Option_Full = L"Completo";
+        static constexpr const wchar_t* Settings_Option_LargeOnly = L"Solo grandes";
+        static constexpr const wchar_t* Settings_Option_All = L"Todos";
         static constexpr const wchar_t* Settings_Option_Window = L"Ventana";
         static constexpr const wchar_t* Settings_Option_Pan = L"Panorámica";
         static constexpr const wchar_t* Settings_Option_None = L"Ninguno";
@@ -2141,6 +2165,7 @@ namespace AppStrings {
         Settings_Label_LockToolbar = T::Settings_Label_LockToolbar;
         Settings_Label_ExifMode = T::Settings_Label_ExifMode;
         Settings_Label_ToolbarInfoDefault = T::Settings_Label_ToolbarInfoDefault;
+        Settings_Label_OpenFullScreenMode = T::Settings_Label_OpenFullScreenMode;
         Settings_Label_InvertWheel = T::Settings_Label_InvertWheel;
         Settings_Label_ZoomSnapDamping = T::Settings_Label_ZoomSnapDamping;
         Settings_Label_InvertButtons = T::Settings_Label_InvertButtons;
@@ -2183,6 +2208,8 @@ namespace AppStrings {
         Settings_Option_Off = T::Settings_Option_Off;
         Settings_Option_Lite = T::Settings_Option_Lite;
         Settings_Option_Full = T::Settings_Option_Full;
+        Settings_Option_LargeOnly = T::Settings_Option_LargeOnly;
+        Settings_Option_All = T::Settings_Option_All;
         Settings_Option_Window = T::Settings_Option_Window;
         Settings_Option_Pan = T::Settings_Option_Pan;
         Settings_Option_None = T::Settings_Option_None;

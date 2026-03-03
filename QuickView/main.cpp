@@ -2062,6 +2062,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"View", L"CanvasCustomB", std::to_wstring(g_config.CanvasCustomB).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"CanvasShowGrid", g_config.CanvasShowGrid ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"AlwaysOnTop", g_config.AlwaysOnTop ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"View", L"OpenFullScreenMode", std::to_wstring(g_config.OpenFullScreenMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"ResizeWindowOnZoom", g_config.ResizeWindowOnZoom ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"AutoHideWindowControls", g_config.AutoHideWindowControls ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"LockBottomToolbar", g_config.LockBottomToolbar ? L"1" : L"0", iniPath.c_str());
@@ -2147,6 +2148,7 @@ void LoadConfig() {
     g_config.CanvasCustomB = (float)_wtof(bufB);
     g_config.CanvasShowGrid = GetPrivateProfileIntW(L"View", L"CanvasShowGrid", 0, iniPath.c_str()) != 0;
     g_config.AlwaysOnTop = GetPrivateProfileIntW(L"View", L"AlwaysOnTop", 0, iniPath.c_str()) != 0;
+    g_config.OpenFullScreenMode = GetPrivateProfileIntW(L"View", L"OpenFullScreenMode", 0, iniPath.c_str());
     g_config.ResizeWindowOnZoom = GetPrivateProfileIntW(L"View", L"ResizeWindowOnZoom", 1, iniPath.c_str()) != 0;
     g_config.AutoHideWindowControls = GetPrivateProfileIntW(L"View", L"AutoHideWindowControls", 1, iniPath.c_str()) != 0;
     g_config.LockBottomToolbar = GetPrivateProfileIntW(L"View", L"LockBottomToolbar", 0, iniPath.c_str()) != 0;
@@ -5540,6 +5542,32 @@ void ProcessEngineEvents(HWND hwnd) {
 
                 // Metadata - Full Copy (Propagate EXIF/Histograms/LoaderName)
                 g_currentMetadata = finalMetadata;
+
+                // [Feature] Auto Fullscreen on Open
+                static ImageID lastFullscreenTriggeredId = ~(0ULL);
+                if (g_config.OpenFullScreenMode > 0 && evt.imageId != lastFullscreenTriggeredId) {
+                    bool shouldFullscreen = false;
+                    if (g_config.OpenFullScreenMode == 2) {
+                        shouldFullscreen = true; // All
+                    } else if (g_config.OpenFullScreenMode == 1) {
+                        // Large Only
+                        HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                        MONITORINFO mi = { sizeof(mi) };
+                        if (GetMonitorInfo(hMon, &mi)) {
+                            int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+                            int monHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+                            if (g_currentMetadata.Width > (UINT)monWidth || g_currentMetadata.Height > (UINT)monHeight) {
+                                shouldFullscreen = true;
+                            }
+                        }
+                    }
+                    if (shouldFullscreen && !g_isFullScreen) {
+                        SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0); // Enter fullscreen
+                    } else if (!shouldFullscreen && g_isFullScreen && g_config.OpenFullScreenMode == 1) {
+                        SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0); // Exit fullscreen
+                    }
+                    lastFullscreenTriggeredId = evt.imageId;
+                }
 
                 // Force one Titan scheduling pass after content swap.
                 // This prevents "same size, same zoom" switches from skipping

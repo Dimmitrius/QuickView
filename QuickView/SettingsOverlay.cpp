@@ -1017,6 +1017,7 @@ void SettingsOverlay::BuildMenu() {
     
     // Toolbar Info Button Default (Lite/Full)
     tabVisuals.items.push_back({ AppStrings::Settings_Label_ToolbarInfoDefault, OptionType::Segment, nullptr, nullptr, &g_config.ToolbarInfoDefault, nullptr, 0, 0, {AppStrings::Settings_Option_Lite, AppStrings::Settings_Option_Full} });
+    tabVisuals.items.push_back({ AppStrings::Settings_Label_OpenFullScreenMode, OptionType::Segment, nullptr, nullptr, &g_config.OpenFullScreenMode, nullptr, 0, 0, {AppStrings::Settings_Option_Off, AppStrings::Settings_Option_LargeOnly, AppStrings::Settings_Option_All} });
     
 
 
