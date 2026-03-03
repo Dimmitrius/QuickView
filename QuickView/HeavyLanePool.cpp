@@ -1618,17 +1618,29 @@ tile_decode_done: ; // [P14] Jump target for fast path (skip legacy TJ decode)
                 // [Standard] Deep Copy to Heap (since Arena is reused/reset)
                 auto safeFrame = std::make_shared<QuickView::RawImageFrame>();
                 safeFrame->quality = rawFrame.quality;
+                
+                size_t bufferSize = 0;
 
-                size_t bufferSize = rawFrame.GetBufferSize();
-                uint8_t* heapPixels = new uint8_t[bufferSize];
-                memcpy(heapPixels, rawFrame.pixels, bufferSize);
-                safeFrame->pixels = heapPixels;
-                safeFrame->width = rawFrame.width;
-                safeFrame->height = rawFrame.height;
-                safeFrame->stride = rawFrame.stride;
-                safeFrame->format = rawFrame.format;
-                safeFrame->formatDetails = rawFrame.formatDetails;
-                safeFrame->memoryDeleter = [](uint8_t* p) { delete[] p; };
+                if (rawFrame.IsSvg()) {
+                    safeFrame->format = rawFrame.format;
+                    safeFrame->width = rawFrame.width;
+                    safeFrame->height = rawFrame.height;
+                    safeFrame->svg = std::make_unique<QuickView::RawImageFrame::SvgData>();
+                    safeFrame->svg->xmlData = rawFrame.svg->xmlData;
+                    safeFrame->svg->viewBoxW = rawFrame.svg->viewBoxW;
+                    safeFrame->svg->viewBoxH = rawFrame.svg->viewBoxH;
+                } else {
+                    bufferSize = rawFrame.GetBufferSize();
+                    uint8_t* heapPixels = new uint8_t[bufferSize];
+                    memcpy(heapPixels, rawFrame.pixels, bufferSize);
+                    safeFrame->pixels = heapPixels;
+                    safeFrame->width = rawFrame.width;
+                    safeFrame->height = rawFrame.height;
+                    safeFrame->stride = rawFrame.stride;
+                    safeFrame->format = rawFrame.format;
+                    safeFrame->formatDetails = rawFrame.formatDetails;
+                    safeFrame->memoryDeleter = [](uint8_t* p) { delete[] p; };
+                }
                 
                 evt.rawFrame = safeFrame;
                 

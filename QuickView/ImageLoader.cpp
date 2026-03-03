@@ -8215,46 +8215,50 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                 // =========================================================
                 // PHASE 1: ID SANITIZATION (Fix Broken Links)
                 // =========================================================
-                // Regex: id="([^"]+)"
-                std::regex reID("id=\"([^\"]+)\"");
-                auto words_begin = std::sregex_iterator(svgContent.begin(), svgContent.end(), reID);
-                auto words_end = std::sregex_iterator();
-                
-                std::map<std::string, std::string> replacements;
-                int count = 0;
-                
-                for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-                    std::smatch match = *i;
-                    std::string val = match.str(1);
+                try {
+                    // Regex: id="([^"]+)"
+                    std::regex reID("id=\"([^\"]+)\"");
+                    auto words_begin = std::sregex_iterator(svgContent.begin(), svgContent.end(), reID);
+                    auto words_end = std::sregex_iterator();
                     
-                    bool unsafe = false;
-                    for (unsigned char c : val) {
-                        if (c > 127) { unsafe = true; break; }
-                    }
-                    // Also consider spaces or weird symbols as unsafe for D2D validation
-                    if (!unsafe && val.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.") != std::string::npos) {
-                         unsafe = true; 
-                    }
+                    std::map<std::string, std::string> replacements;
+                    int count = 0;
+                    
+                    for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+                        std::smatch match = *i;
+                        std::string val = match.str(1);
+                        
+                        bool unsafe = false;
+                        for (unsigned char c : val) {
+                            if (c > 127) { unsafe = true; break; }
+                        }
+                        // Also consider spaces or weird symbols as unsafe for D2D validation
+                        if (!unsafe && val.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.") != std::string::npos) {
+                             unsafe = true; 
+                        }
 
-                    if (unsafe && replacements.find(val) == replacements.end()) {
-                         char buf[64];
-                         sprintf_s(buf, "qv_fix_%d", count++);
-                         replacements[val] = std::string(buf);
-                    }
-                }
-                
-                // Apply ID Replacements
-                if (!replacements.empty()) {
-                    for (auto const& [oldVal, newVal] : replacements) {
-                        size_t pos = 0;
-                        while ((pos = svgContent.find(oldVal, pos)) != std::string::npos) {
-                             svgContent.replace(pos, oldVal.length(), newVal);
-                             pos += newVal.length();
+                        if (unsafe && replacements.find(val) == replacements.end()) {
+                             char buf[64];
+                             sprintf_s(buf, "qv_fix_%d", count++);
+                             replacements[val] = std::string(buf);
                         }
                     }
-                    wchar_t msg[128];
-                    swprintf_s(msg, L"[SVG] Sanitized %d Unsafe IDs.\n", (int)replacements.size());
-                    OutputDebugStringW(msg);
+                    
+                    // Apply ID Replacements
+                    if (!replacements.empty()) {
+                        for (auto const& [oldVal, newVal] : replacements) {
+                            size_t pos = 0;
+                            while ((pos = svgContent.find(oldVal, pos)) != std::string::npos) {
+                                 svgContent.replace(pos, oldVal.length(), newVal);
+                                 pos += newVal.length();
+                            }
+                        }
+                        wchar_t msg[128];
+                        swprintf_s(msg, L"[SVG] Sanitized %d Unsafe IDs.\n", (int)replacements.size());
+                        OutputDebugStringW(msg);
+                    }
+                } catch (...) {
+                    OutputDebugStringW(L"[SVG] ID Sanitizer Pattern Failure\n");
                 }
 
                 // =========================================================

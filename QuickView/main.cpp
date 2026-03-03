@@ -599,6 +599,7 @@ static bool UpgradeSvgSurface(HWND hwnd, ImageResource& res, int tier) {
     // Tier 2: screen × 4 (max 8192) - used when zoom > 1.8×
     float multiplier = (tier == 1) ? 2.0f : 4.0f;
     UINT maxSize = (tier == 1) ? 4096 : 8192;
+
     
     // [Fix] Strictly match Surface Aspect Ratio to SVG
     // This eliminates internal padding/offsets, preventing visual shifts during upgrade
@@ -5627,6 +5628,7 @@ void ProcessEngineEvents(HWND hwnd) {
                 
                 // [Fix] Expand transparency detection to include all transparent formats
                 bool hasTransparency = (evt.metadata.Format == L"SVG") ||
+                                       (evt.rawFrame && evt.rawFrame->IsSvg()) ||
                                        (evt.metadata.Format == L"PNG") || 
                                        (evt.metadata.Format == L"WEBP") ||
                                        (evt.metadata.Format == L"GIF") ||
