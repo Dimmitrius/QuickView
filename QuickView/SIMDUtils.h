@@ -263,8 +263,91 @@ namespace SIMDUtils {
             const uint8_t* row0 = src + static_cast<size_t>(yc.idx0) * static_cast<size_t>(srcStride);
             const uint8_t* row1 = src + static_cast<size_t>(yc.idx1) * static_cast<size_t>(srcStride);
             uint8_t* pd = dst + static_cast<size_t>(y) * static_cast<size_t>(dstStride);
+            
+            int x = 0;
+            
+            // AVX2 unrolled 4-pixel loop using 32-bit math for absolute precision
+            for (; x + 3 < newW; x += 4) {
+                // Fetch indices
+                const int i00 = xCoeff[x+0].idx0 * 4; const int i01 = xCoeff[x+0].idx1 * 4;
+                const int i10 = xCoeff[x+1].idx0 * 4; const int i11 = xCoeff[x+1].idx1 * 4;
+                const int i20 = xCoeff[x+2].idx0 * 4; const int i21 = xCoeff[x+2].idx1 * 4;
+                const int i30 = xCoeff[x+3].idx0 * 4; const int i31 = xCoeff[x+3].idx1 * 4;
 
-            for (int x = 0; x < newW; ++x) {
+                // Load 4 pixels per variable
+                __m128i v_s00 = _mm_set_epi32(*(const uint32_t*)(row0 + i30), *(const uint32_t*)(row0 + i20), *(const uint32_t*)(row0 + i10), *(const uint32_t*)(row0 + i00));
+                __m128i v_s01 = _mm_set_epi32(*(const uint32_t*)(row0 + i31), *(const uint32_t*)(row0 + i21), *(const uint32_t*)(row0 + i11), *(const uint32_t*)(row0 + i01));
+                __m128i v_s10 = _mm_set_epi32(*(const uint32_t*)(row1 + i30), *(const uint32_t*)(row1 + i20), *(const uint32_t*)(row1 + i10), *(const uint32_t*)(row1 + i00));
+                __m128i v_s11 = _mm_set_epi32(*(const uint32_t*)(row1 + i31), *(const uint32_t*)(row1 + i21), *(const uint32_t*)(row1 + i11), *(const uint32_t*)(row1 + i01));
+
+                // Unpack to 32-bit floats
+                __m256i p00_lo = _mm256_cvtepu8_epi32(v_s00);
+                __m256i p00_hi = _mm256_cvtepu8_epi32(_mm_srli_si128(v_s00, 8));
+                __m256i p01_lo = _mm256_cvtepu8_epi32(v_s01);
+                __m256i p01_hi = _mm256_cvtepu8_epi32(_mm_srli_si128(v_s01, 8));
+                __m256i p10_lo = _mm256_cvtepu8_epi32(v_s10);
+                __m256i p10_hi = _mm256_cvtepu8_epi32(_mm_srli_si128(v_s10, 8));
+                __m256i p11_lo = _mm256_cvtepu8_epi32(v_s11);
+                __m256i p11_hi = _mm256_cvtepu8_epi32(_mm_srli_si128(v_s11, 8));
+
+                // Weights calculation
+                int32_t w00_0 = xCoeff[x+0].w0 * yc.w0; int32_t w01_0 = xCoeff[x+0].w1 * yc.w0;
+                int32_t w10_0 = xCoeff[x+0].w0 * yc.w1; int32_t w11_0 = xCoeff[x+0].w1 * yc.w1;
+
+                int32_t w00_1 = xCoeff[x+1].w0 * yc.w0; int32_t w01_1 = xCoeff[x+1].w1 * yc.w0;
+                int32_t w10_1 = xCoeff[x+1].w0 * yc.w1; int32_t w11_1 = xCoeff[x+1].w1 * yc.w1;
+
+                int32_t w00_2 = xCoeff[x+2].w0 * yc.w0; int32_t w01_2 = xCoeff[x+2].w1 * yc.w0;
+                int32_t w10_2 = xCoeff[x+2].w0 * yc.w1; int32_t w11_2 = xCoeff[x+2].w1 * yc.w1;
+
+                int32_t w00_3 = xCoeff[x+3].w0 * yc.w0; int32_t w01_3 = xCoeff[x+3].w1 * yc.w0;
+                int32_t w10_3 = xCoeff[x+3].w0 * yc.w1; int32_t w11_3 = xCoeff[x+3].w1 * yc.w1;
+
+                // Broadcast weights across pixel channels
+                __m256i w00_lo_v = _mm256_set_epi32(w00_1, w00_1, w00_1, w00_1, w00_0, w00_0, w00_0, w00_0);
+                __m256i w01_lo_v = _mm256_set_epi32(w01_1, w01_1, w01_1, w01_1, w01_0, w01_0, w01_0, w01_0);
+                __m256i w10_lo_v = _mm256_set_epi32(w10_1, w10_1, w10_1, w10_1, w10_0, w10_0, w10_0, w10_0);
+                __m256i w11_lo_v = _mm256_set_epi32(w11_1, w11_1, w11_1, w11_1, w11_0, w11_0, w11_0, w11_0);
+
+                __m256i w00_hi_v = _mm256_set_epi32(w00_3, w00_3, w00_3, w00_3, w00_2, w00_2, w00_2, w00_2);
+                __m256i w01_hi_v = _mm256_set_epi32(w01_3, w01_3, w01_3, w01_3, w01_2, w01_2, w01_2, w01_2);
+                __m256i w10_hi_v = _mm256_set_epi32(w10_3, w10_3, w10_3, w10_3, w10_2, w10_2, w10_2, w10_2);
+                __m256i w11_hi_v = _mm256_set_epi32(w11_3, w11_3, w11_3, w11_3, w11_2, w11_2, w11_2, w11_2);
+
+                // Multiplication & Accumulation
+                __m256i sum_lo = _mm256_mullo_epi32(p00_lo, w00_lo_v);
+                sum_lo = _mm256_add_epi32(sum_lo, _mm256_mullo_epi32(p01_lo, w01_lo_v));
+                sum_lo = _mm256_add_epi32(sum_lo, _mm256_mullo_epi32(p10_lo, w10_lo_v));
+                sum_lo = _mm256_add_epi32(sum_lo, _mm256_mullo_epi32(p11_lo, w11_lo_v));
+
+                __m256i sum_hi = _mm256_mullo_epi32(p00_hi, w00_hi_v);
+                sum_hi = _mm256_add_epi32(sum_hi, _mm256_mullo_epi32(p01_hi, w01_hi_v));
+                sum_hi = _mm256_add_epi32(sum_hi, _mm256_mullo_epi32(p10_hi, w10_hi_v));
+                sum_hi = _mm256_add_epi32(sum_hi, _mm256_mullo_epi32(p11_hi, w11_hi_v));
+
+                // Add Rounding Factor & Right Shift
+                __m256i vRound = _mm256_set1_epi32(kWeightRound);
+                sum_lo = _mm256_srai_epi32(_mm256_add_epi32(sum_lo, vRound), kWeightShift);
+                sum_hi = _mm256_srai_epi32(_mm256_add_epi32(sum_hi, vRound), kWeightShift);
+
+                // Pack down to 16-bit
+                __m256i packed16 = _mm256_packs_epi32(sum_lo, sum_hi);
+                
+                // Pack down to 8-bit
+                __m256i packed8 = _mm256_packus_epi16(packed16, packed16);
+
+                // Re-arrange into contiguous memory using lane extraction
+                __m128i p0_p2 = _mm256_castsi256_si128(packed8);
+                __m128i p1_p3 = _mm256_extracti128_si256(packed8, 1);
+
+                *(uint32_t*)(pd + x * 4 + 0) = _mm_cvtsi128_si32(p0_p2);
+                *(uint32_t*)(pd + x * 4 + 4) = _mm_cvtsi128_si32(p1_p3);
+                *(uint32_t*)(pd + x * 4 + 8) = _mm_extract_epi32(p0_p2, 1);
+                *(uint32_t*)(pd + x * 4 + 12) = _mm_extract_epi32(p1_p3, 1);
+            }
+
+            // Scalar fallback for remaining pixels
+            for (; x < newW; ++x) {
                 const AxisCoeff xc = xCoeff[x];
                 const uint8_t* s00 = row0 + static_cast<size_t>(xc.idx0) * 4;
                 const uint8_t* s01 = row0 + static_cast<size_t>(xc.idx1) * 4;
@@ -276,34 +359,11 @@ namespace SIMDUtils {
                 const int w10 = xc.w0 * yc.w1;
                 const int w11 = xc.w1 * yc.w1;
 
-#if QVIEW_SIMDUTILS_USE_STD_SIMD_RESIZE
-                using i32x4 = std::simd<int32_t, std::simd_abi::fixed_size<4>>;
-                std::array<int32_t, 4> s00Lane = { static_cast<int32_t>(s00[0]), static_cast<int32_t>(s00[1]), static_cast<int32_t>(s00[2]), static_cast<int32_t>(s00[3]) };
-                std::array<int32_t, 4> s01Lane = { static_cast<int32_t>(s01[0]), static_cast<int32_t>(s01[1]), static_cast<int32_t>(s01[2]), static_cast<int32_t>(s01[3]) };
-                std::array<int32_t, 4> s10Lane = { static_cast<int32_t>(s10[0]), static_cast<int32_t>(s10[1]), static_cast<int32_t>(s10[2]), static_cast<int32_t>(s10[3]) };
-                std::array<int32_t, 4> s11Lane = { static_cast<int32_t>(s11[0]), static_cast<int32_t>(s11[1]), static_cast<int32_t>(s11[2]), static_cast<int32_t>(s11[3]) };
-
-                i32x4 v00; v00.copy_from(s00Lane.data(), std::element_aligned);
-                i32x4 v01; v01.copy_from(s01Lane.data(), std::element_aligned);
-                i32x4 v10; v10.copy_from(s10Lane.data(), std::element_aligned);
-                i32x4 v11; v11.copy_from(s11Lane.data(), std::element_aligned);
-
-                i32x4 mixed = v00 * w00 + v01 * w01 + v10 * w10 + v11 * w11;
-                mixed = (mixed + i32x4(kWeightRound)) >> kWeightShift;
-
-                std::array<int32_t, 4> outLane;
-                mixed.copy_to(outLane.data(), std::element_aligned);
-                pd[static_cast<size_t>(x) * 4 + 0] = static_cast<uint8_t>(outLane[0]);
-                pd[static_cast<size_t>(x) * 4 + 1] = static_cast<uint8_t>(outLane[1]);
-                pd[static_cast<size_t>(x) * 4 + 2] = static_cast<uint8_t>(outLane[2]);
-                pd[static_cast<size_t>(x) * 4 + 3] = static_cast<uint8_t>(outLane[3]);
-#else
                 const size_t dstBase = static_cast<size_t>(x) * 4;
                 pd[dstBase + 0] = static_cast<uint8_t>((s00[0] * w00 + s01[0] * w01 + s10[0] * w10 + s11[0] * w11 + kWeightRound) >> kWeightShift);
                 pd[dstBase + 1] = static_cast<uint8_t>((s00[1] * w00 + s01[1] * w01 + s10[1] * w10 + s11[1] * w11 + kWeightRound) >> kWeightShift);
                 pd[dstBase + 2] = static_cast<uint8_t>((s00[2] * w00 + s01[2] * w01 + s10[2] * w10 + s11[2] * w11 + kWeightRound) >> kWeightShift);
                 pd[dstBase + 3] = static_cast<uint8_t>((s00[3] * w00 + s01[3] * w01 + s10[3] * w10 + s11[3] * w11 + kWeightRound) >> kWeightShift);
-#endif
             }
         }
     }
