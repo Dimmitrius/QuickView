@@ -43,6 +43,7 @@ using namespace QuickView;
 #include "SIMDUtils.h"
 #include <thread>
 #include "PreviewExtractor.h"
+#include <shobjidl.h> // [Add] for IShellItemImageFactory
 #include "MappedFile.h" // [Opt]
 #if defined(__has_include)
 #if __has_include(<simd>)
@@ -2180,6 +2181,91 @@ static void ApplyOrientationToThumbData(CImageLoader::ThumbData* pData, int orie
 
 
 
+HRESULT CImageLoader::LoadShellThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData) {
+    if (!filePath || !pData || !m_wicFactory) return E_INVALIDARG;
+
+    ComPtr<IShellItemImageFactory> imageFactory;
+    HRESULT hr = SHCreateItemFromParsingName(filePath, nullptr, IID_PPV_ARGS(&imageFactory));
+    if (FAILED(hr) || !imageFactory) return hr;
+
+    SIZE size = { targetSize, targetSize };
+    HBITMAP hBitmap = nullptr;
+    
+    // Step 1: Request from shell cache (exactly target size) and strictly NO Icon fallback (SIIGBF_THUMBNAILONLY)
+    hr = imageFactory->GetImage(size, static_cast<SIIGBF>(SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY), &hBitmap);
+    
+    // Step 2: Fallback to System Large Icon Cache size (256) if the requested size failed
+    if (FAILED(hr) || !hBitmap) {
+        SIZE fallbackSize = { 256, 256 };
+        hr = imageFactory->GetImage(fallbackSize, static_cast<SIIGBF>(SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY), &hBitmap);
+    }
+    
+    if (FAILED(hr) || !hBitmap) return E_FAIL;
+
+    // Reject standard icon sizes to avoid meaningless fallback
+    BITMAP bm;
+    if (GetObject(hBitmap, sizeof(bm), &bm)) {
+        if (bm.bmWidth == bm.bmHeight && (bm.bmWidth == 16 || bm.bmWidth == 32 || bm.bmWidth == 48 || bm.bmWidth == 64 || bm.bmWidth == 128)) {
+            DeleteObject(hBitmap);
+            return E_FAIL; // It's an icon, reject it
+        }
+    } else {
+        DeleteObject(hBitmap);
+        return E_FAIL;
+    }
+
+    ComPtr<IWICBitmap> wicBitmap;
+    hr = m_wicFactory->CreateBitmapFromHBITMAP(hBitmap, nullptr, WICBitmapUsePremultipliedAlpha, &wicBitmap);
+    DeleteObject(hBitmap);
+    
+    if (FAILED(hr) || !wicBitmap) return hr;
+    
+    ComPtr<IWICBitmapSource> sourceToCopy = wicBitmap;
+    WICPixelFormatGUID srcFormat = {};
+    if (SUCCEEDED(wicBitmap->GetPixelFormat(&srcFormat)) && !IsEqualGUID(srcFormat, GUID_WICPixelFormat32bppPBGRA)) {
+        ComPtr<IWICFormatConverter> converter;
+        if (SUCCEEDED(m_wicFactory->CreateFormatConverter(&converter)) && converter) {
+            hr = converter->Initialize(wicBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom);
+            if (SUCCEEDED(hr)) {
+                sourceToCopy = converter;
+            }
+        }
+    }
+
+    UINT w = 0, h = 0;
+    if (FAILED(sourceToCopy->GetSize(&w, &h)) || w == 0 || h == 0) return E_FAIL;
+
+    UINT stride = QuickView::CalculateAlignedStride(w, 4);
+    size_t byteCount = static_cast<size_t>(stride) * h;
+    
+    try {
+        pData->pixels.resize(byteCount);
+    } catch (...) {
+        return E_OUTOFMEMORY;
+    }
+    
+    hr = sourceToCopy->CopyPixels(nullptr, stride, static_cast<UINT>(byteCount), pData->pixels.data());
+    if (FAILED(hr)) {
+        pData->pixels.clear();
+        return hr;
+    }
+    
+    pData->width = static_cast<int>(w);
+    pData->height = static_cast<int>(h);
+    pData->stride = static_cast<int>(stride);
+    pData->isValid = true;
+    pData->loaderName = L"Shell Cache";
+    
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    if (GetFileAttributesExW(filePath, GetFileExInfoStandard, &fad)) {
+        pData->fileSize = (static_cast<uint64_t>(fad.nFileSizeHigh) << 32) | fad.nFileSizeLow;
+    }
+    pData->origWidth = pData->width;
+    pData->origHeight = pData->height;
+
+    return S_OK;
+}
+
 HRESULT CImageLoader::LoadThumbJPEG(LPCWSTR filePath, int targetSize, ThumbData* pData) {
     if (!pData) return E_INVALIDARG;
 
@@ -2192,6 +2278,11 @@ HRESULT CImageLoader::LoadThumbJPEG(LPCWSTR filePath, int targetSize, ThumbData*
 HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData, bool allowSlow) {
     if (!filePath || !pData) return E_INVALIDARG;
     pData->isValid = false;
+    
+    // 0. Highest Priority: Windows Shell Thumbnail Cache (Insanely fast for pre-cached heavy RAWs)
+    if (SUCCEEDED(LoadShellThumbnail(filePath, targetSize, pData))) {
+        return S_OK;
+    }
 
     // 1. Unified Codec Dispatch (Primary)
     DecodeContext ctx;

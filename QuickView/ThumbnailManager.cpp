@@ -197,6 +197,9 @@ void ThumbnailManager::TouchLRU(int index) {
 }
 
 void ThumbnailManager::WorkerLoopFast() {
+    // Thumbnail extraction (especially via WIC/Shell) relies on COM components
+    HRESULT coInitHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    
     while (m_running) {
         Task task;
         {
@@ -227,9 +230,16 @@ void ThumbnailManager::WorkerLoopFast() {
             PostMessage(m_hwnd, WM_THUMB_KEY_READY, (WPARAM)task.index, 0);
         }
     }
+    
+    if (SUCCEEDED(coInitHr)) {
+        CoUninitialize();
+    }
 }
 
 void ThumbnailManager::WorkerLoopSlow() {
+    // Thumbnail extraction (especially via WIC/Shell) relies on COM components
+    HRESULT coInitHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    
     while (m_running) {
         Task task;
         {
@@ -258,6 +268,10 @@ void ThumbnailManager::WorkerLoopSlow() {
             }
             PostMessage(m_hwnd, WM_THUMB_KEY_READY, (WPARAM)task.index, 0);
         }
+    }
+    
+    if (SUCCEEDED(coInitHr)) {
+        CoUninitialize();
     }
 }
 

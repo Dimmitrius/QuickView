@@ -393,6 +393,9 @@ public:
     static void ReleaseJxlRunner();
 
 private:
+    // Windows Shell Thumbnail Extractor
+    HRESULT LoadShellThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData);
+
     ComPtr<IWICImagingFactory> m_wicFactory;
     
     // [JXL Global Runner] Static singleton
