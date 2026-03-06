@@ -1292,55 +1292,6 @@ HRESULT CImageLoader::FullDecodeFromMemory(const uint8_t* data, size_t size,
         return S_OK;
     }
 
-    // ---------------------------------------------------------------
-    // HEIC / Legacy Path: WIC (Direct-to-Memory via Stream)
-    // ---------------------------------------------------------------
-    if (fmt == L"HEIC" || fmt == L"HEIF") {
-        // [v4.1] Prevent double-fallback logic in HeavyLanePool.
-        ComPtr<IWICImagingFactory> localWic;
-        if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localWic)))) {
-            ComPtr<IStream> stream;
-            stream.Attach(SHCreateMemStream(data, (UINT)size));
-            if (stream) {
-                ComPtr<IWICBitmapDecoder> decoder;
-                if (SUCCEEDED(localWic->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) {
-                    ComPtr<IWICBitmapFrameDecode> frame;
-                    if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-                        ComPtr<IWICFormatConverter> converter;
-                        if (SUCCEEDED(localWic->CreateFormatConverter(&converter)) &&
-                            SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
-                            
-                            UINT w = 0, h = 0;
-                            if (SUCCEEDED(converter->GetSize(&w, &h)) && w > 0 && h > 0) {
-                                UINT stride = w * 4;
-                                size_t bufSize = (size_t)stride * h;
-                                uint8_t* pixels = (uint8_t*)_aligned_malloc(bufSize, 32);
-                                if (pixels) {
-                                    if (SUCCEEDED(converter->CopyPixels(nullptr, stride, (UINT)bufSize, pixels))) {
-                                        outFrame->pixels = pixels;
-                                        outFrame->width = w;
-                                        outFrame->height = h;
-                                        outFrame->stride = stride;
-                                        outFrame->format = QuickView::PixelFormat::BGRA8888;
-                                        outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
-                                        outFrame->formatDetails = L"WIC/HEVC";
-                                        
-                                        OutputDebugStringW(L"[P15] HEIC decoded via WIC (SHMemStream) OK\n");
-                                        return S_OK;
-                                    }
-                                    _aligned_free(pixels);
-                                } else {
-                                    return E_OUTOFMEMORY;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        OutputDebugStringW(L"[P15] HEIC WIC decode failed, falling back\n");
-        return E_FAIL;
-    }
 
     // ---------------------------------------------------------------
     // Fallback: unsupported format for tile decode

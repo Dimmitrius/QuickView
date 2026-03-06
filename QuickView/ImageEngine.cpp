@@ -166,8 +166,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
     bool isSupportedFormat = (fmtUpper == L"JPEG" || fmtUpper == L"JPG" || 
                               fmtUpper == L"WEBP" || fmtUpper == L"PNG" || 
                               fmtUpper == L"JXL" || fmtUpper == L"TIF" || 
-                              fmtUpper == L"TIFF" || fmtUpper == L"AVIF" || 
-                              fmtUpper == L"HEIC");
+                              fmtUpper == L"TIFF" || fmtUpper == L"AVIF");
 
     // 2. Size triggers: Any side > 8192 OR Total pixels > 50MP
     bool sizeTrigger = (info.width > 8192 || info.height > 8192);
