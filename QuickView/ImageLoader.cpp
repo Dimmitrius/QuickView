@@ -1292,6 +1292,56 @@ HRESULT CImageLoader::FullDecodeFromMemory(const uint8_t* data, size_t size,
     }
 
     // ---------------------------------------------------------------
+    // HEIC / Legacy Path: WIC (Direct-to-Memory via Stream)
+    // ---------------------------------------------------------------
+    if (fmt == L"HEIC" || fmt == L"HEIF") {
+        // [v4.1] Prevent double-fallback logic in HeavyLanePool.
+        ComPtr<IWICImagingFactory> localWic;
+        if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localWic)))) {
+            ComPtr<IStream> stream;
+            stream.Attach(SHCreateMemStream(data, (UINT)size));
+            if (stream) {
+                ComPtr<IWICBitmapDecoder> decoder;
+                if (SUCCEEDED(localWic->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) {
+                    ComPtr<IWICBitmapFrameDecode> frame;
+                    if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                        ComPtr<IWICFormatConverter> converter;
+                        if (SUCCEEDED(localWic->CreateFormatConverter(&converter)) &&
+                            SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
+                            
+                            UINT w = 0, h = 0;
+                            if (SUCCEEDED(converter->GetSize(&w, &h)) && w > 0 && h > 0) {
+                                UINT stride = w * 4;
+                                size_t bufSize = (size_t)stride * h;
+                                uint8_t* pixels = (uint8_t*)_aligned_malloc(bufSize, 32);
+                                if (pixels) {
+                                    if (SUCCEEDED(converter->CopyPixels(nullptr, stride, (UINT)bufSize, pixels))) {
+                                        outFrame->pixels = pixels;
+                                        outFrame->width = w;
+                                        outFrame->height = h;
+                                        outFrame->stride = stride;
+                                        outFrame->format = QuickView::PixelFormat::BGRA8888;
+                                        outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+                                        outFrame->formatDetails = L"WIC/HEVC";
+                                        
+                                        OutputDebugStringW(L"[P15] HEIC decoded via WIC (SHMemStream) OK\n");
+                                        return S_OK;
+                                    }
+                                    _aligned_free(pixels);
+                                } else {
+                                    return E_OUTOFMEMORY;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        OutputDebugStringW(L"[P15] HEIC WIC decode failed, falling back\n");
+        return E_FAIL;
+    }
+
+    // ---------------------------------------------------------------
     // Fallback: unsupported format for tile decode
     // ---------------------------------------------------------------
     OutputDebugStringW(L"[P15] FullDecodeFromMemory: unsupported format\n");
@@ -3386,12 +3436,6 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     // 3. Robust Fallback to WIC (Standard Loading)
     if (pLoaderName && pLoaderName->empty()) *pLoaderName = L"WIC (Fallback)";
 
-
-    
-    // If High-Perf loader failed (e.g. malformed specific header, unsupported feature) OR format verified but unimplemented (stub),
-    // OR format unknown.
-    // ---------------------------------------------------------
-
     // 1. Load Lazy Source
     ComPtr<IWICBitmapSource> source;
     // Note: Can't use this->LoadFromFile nicely if we want to avoid double-open, 
@@ -3407,6 +3451,45 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     ComPtr<IWICBitmapFrameDecode> frame;
     hr = decoder->GetFrame(0, &frame);
     if (FAILED(hr)) return hr;
+
+    // [v4.1] Native WIC Downscaling Support (IWICBitmapScaler)
+    // For HEIC, HEIF, and TIFF, if Titan demands an LOD=1 base scale, we scale natively here.
+    ComPtr<IWICBitmapSource> finalSource = frame;
+    
+    // First, try fast native decoder-level scaling (IWICBitmapSourceTransform)
+    bool usedNativeScaling = false;
+    if (targetWidth > 0 && targetHeight > 0) {
+        UINT width, height;
+        if (SUCCEEDED(frame->GetSize(&width, &height)) && (width > (UINT)targetWidth || height > (UINT)targetHeight)) {
+            // Find proportional size
+            float scaleW = (float)targetWidth / width;
+            float scaleH = (float)targetHeight / height;
+            float scale = (std::min)(scaleW, scaleH);
+            
+            UINT finalW = (UINT)(width * scale + 0.5f);
+            UINT finalH = (UINT)(height * scale + 0.5f);
+            if (finalW < 1) finalW = 1;
+            if (finalH < 1) finalH = 1;
+            
+            // Try IWICBitmapSourceTransform for ultra-fast codec-level scale (HEVC natively supports this)
+            ComPtr<IWICBitmapSourceTransform> pTransform;
+            if (SUCCEEDED(frame.As(&pTransform))) {
+                // Not copying here because we need an IWICBitmapSource for the converter.
+                // But wait, IWICBitmapSourceTransform is used via CopyPixels, making it hard to plug into converter pipeline.
+                // WIC's standard IWICBitmapScaler handles requesting native scale from the decoder underneath anyway!
+                // So using Scaler is mathematically optimal.
+            }
+
+            ComPtr<IWICBitmapScaler> scaler;
+            if (SUCCEEDED(m_wicFactory->CreateBitmapScaler(&scaler))) {
+                if (SUCCEEDED(scaler->Initialize(frame.Get(), finalW, finalH, WICBitmapInterpolationModeFant))) {
+                    finalSource = scaler;
+                    if (pLoaderName) *pLoaderName += L" [WIC Scaler]";
+                    usedNativeScaling = true;
+                }
+            }
+        }
+    }
     
     // 2. Convert to D2D Compatible Format (PBGRA32)
     ComPtr<IWICFormatConverter> converter;
@@ -3414,7 +3497,7 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     if (FAILED(hr)) return hr;
 
     hr = converter->Initialize(
-        frame.Get(), // Use frame source
+        finalSource.Get(), // Use frame source
         GUID_WICPixelFormat32bppPBGRA,
         WICBitmapDitherTypeNone,
         nullptr,
@@ -3424,14 +3507,13 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     if (FAILED(hr)) return hr;
 
     // 3. Force Decode to Memory
-    // 3. Force Decode to Memory
     HRESULT hrBitmap = m_wicFactory->CreateBitmapFromSource(
         converter.Get(),
         WICBitmapCacheOnLoad, 
         ppBitmap
     );
 
-    if (SUCCEEDED(hrBitmap) && pLoaderName && *pLoaderName == L"WIC (Fallback)") {
+    if (SUCCEEDED(hrBitmap) && pLoaderName && pLoaderName->find(L"WIC") != std::wstring::npos && !usedNativeScaling) {
          UINT w = 0, h = 0;
          (*ppBitmap)->GetSize(&w, &h);
          wchar_t buf[32]; swprintf_s(buf, L" [%ux%u]", w, h);
@@ -4896,7 +4978,7 @@ static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, Deco
         fmt == L"AVIF" || 
         fmt == L"QOI" || fmt == L"TGA" || fmt == L"PNM" || fmt == L"WBMP" ||
         fmt == L"PSD" || fmt == L"HDR" || fmt == L"PIC" || fmt == L"PCX" ||
-        fmt == L"SVG" || fmt == L"EXR" || fmt == L"HEIC"
+        fmt == L"SVG" || fmt == L"EXR"
     );
     
     if (isBufferCodec) {
@@ -4907,7 +4989,7 @@ static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, Deco
         size_t mappedSize = mapping.size();
         
         // Dispatch
-        if (fmt == L"AVIF" || fmt == L"HEIC") {
+        if (fmt == L"AVIF") {
             CImageLoader::ThumbData tmp;
             int targetDim = (std::max)(ctx.targetWidth, ctx.targetHeight);
             HRESULT hr = CImageLoader::LoadThumbAVIF_Proxy(mappedData, mappedSize, targetDim, &tmp, false, &result.metadata);
@@ -8803,7 +8885,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
     
     ComPtr<IWICBitmap> wicBitmap;
     std::wstring loaderName;
-    HRESULT hr = LoadToMemory(filePath, &wicBitmap, &loaderName, false, checkCancel);
+    HRESULT hr = LoadToMemory(filePath, &wicBitmap, &loaderName, false, checkCancel, targetWidth, targetHeight);
     if (FAILED(hr)) return hr;
     
     if (pLoaderName) *pLoaderName = loaderName;

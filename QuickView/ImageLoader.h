@@ -194,7 +194,7 @@ public:
     /// <summary>
     /// Load WIC bitmap from file and force decode to memory
     /// </summary>
-    HRESULT LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std::wstring* pLoaderName = nullptr, bool forceFullDecode = false, CancelPredicate checkCancel = nullptr);
+    HRESULT LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std::wstring* pLoaderName = nullptr, bool forceFullDecode = false, CancelPredicate checkCancel = nullptr, int targetWidth = 0, int targetHeight = 0);
 
     /// <summary>
     /// NEW: Load image directly into PMR-backed buffer (Zero-Copy for Heavy Lane)
