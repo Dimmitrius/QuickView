@@ -1,5 +1,33 @@
 # Changelog
 
+## [4.0.0] - The Titan Engine Update
+**Release Date**: 2026-03-06
+
+### 🚀 Major Architecture: "Titan System"
+- **Gigapixel Tiling (Titan Tile)**: Introduced the "Titan System," a dynamic tiling engine for ultra-massive imagery, capable of loading images previously blocked by memory limits. 
+- **Single-Decode-Then-Slice**: Drastically reduces peak memory usage on massive images by slicing decoded bounds natively into chunks.
+- **Smart Pull Architecture**: Only renders and decodes map-regions actually visible on screen (Map First & Touch-Up Prefetch).
+- **Direct-to-MMF Decode**: Utilizes Memory Mapped Files for zero-copy streaming of massive cache components.
+- **Dynamic HeavyLanePool**: Dynamically scales worker concurrency based on system IO and CPU throttling limits.
+
+### ✨ New Features & Formats
+-   **Native JPEG XL (JXL)**: Complete libjxl integration with multi-threaded, parallel tile runner decoders.
+-   **Pro Formats**: Added full support for Large Document Format (PSB) and instantaneous PSD preview extraction.
+-   **Always Fullscreen Mode**: Added options to automatically start in fullscreen (Off / Large Only / All) with intelligent auto-exit policies.
+-   **Gallery Acceleration**: Integrated Windows Shell caching (Explorer cache) into the Gallery mode, delivering near-instant 0-latency thumbnails for thousands of files.
+-   **PerMonitorV2 DPI**: Re-engineered the UI with explicit D2D UI scaling, granular UI scale presets (100%-250%), and better multi-monitor mixed DPI handling.
+
+### ⚡ Performance & Core
+-   **SIMD Acceleration**: Optimized `ResizeBilinear` using AVX2/AVX-512 unrolled 4-pixel paths. Native high-quality downscaling for AVIF and Ultra-HD LOD0 regions.
+-   **Async GC (Phase 5)**: Complete implementation of asynchronous garbage collection for tile pools to eliminate UI stuttering on massive context switches.
+-   **Coordinate Topology**: Refactored DirectComposition coordinate system to a "Center-to-Center Topology" solving edge-smearing and tile gaps.
+
+### 🐛 Bug Fixes
+-   **SVG Engine**: Fixed SVG CSS transparency bugs and regex-based crashes on extremely massive SVG nodes.
+-   **Threading**: Fixed multiple race condition crashes with Titan tiles, DC stage swizzle races, and rapid-switching access violations.
+-   **Window/OS**: Fixed issue where launching new instances wouldn't focus the window correctly (fixed using `AttachThreadInput`).
+-   **Image Scaling**: Prevented image stretching anomalies and window jumps during "Phase 1" metadata peeking events.
+
 ## [3.2.5] - Precision & Expansion Update
 **Release Date**: 2026-01-26
 

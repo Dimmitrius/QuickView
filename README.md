@@ -67,34 +67,23 @@ QuickView supports almost all modern and professional image formats:
 
 ---
 
-# QuickView v3.2.5 - The Dynamic Scheduling Update
-**Release Date**: 2026-01-26
+# QuickView v4.0.0 - The Titan Engine Update
+**Release Date**: 2026-03-06
 
-### ⚡ Core Architecture: "Dynamic Scheduling"
-- **Unified Scheduling & Decoding (Dynamic Scheduling)**: Introduced a "Fast/Slow Dual-Channel" architecture (`FastLane` + `HeavyLanePool`) that isolates instant interactions from heavy decoding tasks.
-- **N+1 Hot-Spare Architecture**: Implemented a "Capped N+1" threading model where standby threads are kept warm for immediate response, maximizing CPU throughput without over-subscription.
-- **Deep Cancellation**: Granular "On-Demand" cancellation logic allowed for heavy formats (JXL/RAW/WebP), ensuring stale tasks (e.g., during rapid scrolling) are instantly terminated to save power.
-- **Direct D2D Passthrough**: Established a "Zero-Copy" pipeline where decoded `RawImageFrame` buffers are uploaded directly to GPU memory, bypassing GDI/GDI+ entirely.
+### 🚀 Core Architecture: "Titan System"
+- **Gigapixel Tiling**: The new Titan Pipeline dynamically slices massive image datasets into LOD (Level of Detail) tiles, enabling smooth 60fps panning over images that previously caused OOM crashes.
+- **Smart Pull & Prefetch**: Memory is now intelligently streamed. QuickView only decodes and uploads the tiles currently visible on your monitor, predicting panning direction to prefetch adjacent chunks.
+- **Direct-to-MMF Decode**: Zero-copy Memory-Mapped File strategy to pipeline gigantic source images directly to the render composition engine.
 
-### 🎨 Visual & Rendering Refactor
-- **DirectComposition (Game-Grade Rendering)**: Completely abandoned the legacy SwapChain/GDI model in favor of a `DirectComposition` Visual tree.
-    - **Visual Ping-Pong**: Implemented a double-buffered Visual architecture for tear-free, artifact-free crossfades.
-    - **IDCompositionScaleTransform**: Hardware-accelerated high-precision zooming and panning.
-- **Native SVG Engine**: Replaced `nanosvg` with **Direct2D Native SVG** rendering.
-    - **Capabilities**: Supports complex SVG filters, gradients, and CSS transparency.
-    - **2-Stage Lossless Scaling**: Vector-based re-rasterization during deep zoom for infinite sharpness.
-    - *(Requirement: Windows 10 Creators Update 1703 or later)*.
+### ✨ Next-Gen Formats & Deep Cache
+-   **Native JPEG XL (JXL)**: Full, hyper-optimized support for the next-gen JXL format, backed by parallel HeavyLane workers for massive speedups.
+-   **Pro Design Formats**: Full support for Photoshop's Massive Document Format (PSB) alongside instant PSD/PSB thumbnail extraction.
+-   **Shell-Accelerated Gallery**: The `T` Gallery now taps directly into the Windows Explorer Thumbnail Cache, making initial indexing of massive folders completely instantaneous.
 
-### 💾 Memory & Resource Management
-- **Arena Dynamic Allocation**: Switched to a **TripleArena** strategy using Polymorphic Memory Resources (PMR). Memory is pre-allocated and recycled (Bucket Strategy) to eliminate heap fragmentation.
-- **Smart Directional Prefetch**:
-    - **Auto-Tuning**: Automatically selects `Eco`, `Balanced`, or `Performance` prefetch strategies based on detected system RAM.
-    - **Manual Override**: Full user control over cache behavior.
-    - **Smart Skip**: Prevents "OOM" in Eco mode by intelligently skipping tasks that exceed the cache budget.
-
-### 🧩 Infrastructure & Metadata
-- **Metadata Architecture Refactor**: Decoupled "Fast Header Peeking" (for instant layout) from "Async Rich Metadata" parsing (Exif/IPTC/XMP), solving UI blocking issues.
-- **Debug HUD**: Added a real-time "Matrix" overlay (`F12`) visualizing the topology of the cache, worker lane status, and frame timings.
+### 💎 PerMonitorV2 & Precision UX
+-   **True High-DPI**: The interface has been untethered from Windows' legacy scaling. We support explicit native D2D UI scaling with granular manual overrides (100%-250%).
+-   **Always Fullscreen**: Command QuickView to automatically launch images in exclusive Fullscreen mode (`Off`, `Large Only`, `All`) with intelligent auto-exit.
+-   **AVX-512 SIMD Resizing**: Critical bilinear scaling paths have been unrolled using AVX2/AVX-512 instructions for blazing-fast zooming.
 
 ---
 
@@ -173,7 +162,6 @@ We are constantly evolving. Here is what's currently in development:
 - **Color Management (CMS):** ICC Profile support.
 - **Dual-View Compare:** Side-by-side image comparison.
 - **Tracing Mode:** Semi-transparent overlay mode, designed for designers to reference and trace over other windows.
-- **Tiling Architecture:** Native gigapixel support with on-demand tile rendering for massive datasets (NASA/Medical).
 
 ---
 
