@@ -1044,45 +1044,14 @@ void ImageEngine::FastLane::QueueWorker() {
             QuickView::RawImageFrame rawFrame;
             std::wstring loaderName;
             
-            // Intelligent Target Sizing
-            // Type A (Sprint) -> Full Decode (target=0) -> FullReady
-            // Type B (Heavy) -> Thumbnail (target=256) -> PreviewReady
-            int targetW = 256; 
-            int targetH = 256;
-            
             auto info = m_loader->PeekHeader(cmd.path.c_str());
             
-            // Standard Thumbnails
-            if (info.type == CImageLoader::ImageType::TypeA_Sprint) {
-                targetW = 0; targetH = 0; // Full decode used as Final
-            }
-            
-            // [v4.1] Exception: JXL (TypeA) uses Two-Stage Loading
-            // [v7.5] JXL Sizing Strategy
-            if (info.format == L"JXL") {
-                 // Small (<1MB & <2MP) -> Full Decode (target=0)
-                 // Re-check updated thresholds
-                 bool isSmall = (info.fileSize < 1048576) && ((uint64_t)info.width * info.height < 2000000);
-                 if (isSmall) {
-                     targetW = 0; targetH = 0;
-                 } else {
-                     // Large -> Preview (target=256 triggers DC)
-                     targetW = 256; targetH = 256;
-                 }
-            }
-            
-            // [v7.0] WebP Strategy: Conditional Two-Stage based on Screen Resolution
-            // Request: If > Screen, use Two-Stage (Stage 1 = Scaled Preview). Else Direct Full.
-            // [v7.1] WebP Strategy: Direct Decode (User Request)
-            // Rules: <1.5MB & <2MP -> FastLane (Full).
-            // Logic handled in Dispatch. If we are here, we do Direct Full Decode.
-            // Gallery Thumbnails use a different path (ThumbnailManager), so this only affects Viewer.
-            std::wstring fmtLower2 = info.format;
-            std::transform(fmtLower2.begin(), fmtLower2.end(), fmtLower2.begin(), ::towlower);
-
-            if (fmtLower2 == L"webp") {
-                targetW = 0; targetH = 0; 
-            }
+            // [Fix] Intelligent Target Sizing - Ultimate Fix!
+            // FastLane only receives TypeA_Sprint or Dedicated Small (<30ms) formats.
+            // ALL jobs in FastLane should be decoded at Full Resolution.
+            // There are NO large images here that need a 256x256 thumbnail.
+            int targetW = 0; 
+            int targetH = 0;
             
             // [Unified Logic] SVG uses target=0 like other formats (User Request: Remove 80% special case)
 
@@ -1095,30 +1064,9 @@ void ImageEngine::FastLane::QueueWorker() {
                 // Determine blurriness
                 // If we did a full decode (target=0 or result close to original), it's Clear.
                 // Otherwise it's a Thumbnail (Blurry/Preview).
-                bool isClear = false;
-                if (targetW == 0) {
-                    // target=0 means "full decode requested".
-                    // For RAW/TIFF files, PeekHeader might return the thumbnail dimensions 
-                    // as info.width/height if it parses a thumbnail IFD (e.g., DNG).
-                    // If the decoded frame matches the embedded preview size, it is a preview!
-                    if (info.hasEmbeddedThumb && 
-                        info.embeddedPreviewWidth > 0 && info.embeddedPreviewHeight > 0 &&
-                        rawFrame.width <= info.embeddedPreviewWidth &&
-                        rawFrame.height <= info.embeddedPreviewHeight) {
-                        
-                        isClear = false;
-                    } 
-                    else if (info.width > 0 && info.height > 0) {
-                        isClear = (rawFrame.width >= info.width / 2 &&
-                                   rawFrame.height >= info.height / 2);
-                    } 
-                    else {
-                        isClear = true;
-                    }
-                } else {
-                    isClear = (rawFrame.width >= info.width / 2 &&
-                               rawFrame.height >= info.height / 2);
-                }
+                // [Fix] targetW=0 means full decode requested.
+                // FastLane does not output dirty previews anymore.
+                bool isClear = true;
                 
                 // Save Scout Loader Name for HUD
                 {
@@ -1161,15 +1109,11 @@ void ImageEngine::FastLane::QueueWorker() {
                 e.rawFrame = safeFrame;
                 
 
-                // [Unified] Populate Metadata instead of ThumbData
-                e.metadata.Width = info.width;
-                e.metadata.Height = info.height;
-                // [Fix] If PeekHeader couldn't determine dimensions (e.g. RAW),
-                // use decoded frame dimensions as fallback
-                if (e.metadata.Width == 0 && rawFrame.width > 0)
-                    e.metadata.Width = rawFrame.width;
-                if (e.metadata.Height == 0 && rawFrame.height > 0)
-                    e.metadata.Height = rawFrame.height;
+                // [Fix] Unified Populate Metadata
+                // PeekHeader dimensions strictly untrusted for FastLane 
+                // RAW/TIFF formats with IFD thumbs may return incorrect info.width/height
+                e.metadata.Width = rawFrame.width;
+                e.metadata.Height = rawFrame.height;
 
                 // [v5.3] Metadata is now populated by LoadToFrame (Unified path)
                 // No need to call ReadMetadata separately or access global variables.
