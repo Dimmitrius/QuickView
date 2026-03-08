@@ -10,7 +10,16 @@ enum class ToolbarButtonID {
     RotateL, RotateR, FlipH, 
     LockSize, Gallery, 
     Exif, RawToggle, FixExtension,
-    Pin // New Pin Button
+    Pin,
+    CompareToggle,
+    CompareSwap,
+    CompareLayout,
+    CompareInfo,
+    CompareDeleteLeft,
+    CompareDeleteRight,
+    CompareSyncZoom,
+    CompareSyncPan,
+    CompareExit
 };
 
 struct ToolbarButton {
@@ -53,9 +62,12 @@ public:
     void SetExifState(bool open);
     void SetRawState(bool isRaw, bool isFullDecode);
     void SetExtensionWarning(bool hasMismatch);
+    void SetCompareMode(bool enabled);
+    bool IsCompareMode() const { return m_compareMode; }
+    void SetCompareSyncStates(bool syncZoom, bool syncPan);
     
     // [Phase 3] Get minimum required width for toolbar
-    float GetMinWidth() const { return (PADDING_X * 2 + 8 * BUTTON_SIZE + 7 * GAP) * m_uiScale; } // ~400px for 8 buttons
+    float GetMinWidth() const { return m_minRequiredWidth > 0.0f ? m_minRequiredWidth : (PADDING_X * 2 + 8 * BUTTON_SIZE + 7 * GAP) * m_uiScale; }
     bool IsWindowTooNarrow() const { return m_windowTooNarrow; }
 
 private:
@@ -74,6 +86,8 @@ private:
     bool m_targetVisible = false;
     bool m_isPinned = false;
     bool m_windowTooNarrow = false; // [Phase 3] Hide toolbar if window is too narrow
+    bool m_compareMode = false;
+    float m_minRequiredWidth = 0.0f;
     
     D2D1_ROUNDED_RECT m_bgRect = {};
     std::vector<ToolbarButton> m_buttons;

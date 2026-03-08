@@ -312,8 +312,63 @@ static float g_fps = 0.0f;
 // the intended zoom change. Cleared by WM_SIZE after handling.
 static bool g_programmaticResize = false;
 
+enum class ViewMode {
+    Single = 0,
+    CompareSideBySide,
+    CompareWipe
+};
+
+enum class ComparePane {
+    Left = 0,
+    Right
+};
+
+struct CompareView {
+    float Zoom = 1.0f;
+    float PanX = 0.0f;
+    float PanY = 0.0f;
+    int ExifOrientation = 1;
+};
+
+struct CompareSlot {
+    ImageResource resource;
+    CImageLoader::ImageMetadata metadata;
+    std::wstring path;
+    CompareView view;
+    bool valid = false;
+
+    void Reset() {
+        resource.Reset();
+        metadata = {};
+        path.clear();
+        view = {};
+        valid = false;
+    }
+};
+
+struct CompareState {
+    ViewMode mode = ViewMode::Single;
+    CompareSlot left;
+    float splitRatio = 0.5f;
+    bool syncZoom = true;
+    bool syncPan = true;
+    bool draggingWipe = false;
+    ComparePane activePane = ComparePane::Right;
+    ComparePane contextPane = ComparePane::Right;
+    bool dirty = false;
+    bool autoExpandedWindow = false;
+};
+static CompareState g_compare;
+
 // Forward Declaration needed for UpgradeSvgSurface and Helpers
 static void SyncDCompState(HWND hwnd, float w, float h);
+static bool RenderCompareComposite(HWND hwnd);
+static void MarkCompareDirty();
+static void EnterCompareMode(HWND hwnd);
+static void ExitCompareMode(HWND hwnd);
+static void CaptureCurrentImageAsCompareLeft();
+static bool LoadImageIntoCompareLeftSlot(const std::wstring& path);
+static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient);
 
 
 
@@ -534,6 +589,405 @@ void ReleaseImageResources();
 void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, bool forceWindowLock);
 void DiscardChanges();
 std::wstring ShowRenameDialog(HWND hParent, const std::wstring& oldName);
+
+static bool IsCompareModeActive() {
+    return g_compare.mode != ViewMode::Single;
+}
+
+static float ClampCompareRatio(float value) {
+    if (value < 0.1f) return 0.1f;
+    if (value > 0.9f) return 0.9f;
+    return value;
+}
+
+static void MarkCompareDirty() {
+    g_compare.dirty = true;
+}
+
+static CompareView GetRightCompareView() {
+    CompareView v;
+    v.Zoom = g_viewState.Zoom;
+    v.PanX = g_viewState.PanX;
+    v.PanY = g_viewState.PanY;
+    v.ExifOrientation = g_viewState.ExifOrientation;
+    return v;
+}
+
+static void SetRightCompareView(const CompareView& view) {
+    g_viewState.Zoom = view.Zoom;
+    g_viewState.PanX = view.PanX;
+    g_viewState.PanY = view.PanY;
+    g_viewState.ExifOrientation = view.ExifOrientation;
+}
+
+static D2D1_SIZE_F GetOrientedSize(const ImageResource& res, int exifOrientation);
+
+static float ComputeZoomStep(float wheelDelta) {
+    const float unit = (wheelDelta >= 0.0f) ? 1.1f : (1.0f / 1.1f);
+    const float count = (std::max)(1.0f, fabsf(wheelDelta));
+    return powf(unit, count);
+}
+
+static void ZoomCompareViewAtPoint(CompareView& view,
+                                   const ImageResource& res,
+                                   const D2D1_RECT_F& viewport,
+                                   float wheelDelta,
+                                   const POINT& mousePt) {
+    const D2D1_SIZE_F oriented = GetOrientedSize(res, view.ExifOrientation);
+    if (oriented.width <= 0.0f || oriented.height <= 0.0f) return;
+
+    const float vpW = viewport.right - viewport.left;
+    const float vpH = viewport.bottom - viewport.top;
+    if (vpW <= 1.0f || vpH <= 1.0f) return;
+
+    float fit = std::min(vpW / oriented.width, vpH / oriented.height);
+    if (oriented.width < 200.0f && oriented.height < 200.0f && fit > 1.0f) {
+        fit = 1.0f;
+    }
+
+    const float oldZoom = (std::max)(0.02f, view.Zoom);
+    float newZoom = oldZoom * ComputeZoomStep(wheelDelta);
+    if (newZoom < 0.02f) newZoom = 0.02f;
+    if (newZoom > 80.0f) newZoom = 80.0f;
+
+    const float ratio = newZoom / oldZoom;
+    const float centerX = (viewport.left + viewport.right) * 0.5f;
+    const float centerY = (viewport.top + viewport.bottom) * 0.5f;
+    const float dx = (float)mousePt.x - centerX;
+    const float dy = (float)mousePt.y - centerY;
+
+    view.PanX = view.PanX * ratio + dx * (1.0f - ratio);
+    view.PanY = view.PanY * ratio + dy * (1.0f - ratio);
+    view.Zoom = newZoom;
+}
+
+static D2D1_RECT_F GetCompareViewport(HWND hwnd, ComparePane pane) {
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const float w = (float)(rc.right - rc.left);
+    const float h = (float)(rc.bottom - rc.top);
+    const float splitX = g_compare.splitRatio * w;
+
+    if (g_compare.mode == ViewMode::CompareSideBySide) {
+        if (pane == ComparePane::Left) {
+            return D2D1::RectF(0.0f, 0.0f, splitX, h);
+        }
+        return D2D1::RectF(splitX, 0.0f, w, h);
+    }
+
+    // Wipe mode: both occupy full viewport.
+    return D2D1::RectF(0.0f, 0.0f, w, h);
+}
+
+static D2D1_SIZE_F GetOrientedSize(const ImageResource& res, int exifOrientation) {
+    D2D1_SIZE_F size = res.GetSize();
+    const bool swapped = (exifOrientation >= 5 && exifOrientation <= 8);
+    if (swapped) {
+        return D2D1::SizeF(size.height, size.width);
+    }
+    return size;
+}
+
+static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient) {
+    if (!IsCompareModeActive()) return ComparePane::Right;
+
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const float w = (float)(rc.right - rc.left);
+    const float splitX = g_compare.splitRatio * w;
+    return ((float)ptClient.x < splitX) ? ComparePane::Left : ComparePane::Right;
+}
+
+static void DrawResourceIntoViewport(ID2D1DeviceContext* ctx,
+                                     const ImageResource& res,
+                                     int exifOrientation,
+                                     const CompareView& view,
+                                     const D2D1_RECT_F& viewport) {
+    if (!ctx || !res) return;
+
+    const float vpW = viewport.right - viewport.left;
+    const float vpH = viewport.bottom - viewport.top;
+    if (vpW <= 1.0f || vpH <= 1.0f) return;
+
+    const D2D1_SIZE_F rawSize = res.GetSize();
+    if (rawSize.width <= 0.0f || rawSize.height <= 0.0f) return;
+
+    const D2D1_SIZE_F orientedSize = GetOrientedSize(res, exifOrientation);
+    if (orientedSize.width <= 0.0f || orientedSize.height <= 0.0f) return;
+
+    float fitScale = std::min(vpW / orientedSize.width, vpH / orientedSize.height);
+    if (orientedSize.width < 200.0f && orientedSize.height < 200.0f && fitScale > 1.0f) {
+        fitScale = 1.0f;
+    }
+
+    const float clampedZoom = (std::max)(0.02f, view.Zoom);
+    const float totalScale = fitScale * clampedZoom;
+    const float centerX = (viewport.left + viewport.right) * 0.5f + view.PanX;
+    const float centerY = (viewport.top + viewport.bottom) * 0.5f + view.PanY;
+
+    D2D1_MATRIX_3X2_F oldTransform{};
+    ctx->GetTransform(&oldTransform);
+    ctx->PushAxisAlignedClip(viewport, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+
+    if (res.isSvg && res.svgDoc) {
+        ComPtr<ID2D1DeviceContext5> ctx5;
+        if (SUCCEEDED(ctx->QueryInterface(IID_PPV_ARGS(&ctx5)))) {
+            const float drawW = rawSize.width * totalScale;
+            const float drawH = rawSize.height * totalScale;
+            const float x = centerX - drawW * 0.5f;
+            const float y = centerY - drawH * 0.5f;
+            D2D1::Matrix3x2F m = D2D1::Matrix3x2F::Scale(totalScale, totalScale) *
+                                 D2D1::Matrix3x2F::Translation(x, y);
+            ctx5->SetTransform(m);
+            ctx5->DrawSvgDocument(res.svgDoc.Get());
+            ctx5->SetTransform(oldTransform);
+        }
+    } else if (res.bitmap) {
+        const float imgW = rawSize.width;
+        const float imgH = rawSize.height;
+        const bool rotated = (exifOrientation >= 2 && exifOrientation <= 8);
+
+        if (!rotated) {
+            const float drawW = imgW * totalScale;
+            const float drawH = imgH * totalScale;
+            const float x = centerX - drawW * 0.5f;
+            const float y = centerY - drawH * 0.5f;
+            D2D1_RECT_F dest = D2D1::RectF(x, y, x + drawW, y + drawH);
+            ctx->DrawBitmap(res.bitmap.Get(), &dest, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        } else {
+            D2D1::Matrix3x2F m = D2D1::Matrix3x2F::Translation(-imgW * 0.5f, -imgH * 0.5f);
+            switch (exifOrientation) {
+                case 2: m = m * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f); break;
+                case 3: m = m * D2D1::Matrix3x2F::Rotation(180.0f); break;
+                case 4: m = m * D2D1::Matrix3x2F::Scale(1.0f, -1.0f); break;
+                case 5: m = m * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f) * D2D1::Matrix3x2F::Rotation(270.0f); break;
+                case 6: m = m * D2D1::Matrix3x2F::Rotation(90.0f); break;
+                case 7: m = m * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f) * D2D1::Matrix3x2F::Rotation(90.0f); break;
+                case 8: m = m * D2D1::Matrix3x2F::Rotation(270.0f); break;
+                default: break;
+            }
+            m = m * D2D1::Matrix3x2F::Scale(totalScale, totalScale);
+            m = m * D2D1::Matrix3x2F::Translation(centerX, centerY);
+            ctx->SetTransform(m);
+            D2D1_RECT_F src = D2D1::RectF(0.0f, 0.0f, imgW, imgH);
+            ctx->DrawBitmap(res.bitmap.Get(), &src, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+            ctx->SetTransform(oldTransform);
+        }
+    }
+
+    ctx->PopAxisAlignedClip();
+    ctx->SetTransform(oldTransform);
+}
+
+static bool LoadImageIntoCompareLeftSlot(const std::wstring& path) {
+    if (path.empty() || !g_imageLoader || !g_renderEngine) return false;
+
+    ComPtr<IWICBitmap> wicBitmap;
+    std::wstring loaderName;
+    if (FAILED(g_imageLoader->LoadToMemory(path.c_str(), &wicBitmap, &loaderName, g_runtime.ForceRawDecode))) {
+        return false;
+    }
+
+    ComPtr<ID2D1DeviceContext> dc = g_renderEngine->GetDeviceContext();
+    if (!dc || !wicBitmap) return false;
+
+    ComPtr<ID2D1Bitmap> d2dBitmap;
+    if (FAILED(dc->CreateBitmapFromWicBitmap(wicBitmap.Get(), nullptr, &d2dBitmap)) || !d2dBitmap) {
+        return false;
+    }
+
+    g_compare.left.Reset();
+    g_compare.left.resource.bitmap = d2dBitmap;
+    g_compare.left.path = path;
+    g_compare.left.valid = true;
+    g_compare.left.view = {};
+
+    CImageLoader::ImageMetadata meta;
+    if (SUCCEEDED(g_imageLoader->ReadMetadata(path.c_str(), &meta, true))) {
+        g_compare.left.metadata = meta;
+    }
+    if (g_compare.left.metadata.Width == 0 || g_compare.left.metadata.Height == 0) {
+        D2D1_SIZE_U pixel = d2dBitmap->GetPixelSize();
+        g_compare.left.metadata.Width = pixel.width;
+        g_compare.left.metadata.Height = pixel.height;
+    }
+    if (g_compare.left.metadata.ExifOrientation < 1 || g_compare.left.metadata.ExifOrientation > 8) {
+        g_compare.left.metadata.ExifOrientation = 1;
+    }
+    g_compare.left.view.ExifOrientation = g_config.AutoRotate ? g_compare.left.metadata.ExifOrientation : 1;
+    return true;
+}
+
+static void CaptureCurrentImageAsCompareLeft() {
+    if (!g_imageResource || g_imagePath.empty()) return;
+
+    g_compare.left.Reset();
+    g_compare.left.resource = g_imageResource;
+    g_compare.left.metadata = g_currentMetadata;
+    g_compare.left.path = g_imagePath;
+    g_compare.left.valid = true;
+    g_compare.left.view.Zoom = g_viewState.Zoom;
+    g_compare.left.view.PanX = g_viewState.PanX;
+    g_compare.left.view.PanY = g_viewState.PanY;
+    g_compare.left.view.ExifOrientation = g_viewState.ExifOrientation;
+    if (g_config.AutoRotate && g_imageLoader) {
+        CImageLoader::ImageMetadata meta;
+        if (SUCCEEDED(g_imageLoader->ReadMetadata(g_imagePath.c_str(), &meta, true)) &&
+            meta.ExifOrientation >= 1 && meta.ExifOrientation <= 8) {
+            g_compare.left.view.ExifOrientation = meta.ExifOrientation;
+        }
+    } else {
+        g_compare.left.view.ExifOrientation = 1;
+    }
+}
+
+static bool RenderCompareComposite(HWND hwnd) {
+    if (!g_compEngine || !g_compEngine->IsInitialized()) return false;
+    if (!g_compare.left.valid || !g_imageResource) return false;
+
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const UINT winW = (UINT)(rc.right - rc.left);
+    const UINT winH = (UINT)(rc.bottom - rc.top);
+    if (winW == 0 || winH == 0) return false;
+
+    ID2D1DeviceContext* ctx = g_compEngine->BeginPendingUpdate(winW, winH, false);
+    if (!ctx) return false;
+
+    ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
+    const CompareView rightView = GetRightCompareView();
+
+    if (g_compare.mode == ViewMode::CompareWipe) {
+        const D2D1_RECT_F full = D2D1::RectF(0.0f, 0.0f, (float)winW, (float)winH);
+        DrawResourceIntoViewport(ctx, g_compare.left.resource, g_compare.left.view.ExifOrientation, g_compare.left.view, full);
+
+        const float splitX = ClampCompareRatio(g_compare.splitRatio) * (float)winW;
+        const D2D1_RECT_F reveal = D2D1::RectF(0.0f, 0.0f, splitX, (float)winH);
+        DrawResourceIntoViewport(ctx, g_imageResource, g_viewState.ExifOrientation, rightView, reveal);
+
+        ComPtr<ID2D1SolidColorBrush> dividerBrush;
+        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f), &dividerBrush);
+        if (dividerBrush) {
+            ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 2.0f);
+        }
+    } else {
+        const float splitX = ClampCompareRatio(g_compare.splitRatio) * (float)winW;
+        const D2D1_RECT_F leftVp = D2D1::RectF(0.0f, 0.0f, splitX, (float)winH);
+        const D2D1_RECT_F rightVp = D2D1::RectF(splitX, 0.0f, (float)winW, (float)winH);
+
+        DrawResourceIntoViewport(ctx, g_compare.left.resource, g_compare.left.view.ExifOrientation, g_compare.left.view, leftVp);
+        DrawResourceIntoViewport(ctx, g_imageResource, g_viewState.ExifOrientation, rightView, rightVp);
+
+        ComPtr<ID2D1SolidColorBrush> dividerBrush;
+        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.35f), &dividerBrush);
+        if (dividerBrush) {
+            ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 1.0f);
+        }
+    }
+
+    g_compEngine->EndPendingUpdate();
+    g_compEngine->PlayPingPongCrossFade(0.0f, true);
+
+    VisualState vs{};
+    vs.PhysicalSize = D2D1::SizeF((float)winW, (float)winH);
+    vs.VisualSize = vs.PhysicalSize;
+    vs.TotalRotation = 0.0f;
+    vs.IsRotated90 = false;
+    vs.FlipX = 1.0f;
+    vs.FlipY = 1.0f;
+    g_compEngine->UpdateTransformMatrix(vs, (float)winW, (float)winH, 1.0f, 0.0f, 0.0f);
+    g_compEngine->Commit();
+    return true;
+}
+
+static void EnterCompareMode(HWND hwnd) {
+    if (IsCompareModeActive() || !g_imageResource) return;
+    if (g_currentMetadata.Width > 8192 || g_currentMetadata.Height > 8192) {
+        g_osd.Show(hwnd, L"Compare mode is not available for Titan images yet.", true);
+        return;
+    }
+
+    CaptureCurrentImageAsCompareLeft();
+    if (!g_compare.left.valid) return;
+
+    if (g_config.AutoRotate && g_imageLoader && !g_imagePath.empty()) {
+        CImageLoader::ImageMetadata rightMeta;
+        if (SUCCEEDED(g_imageLoader->ReadMetadata(g_imagePath.c_str(), &rightMeta, true)) &&
+            rightMeta.ExifOrientation >= 1 && rightMeta.ExifOrientation <= 8) {
+            g_viewState.ExifOrientation = rightMeta.ExifOrientation;
+        }
+    } else {
+        g_viewState.ExifOrientation = 1;
+    }
+
+    g_compare.mode = ViewMode::CompareSideBySide;
+    g_compare.splitRatio = 0.5f;
+    g_compare.syncZoom = true;
+    g_compare.syncPan = true;
+    g_compare.draggingWipe = false;
+    g_compare.activePane = ComparePane::Right;
+    g_compare.contextPane = ComparePane::Right;
+    MarkCompareDirty();
+
+    g_toolbar.SetCompareMode(true);
+    g_toolbar.SetCompareSyncStates(g_compare.syncZoom, g_compare.syncPan);
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+
+    // Optional expansion: widen once to improve side-by-side usability.
+    if (!g_compare.autoExpandedWindow && !g_isFullScreen && !IsZoomed(hwnd)) {
+        RECT win{};
+        GetWindowRect(hwnd, &win);
+        HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{ sizeof(mi) };
+        if (GetMonitorInfoW(mon, &mi)) {
+            int curW = win.right - win.left;
+            int curH = win.bottom - win.top;
+            int maxW = mi.rcWork.right - mi.rcWork.left;
+            int targetW = (std::min)((int)(curW * 1.7f), maxW);
+            int cx = (win.left + win.right) / 2;
+            int cy = (win.top + win.bottom) / 2;
+            SetWindowPos(hwnd, nullptr, cx - targetW / 2, cy - curH / 2, targetW, curH, SWP_NOZORDER | SWP_NOACTIVATE);
+            g_compare.autoExpandedWindow = true;
+        }
+    }
+
+    // Auto-load next image into right pane if possible.
+    if (g_navigator.Count() > 1) {
+        std::wstring nextPath = g_navigator.PeekNext();
+        if (!nextPath.empty() && nextPath != g_imagePath) {
+            g_viewState.Reset();
+            LoadImageAsync(hwnd, nextPath, false, QuickView::BrowseDirection::FORWARD);
+        }
+    }
+}
+
+static void ExitCompareMode(HWND hwnd) {
+    if (!IsCompareModeActive()) return;
+
+    g_compare.mode = ViewMode::Single;
+    g_compare.draggingWipe = false;
+    g_compare.contextPane = ComparePane::Right;
+    g_compare.activePane = ComparePane::Right;
+    g_compare.dirty = false;
+
+    g_toolbar.SetCompareMode(false);
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+
+    if (g_imageResource) {
+        bool hasTransparency = (g_currentMetadata.Format == L"SVG") ||
+                               (g_currentMetadata.Format == L"PNG") ||
+                               (g_currentMetadata.Format == L"WEBP") ||
+                               (g_currentMetadata.Format == L"GIF") ||
+                               (g_currentMetadata.Format.find(L"Alpha") != std::wstring::npos);
+        RenderImageToDComp(hwnd, g_imageResource, hasTransparency, false);
+        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+        g_compEngine->Commit();
+    }
+}
 
 // Helper: Check if panning makes sense (image exceeds window OR window exceeds screen)
 bool CanPan(HWND hwnd) {
@@ -2567,6 +3021,18 @@ static void SyncDCompState(HWND hwnd, float winW, float winH) {
     }
     g_compEngine->UpdateBackground(winW, winH, bgColor, g_config.CanvasColor == 2 || g_config.CanvasShowGrid);
 
+    if (IsCompareModeActive()) {
+        VisualState vs{};
+        vs.PhysicalSize = D2D1::SizeF(winW, winH);
+        vs.VisualSize = vs.PhysicalSize;
+        vs.TotalRotation = 0.0f;
+        vs.IsRotated90 = false;
+        vs.FlipX = 1.0f;
+        vs.FlipY = 1.0f;
+        g_compEngine->UpdateTransformMatrix(vs, winW, winH, 1.0f, 0.0f, 0.0f);
+        return;
+    }
+
     // 2. Update Image Transforms
     if (g_imageResource) {
         VisualState vs = GetVisualState();
@@ -3547,6 +4013,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              isTracking = true;
           }
           POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+          if (IsCompareModeActive()) {
+              g_compare.activePane = HitTestComparePane(hwnd, pt);
+          }
+          if (IsCompareModeActive() && g_compare.mode == ViewMode::CompareWipe) {
+              RECT rcSplit{};
+              GetClientRect(hwnd, &rcSplit);
+              float splitX = g_compare.splitRatio * (float)(rcSplit.right - rcSplit.left);
+              if (fabsf((float)pt.x - splitX) <= 6.0f) {
+                  SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
+              }
+          }
           
           SettingsAction action = g_settingsOverlay.OnMouseMove((float)pt.x, (float)pt.y);
           if (action == SettingsAction::RepaintAll) RequestRepaint(PaintLayer::All);
@@ -3704,18 +4181,53 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              SetWindowPos(hwnd, nullptr, newX, newY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
              return 0;
          }
+
+         if (IsCompareModeActive() && g_compare.draggingWipe && g_compare.mode == ViewMode::CompareWipe) {
+             RECT rcSplit{};
+             GetClientRect(hwnd, &rcSplit);
+             const float w = (float)(rcSplit.right - rcSplit.left);
+             if (w > 1.0f) {
+                 g_compare.splitRatio = ClampCompareRatio((float)pt.x / w);
+                 MarkCompareDirty();
+                 RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+             }
+             return 0;
+         }
          
          if (g_viewState.IsDragging) {
-             g_viewState.PanX += (pt.x - g_viewState.LastMousePos.x); 
-             g_viewState.PanY += (pt.y - g_viewState.LastMousePos.y); 
+             const float dx = (float)(pt.x - g_viewState.LastMousePos.x);
+             const float dy = (float)(pt.y - g_viewState.LastMousePos.y);
              g_viewState.LastMousePos = pt;
-             
-             // [DComp] Use hardware pan with proper centering offset
-             // [DComp] Use hardware pan via centralized Sync logic
-             // Fixes jitter by ensuring Visual dimensions (Rotation) are respected
-             RECT rc; GetClientRect(hwnd, &rc);
-             SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
-             RequestRepaint(PaintLayer::Dynamic);  // OSD update only
+
+             if (IsCompareModeActive()) {
+                 if (g_compare.activePane == ComparePane::Left) {
+                     g_compare.left.view.PanX += dx;
+                     g_compare.left.view.PanY += dy;
+                     if (g_compare.syncPan) {
+                         g_viewState.PanX += dx;
+                         g_viewState.PanY += dy;
+                     }
+                 } else {
+                     g_viewState.PanX += dx;
+                     g_viewState.PanY += dy;
+                     if (g_compare.syncPan) {
+                         g_compare.left.view.PanX += dx;
+                         g_compare.left.view.PanY += dy;
+                     }
+                 }
+                 MarkCompareDirty();
+                 RequestRepaint(PaintLayer::Image);
+             } else {
+                 g_viewState.PanX += dx; 
+                 g_viewState.PanY += dy; 
+                 
+                 // [DComp] Use hardware pan with proper centering offset
+                 // [DComp] Use hardware pan via centralized Sync logic
+                 // Fixes jitter by ensuring Visual dimensions (Rotation) are respected
+                 RECT rc; GetClientRect(hwnd, &rc);
+                 SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+                 RequestRepaint(PaintLayer::Dynamic);  // OSD update only
+             }
          }
          
           // Hand cursor for info panel clickable areas
@@ -3771,6 +4283,61 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         // [Fix] Fullscreen Exit on Double Click
         if (g_isFullScreen) {
             SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+            return 0;
+        }
+
+        if (IsCompareModeActive()) {
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            ComparePane pane = HitTestComparePane(hwnd, pt);
+            D2D1_RECT_F vp = GetCompareViewport(hwnd, pane);
+            float vpW = vp.right - vp.left;
+            float vpH = vp.bottom - vp.top;
+
+            if (pane == ComparePane::Left && g_compare.left.valid) {
+                D2D1_SIZE_F sz = GetOrientedSize(g_compare.left.resource, g_compare.left.view.ExifOrientation);
+                if (sz.width > 0 && sz.height > 0) {
+                    float fit = std::min(vpW / sz.width, vpH / sz.height);
+                    float total = fit * g_compare.left.view.Zoom;
+                    if (fabsf(total - 1.0f) < 0.05f) g_compare.left.view.Zoom = 1.0f;
+                    else g_compare.left.view.Zoom = (fit > 0.0001f) ? (1.0f / fit) : 1.0f;
+                    g_compare.left.view.PanX = 0.0f;
+                    g_compare.left.view.PanY = 0.0f;
+                }
+            } else if (pane == ComparePane::Right && g_imageResource) {
+                CompareView right = GetRightCompareView();
+                D2D1_SIZE_F sz = GetOrientedSize(g_imageResource, right.ExifOrientation);
+                if (sz.width > 0 && sz.height > 0) {
+                    float fit = std::min(vpW / sz.width, vpH / sz.height);
+                    float total = fit * right.Zoom;
+                    if (fabsf(total - 1.0f) < 0.05f) right.Zoom = 1.0f;
+                    else right.Zoom = (fit > 0.0001f) ? (1.0f / fit) : 1.0f;
+                    right.PanX = 0.0f;
+                    right.PanY = 0.0f;
+                    SetRightCompareView(right);
+                }
+            }
+
+            if (g_compare.syncZoom && g_compare.left.valid && g_imageResource) {
+                if (pane == ComparePane::Left) {
+                    CompareView right = GetRightCompareView();
+                    right.Zoom = g_compare.left.view.Zoom;
+                    SetRightCompareView(right);
+                } else {
+                    g_compare.left.view.Zoom = g_viewState.Zoom;
+                }
+            }
+            if (g_compare.syncPan) {
+                if (pane == ComparePane::Left) {
+                    g_viewState.PanX = g_compare.left.view.PanX;
+                    g_viewState.PanY = g_compare.left.view.PanY;
+                } else {
+                    g_compare.left.view.PanX = g_viewState.PanX;
+                    g_compare.left.view.PanY = g_viewState.PanY;
+                }
+            }
+
+            MarkCompareDirty();
+            RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
             return 0;
         }
 
@@ -4133,6 +4700,20 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (g_toolbar.IsVisible() && g_toolbar.HitTest((float)pt.x, (float)pt.y)) {
             return 0; // Handled by LBUTTONUP
         }
+
+        if (IsCompareModeActive()) {
+            g_compare.activePane = HitTestComparePane(hwnd, pt);
+            if (g_compare.mode == ViewMode::CompareWipe) {
+                RECT rcSplit{};
+                GetClientRect(hwnd, &rcSplit);
+                float splitX = g_compare.splitRatio * (float)(rcSplit.right - rcSplit.left);
+                if (fabsf((float)pt.x - splitX) <= 6.0f) {
+                    g_compare.draggingWipe = true;
+                    SetCapture(hwnd);
+                    return 0;
+                }
+            }
+        }
         
         // Edge Navigation Zone Check - Record start, handle in LBUTTONUP
         // Zone: Left/Right 15%, Vertical range depends on NavIndicator mode
@@ -4183,8 +4764,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
             return 0;
         } else if (effectiveAction == MouseAction::PanImage) {
-            // Only allow panning if image exceeds window bounds
-            if (CanPan(hwnd)) {
+            bool allowPan = CanPan(hwnd);
+            if (IsCompareModeActive()) {
+                allowPan = (g_compare.activePane == ComparePane::Left) ? g_compare.left.valid : (bool)g_imageResource;
+            }
+            if (allowPan) {
                 SetCapture(hwnd);
                 g_viewState.IsDragging = true;
                 g_viewState.IsInteracting = true;  // Start interaction mode
@@ -4195,6 +4779,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
     case WM_LBUTTONUP: {
         POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        if (IsCompareModeActive()) {
+            g_compare.activePane = HitTestComparePane(hwnd, pt);
+        }
+        if (IsCompareModeActive() && g_compare.draggingWipe) {
+            g_compare.draggingWipe = false;
+            ReleaseCapture();
+            return 0;
+        }
         
         if (g_settingsOverlay.IsVisible()) {
              SettingsAction action = g_settingsOverlay.OnLButtonUp((float)pt.x, (float)pt.y);
@@ -4224,7 +4816,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         
         // Toolbar Click
-        ToolbarButtonID tbId;
+        ToolbarButtonID tbId = ToolbarButtonID::None;
         if (g_toolbar.OnClick((float)pt.x, (float)pt.y, tbId)) {
             switch (tbId) {
                 case ToolbarButtonID::Prev: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, -1); break;
@@ -4285,6 +4877,98 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         SetTimer(hwnd, 998, 16, nullptr);
                     }
                     RequestRepaint(PaintLayer::All);
+                    break;
+                case ToolbarButtonID::CompareToggle:
+                    if (IsCompareModeActive()) {
+                        ExitCompareMode(hwnd);
+                    } else {
+                        EnterCompareMode(hwnd);
+                    }
+                    RequestRepaint(PaintLayer::All);
+                    break;
+                case ToolbarButtonID::CompareExit:
+                    ExitCompareMode(hwnd);
+                    RequestRepaint(PaintLayer::All);
+                    break;
+                case ToolbarButtonID::CompareSwap:
+                    if (IsCompareModeActive() && g_compare.left.valid && g_imageResource) {
+                        ImageResource rightRes = g_imageResource;
+                        CImageLoader::ImageMetadata rightMeta = g_currentMetadata;
+                        std::wstring rightPath = g_imagePath;
+                        CompareView rightView = GetRightCompareView();
+
+                        g_imageResource = g_compare.left.resource;
+                        g_currentMetadata = g_compare.left.metadata;
+                        g_imagePath = g_compare.left.path;
+                        SetRightCompareView(g_compare.left.view);
+
+                        g_compare.left.resource = rightRes;
+                        g_compare.left.metadata = rightMeta;
+                        g_compare.left.path = rightPath;
+                        g_compare.left.view = rightView;
+                        g_compare.left.valid = true;
+                        if (!g_imagePath.empty()) {
+                            g_navigator.Initialize(g_imagePath);
+                        }
+                        MarkCompareDirty();
+                        RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                    }
+                    break;
+                case ToolbarButtonID::CompareLayout:
+                    if (IsCompareModeActive()) {
+                        g_compare.mode = (g_compare.mode == ViewMode::CompareSideBySide)
+                            ? ViewMode::CompareWipe
+                            : ViewMode::CompareSideBySide;
+                        MarkCompareDirty();
+                        RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                    }
+                    break;
+                case ToolbarButtonID::CompareInfo:
+                    if (IsCompareModeActive() && g_compare.left.valid && g_imageResource) {
+                        const auto& l = g_compare.left.metadata;
+                        const auto& r = g_currentMetadata;
+                        wchar_t msg[1024];
+                        swprintf_s(
+                            msg,
+                            L"Resolution: L %ux%u / R %ux%u (%s)\nFile size: L %llu / R %llu bytes (%s)\nFormat: L %s / R %s",
+                            l.Width, l.Height, r.Width, r.Height,
+                            (uint64_t)l.Width * l.Height >= (uint64_t)r.Width * r.Height ? L"L better" : L"R better",
+                            (unsigned long long)l.FileSize, (unsigned long long)r.FileSize,
+                            (l.FileSize > 0 && r.FileSize > 0 && l.FileSize <= r.FileSize) ? L"L better" : L"R better",
+                            l.Format.c_str(), r.Format.c_str()
+                        );
+                        std::vector<DialogButton> buttons = { { DialogResult::Yes, L"OK", true } };
+                        ShowQuickViewDialog(hwnd, L"Compare Info", msg, D2D1::ColorF(D2D1::ColorF::CornflowerBlue), buttons, false, L"", L"");
+                    }
+                    break;
+                case ToolbarButtonID::CompareDeleteLeft:
+                    if (IsCompareModeActive()) {
+                        g_compare.contextPane = ComparePane::Left;
+                        SendMessage(hwnd, WM_COMMAND, IDM_DELETE, 0);
+                    }
+                    break;
+                case ToolbarButtonID::CompareDeleteRight:
+                    if (IsCompareModeActive()) {
+                        g_compare.contextPane = ComparePane::Right;
+                        SendMessage(hwnd, WM_COMMAND, IDM_DELETE, 0);
+                    }
+                    break;
+                case ToolbarButtonID::CompareSyncZoom:
+                    if (IsCompareModeActive()) {
+                        g_compare.syncZoom = !g_compare.syncZoom;
+                        g_toolbar.SetCompareSyncStates(g_compare.syncZoom, g_compare.syncPan);
+                        RequestRepaint(PaintLayer::Static);
+                    }
+                    break;
+                case ToolbarButtonID::CompareSyncPan:
+                    if (IsCompareModeActive()) {
+                        g_compare.syncPan = !g_compare.syncPan;
+                        g_toolbar.SetCompareSyncStates(g_compare.syncZoom, g_compare.syncPan);
+                        RequestRepaint(PaintLayer::Static);
+                    }
+                    break;
+                case ToolbarButtonID::None:
+                default:
                     break;
             }
             return 0;
@@ -4374,7 +5058,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              }
              return 0;
         }
-        if (!g_imageResource) return 0;
         
         float delta = GET_WHEEL_DELTA_WPARAM(wParam) / 120.0f;
         if (g_config.InvertWheel) delta = -delta;
@@ -4382,6 +5065,63 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         bool isCtrl = (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) != 0;
         bool wheelPrimaryNavigate = (g_config.WheelActionMode == 1);
         bool shouldNavigate = wheelPrimaryNavigate ? !isCtrl : isCtrl;
+
+        if (IsCompareModeActive()) {
+            if (shouldNavigate) {
+                int direction = (delta > 0.0f) ? -1 : 1;
+                if (delta != 0.0f && CheckUnsavedChanges(hwnd)) {
+                    Navigate(hwnd, direction);
+                }
+                return 0;
+            }
+
+            POINT mousePt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ComparePane pane = HitTestComparePane(hwnd, mousePt);
+            g_compare.activePane = pane;
+            ComparePane other = (pane == ComparePane::Left) ? ComparePane::Right : ComparePane::Left;
+
+            auto zoomPane = [&](ComparePane p, const POINT& mappedPt) {
+                if (p == ComparePane::Left) {
+                    if (!g_compare.left.valid) return;
+                    D2D1_RECT_F vp = GetCompareViewport(hwnd, ComparePane::Left);
+                    ZoomCompareViewAtPoint(g_compare.left.view, g_compare.left.resource, vp, delta, mappedPt);
+                } else {
+                    if (!g_imageResource) return;
+                    CompareView right = GetRightCompareView();
+                    D2D1_RECT_F vp = GetCompareViewport(hwnd, ComparePane::Right);
+                    ZoomCompareViewAtPoint(right, g_imageResource, vp, delta, mappedPt);
+                    SetRightCompareView(right);
+                }
+            };
+
+            zoomPane(pane, mousePt);
+            if (g_compare.syncZoom) {
+                POINT mapped = mousePt;
+                if (g_compare.mode == ViewMode::CompareSideBySide) {
+                    D2D1_RECT_F fromVp = GetCompareViewport(hwnd, pane);
+                    D2D1_RECT_F toVp = GetCompareViewport(hwnd, other);
+                    float fromW = fromVp.right - fromVp.left;
+                    float fromH = fromVp.bottom - fromVp.top;
+                    float nx = (fromW > 1.0f) ? ((float)mousePt.x - fromVp.left) / fromW : 0.5f;
+                    float ny = (fromH > 1.0f) ? ((float)mousePt.y - fromVp.top) / fromH : 0.5f;
+                    mapped.x = (LONG)(toVp.left + nx * (toVp.right - toVp.left));
+                    mapped.y = (LONG)(toVp.top + ny * (toVp.bottom - toVp.top));
+                }
+                zoomPane(other, mapped);
+            }
+
+            MarkCompareDirty();
+            RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
+
+            const CompareView activeView = (pane == ComparePane::Left) ? g_compare.left.view : GetRightCompareView();
+            wchar_t zoomBuf[32];
+            swprintf_s(zoomBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, (int)std::round(activeView.Zoom * 100.0f));
+            g_osd.Show(hwnd, zoomBuf, false, false, D2D1::ColorF(D2D1::ColorF::White));
+            return 0;
+        }
+
+        if (!g_imageResource) return 0;
+
         if (shouldNavigate) {
             int direction = (delta > 0.0f) ? -1 : 1;
             if (delta != 0.0f && CheckUnsavedChanges(hwnd)) {
@@ -4449,12 +5189,34 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HDROP hDrop = reinterpret_cast<HDROP>(wParam);
         wchar_t path[MAX_PATH];
         if (DragQueryFileW(hDrop, 0, path, MAX_PATH)) {
-            g_editState.Reset();
-            g_viewState.Reset();
-            g_navigator.Initialize(path);
-            g_thumbMgr.ClearCache(); // Fix: Clear old thumbnails on folder switch
-            LoadImageAsync(hwnd, path); // Async
-            RequestRepaint(PaintLayer::All);
+            POINT dropPt{};
+            DragQueryPoint(hDrop, &dropPt);
+            if (IsCompareModeActive()) {
+                ComparePane pane = HitTestComparePane(hwnd, dropPt);
+                if (pane == ComparePane::Left) {
+                    if (LoadImageIntoCompareLeftSlot(path)) {
+                        g_compare.activePane = ComparePane::Left;
+                        MarkCompareDirty();
+                        RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                    }
+                } else {
+                    g_compare.activePane = ComparePane::Right;
+                    CaptureCurrentImageAsCompareLeft();
+                    g_editState.Reset();
+                    g_viewState.Reset();
+                    g_navigator.Initialize(path);
+                    g_thumbMgr.ClearCache();
+                    LoadImageAsync(hwnd, path); // Async
+                    RequestRepaint(PaintLayer::All);
+                }
+            } else {
+                g_editState.Reset();
+                g_viewState.Reset();
+                g_navigator.Initialize(path);
+                g_thumbMgr.ClearCache(); // Fix: Clear old thumbnails on folder switch
+                LoadImageAsync(hwnd, path); // Async
+                RequestRepaint(PaintLayer::All);
+            }
         }
         DragFinish(hDrop);
         return 0;
@@ -4550,15 +5312,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case VK_SPACE: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, 1); break;
         
         // File operations
-        case 'O': SendMessage(hwnd, WM_COMMAND, IDM_OPEN, 0); break; // O or Ctrl+O: Open
+        case 'O':
+            if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
+            SendMessage(hwnd, WM_COMMAND, IDM_OPEN, 0);
+            break; // O or Ctrl+O: Open
         case 'E': SendMessage(hwnd, WM_COMMAND, IDM_EDIT, 0); break; // E: Edit
         case VK_F1: // Help
              if (g_settingsOverlay.IsVisible()) g_settingsOverlay.SetVisible(false);
              g_helpOverlay.Toggle();
              RequestRepaint(PaintLayer::Static);
              break;
-        case VK_F2: SendMessage(hwnd, WM_COMMAND, IDM_RENAME, 0); break; // F2: Rename
-        case VK_DELETE: SendMessage(hwnd, WM_COMMAND, IDM_DELETE, 0); break; // Del: Delete
+        case VK_F2:
+            if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
+            SendMessage(hwnd, WM_COMMAND, IDM_RENAME, 0);
+            break; // F2: Rename
+        case VK_DELETE:
+            if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
+            SendMessage(hwnd, WM_COMMAND, IDM_DELETE, 0);
+            break; // Del: Delete
         case 'P': if (ctrl) { SendMessage(hwnd, WM_COMMAND, IDM_PRINT, 0); } break; // Ctrl+P: Print
         case 'C': // Ctrl+C: Copy image, Ctrl+Alt+C: Copy path
             if (ctrl && alt) {
@@ -4720,6 +5491,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         
         // Exit
         case VK_ESCAPE: 
+            if (IsCompareModeActive()) {
+                ExitCompareMode(hwnd);
+                RequestRepaint(PaintLayer::All);
+                break;
+            }
             if (IsZoomed(hwnd)) {
                 ShowWindow(hwnd, SW_RESTORE);
             } else {
@@ -4732,15 +5508,30 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     
     case WM_RBUTTONUP: {
         // Show context menu
-        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        POINT ptClient = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        POINT pt = ptClient;
         ClientToScreen(hwnd, &pt);
+
+        if (IsCompareModeActive()) {
+            g_compare.contextPane = HitTestComparePane(hwnd, ptClient);
+            g_compare.activePane = g_compare.contextPane;
+        }
         
         bool hasImage = g_imageResource;
         bool extensionFixNeeded = false;
         bool isRaw = false;
-        if (hasImage && !g_imagePath.empty()) {
-             extensionFixNeeded = CheckExtensionMismatch(g_imagePath, g_currentMetadata.LoaderName);
-             isRaw = IsRawFile(g_imagePath);
+        std::wstring targetPath = g_imagePath;
+        std::wstring targetFmt = g_currentMetadata.Format;
+
+        if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left) {
+            hasImage = g_compare.left.valid;
+            targetPath = g_compare.left.path;
+            targetFmt = g_compare.left.metadata.Format;
+        }
+
+        if (hasImage && !targetPath.empty()) {
+             extensionFixNeeded = CheckExtensionMismatch(targetPath, targetFmt);
+             isRaw = IsRawFile(targetPath);
         }
         
         ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode);
@@ -4775,11 +5566,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             ofn.lpstrFilter = L"All Images\0*.jpg;*.jpeg;*.jpe;*.jfif;*.png;*.bmp;*.dib;*.gif;*.tif;*.tiff;*.ico;*.webp;*.avif;*.heic;*.heif;*.svg;*.svgz;*.jxl;*.exr;*.hdr;*.pic;*.psd;*.psb;*.tga;*.pcx;*.qoi;*.wbmp;*.pam;*.pbm;*.pgm;*.ppm;*.wdp;*.hdp;*.arw;*.cr2;*.cr3;*.crw;*.dng;*.nef;*.orf;*.raf;*.rw2;*.srw;*.x3f;*.mrw;*.mos;*.kdc;*.dcr;*.sr2;*.pef;*.erf;*.3fr;*.mef;*.nrw;*.raw\0All Files\0*.*\0";
             ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
             if (GetOpenFileNameW(&ofn)) {
-                g_editState.Reset();
-                g_viewState.Reset();
-                g_navigator.Initialize(szFile);
-                g_thumbMgr.ClearCache(); // Fix: Clear old thumbnails on folder switch
-                LoadImageAsync(hwnd, szFile);
+                if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left) {
+                    if (LoadImageIntoCompareLeftSlot(szFile)) {
+                        g_compare.activePane = ComparePane::Left;
+                        MarkCompareDirty();
+                        RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                    }
+                } else {
+                    if (IsCompareModeActive()) {
+                        CaptureCurrentImageAsCompareLeft();
+                        g_compare.activePane = ComparePane::Right;
+                    }
+                    g_editState.Reset();
+                    g_viewState.Reset();
+                    g_navigator.Initialize(szFile);
+                    g_thumbMgr.ClearCache(); // Fix: Clear old thumbnails on folder switch
+                    LoadImageAsync(hwnd, szFile);
+                }
             }
             break;
         }
@@ -4927,6 +5730,43 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case IDM_RENAME: {
             if (!CheckUnsavedChanges(hwnd)) break;
+            if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left && !g_compare.left.path.empty()) {
+                std::wstring currentFolder = L"";
+                std::wstring currentName = L"";
+                size_t lastSlash = g_compare.left.path.find_last_of(L"\\/");
+                if (lastSlash != std::wstring::npos) {
+                    currentFolder = g_compare.left.path.substr(0, lastSlash + 1);
+                    currentName = g_compare.left.path.substr(lastSlash + 1);
+                } else {
+                    currentName = g_compare.left.path;
+                }
+
+                std::wstring newName = ShowQuickViewInputDialog(hwnd, AppStrings::Context_Rename, L"Enter new filename:", currentName);
+                if (!newName.empty()) {
+                    bool newHasExt = (newName.find_last_of(L'.') != std::wstring::npos);
+                    if (!newHasExt) {
+                        size_t dotPos = currentName.find_last_of(L'.');
+                        if (dotPos != std::wstring::npos) {
+                            newName += currentName.substr(dotPos);
+                        }
+                    }
+                }
+
+                if (!newName.empty() && newName != currentName) {
+                    std::wstring newPath = currentFolder + newName;
+                    if (MoveFileW(g_compare.left.path.c_str(), newPath.c_str())) {
+                        if (LoadImageIntoCompareLeftSlot(newPath)) {
+                            g_osd.Show(hwnd, L"Renamed (Left)", false);
+                            MarkCompareDirty();
+                            RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                        }
+                    } else {
+                        g_osd.Show(hwnd, L"Rename Failed", true);
+                    }
+                }
+                break;
+            }
+
             if (!g_imagePath.empty()) {
                 std::wstring currentFolder = L"";
                 std::wstring currentName = L"";
@@ -4977,6 +5817,39 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         }
         case IDM_DELETE: {
+            if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left && !g_compare.left.path.empty()) {
+                std::wstring recycleTarget = g_compare.left.path;
+                size_t lastSlash = recycleTarget.find_last_of(L"\\/");
+                std::wstring filename = (lastSlash != std::wstring::npos) ? recycleTarget.substr(lastSlash + 1) : recycleTarget;
+
+                bool confirmed = true;
+                if (g_config.ConfirmDelete) {
+                    std::wstring dlgMessage = L"Move to Recycle Bin?";
+                    std::vector<DialogButton> dlgButtons;
+                    dlgButtons.emplace_back(DialogResult::Yes, L"Delete");
+                    dlgButtons.emplace_back(DialogResult::Cancel, L"Cancel");
+                    DialogResult dlgResult = ShowQuickViewDialog(hwnd, filename.c_str(), dlgMessage.c_str(),
+                                                                 D2D1::ColorF(0.85f, 0.25f, 0.25f), dlgButtons, false, L"", L"");
+                    confirmed = (dlgResult == DialogResult::Yes);
+                }
+
+                if (confirmed) {
+                    std::wstring pathCopy = recycleTarget;
+                    pathCopy.push_back(L'\0');
+                    SHFILEOPSTRUCTW op = {};
+                    op.wFunc = FO_DELETE;
+                    op.pFrom = pathCopy.c_str();
+                    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
+                    if (SHFileOperationW(&op) == 0) {
+                        g_compare.left.Reset();
+                        g_osd.Show(hwnd, AppStrings::OSD_MovedToRecycleBin, false);
+                        ExitCompareMode(hwnd);
+                        RequestRepaint(PaintLayer::All);
+                    }
+                }
+                break;
+            }
+
             // [v9.9 Fix] Handle Deletion during Edit/Transform
             // Determine actual target to recycle and temp file to map
             std::wstring recycleTarget = g_imagePath;
@@ -5050,9 +5923,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                              // Let's call Initialize(nextPath) to refresh list and set index.
                              g_navigator.Initialize(nextPath);
                              LoadImageAsync(hwnd, nextPath);
+                             if (IsCompareModeActive()) {
+                                 MarkCompareDirty();
+                             }
                         } else {
                              // Empty folder?
                              g_navigator.Initialize(L"");
+                             if (IsCompareModeActive()) {
+                                 ExitCompareMode(hwnd);
+                             }
                              RequestRepaint(PaintLayer::All);
                         }
                     }
@@ -5332,7 +6211,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 
 
-void OnResize(HWND hwnd, UINT width, UINT height) { 
+void OnResize(HWND hwnd, UINT width, UINT height) {
     if (g_compEngine) {
         // [Fix] Atomic Update for Rotated Image Lag
         // 1. ResizeSurfaces: Updates UI layer backing stores (No Commit)
@@ -5344,6 +6223,9 @@ void OnResize(HWND hwnd, UINT width, UINT height) {
     }
     if (g_uiRenderer) g_uiRenderer->OnResize(width, height);
     g_toolbar.UpdateLayout((float)width, (float)height);
+    if (IsCompareModeActive()) {
+        MarkCompareDirty();
+    }
 }
 
 
@@ -5669,30 +6551,39 @@ void ProcessEngineEvents(HWND hwnd) {
                 bool isSameImageUpgrade = g_isImageScaled && !evt.isScaled && 
                                           (evt.imageId == g_currentImageId.load());
 
-
-                // Update DComp Visual (Base Preview for Titan, or full image for standard)
-                RenderImageToDComp(hwnd, g_imageResource, hasTransparency, isSameImageUpgrade);
-                
-                // [Optimization] GPU-Assistant Surface Rotation Complete
-                // The Surface is now physically rotated. Neutralize global Exif.
-                // This ensures AdjustWindowToImage sees "Orientation 1" and uses the already-swapped Surface dimensions.
-                if (g_viewState.ExifOrientation > 1 && g_config.AutoRotate) {
-                    g_currentMetadata.ExifOrientation = 1;
-                    g_viewState.ExifOrientation = 1;
+                if (IsCompareModeActive() && (g_currentMetadata.Width > 8192 || g_currentMetadata.Height > 8192)) {
+                    ExitCompareMode(hwnd);
+                    g_osd.Show(hwnd, L"Compare mode exited: Titan image is not supported yet.", true);
                 }
-                
-                // [Fix] Update Window Size AFTER RenderImageToDComp
-                // This ensures g_lastSurfaceSize is updated with the NEW image dimensions.
-                AdjustWindowToImage(hwnd);
-                
-                // [Fix] Explicitly Sync DComp State immediately after Window Adjustment
-                // This covers the case where the Window Size DOES NOT CHANGE (e.g. Locked or Maximized),
-                // so WM_SIZE is never fired, leaving the DComp Transform Matrix stale (using old image AR).
-                // This fixes the "Initial Clipping/Jump" issue.
-                if (g_compEngine && g_compEngine->IsInitialized()) {
-                    RECT rc; GetClientRect(hwnd, &rc);
-                    SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
-                    g_compEngine->Commit();
+
+
+                if (IsCompareModeActive()) {
+                    MarkCompareDirty();
+                } else {
+                    // Update DComp Visual (Base Preview for Titan, or full image for standard)
+                    RenderImageToDComp(hwnd, g_imageResource, hasTransparency, isSameImageUpgrade);
+                    
+                    // [Optimization] GPU-Assistant Surface Rotation Complete
+                    // The Surface is now physically rotated. Neutralize global Exif.
+                    // This ensures AdjustWindowToImage sees "Orientation 1" and uses the already-swapped Surface dimensions.
+                    if (g_viewState.ExifOrientation > 1 && g_config.AutoRotate) {
+                        g_currentMetadata.ExifOrientation = 1;
+                        g_viewState.ExifOrientation = 1;
+                    }
+                    
+                    // [Fix] Update Window Size AFTER RenderImageToDComp
+                    // This ensures g_lastSurfaceSize is updated with the NEW image dimensions.
+                    AdjustWindowToImage(hwnd);
+                    
+                    // [Fix] Explicitly Sync DComp State immediately after Window Adjustment
+                    // This covers the case where the Window Size DOES NOT CHANGE (e.g. Locked or Maximized),
+                    // so WM_SIZE is never fired, leaving the DComp Transform Matrix stale (using old image AR).
+                    // This fixes the "Initial Clipping/Jump" issue.
+                    if (g_compEngine && g_compEngine->IsInitialized()) {
+                        RECT rc; GetClientRect(hwnd, &rc);
+                        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+                        g_compEngine->Commit();
+                    }
                 }
 
                 // Cleanup
@@ -6455,6 +7346,26 @@ void Navigate(HWND hwnd, int direction) {
             ? g_navigator.Next(g_config.LoopNavigation) 
             : g_navigator.Previous(g_config.LoopNavigation);
         
+        if (IsCompareModeActive()) {
+            if (!path.empty()) {
+                // Keep old right image as left baseline, then load new right image.
+                CaptureCurrentImageAsCompareLeft();
+                g_compare.activePane = ComparePane::Right;
+                g_compare.contextPane = ComparePane::Right;
+                g_editState.Reset();
+                g_viewState.Reset();
+                QuickView::BrowseDirection browseDir = (direction > 0)
+                    ? QuickView::BrowseDirection::FORWARD
+                    : QuickView::BrowseDirection::BACKWARD;
+                LoadImageAsync(hwnd, path, true, browseDir);
+                MarkCompareDirty();
+            } else if (g_navigator.HitEnd()) {
+                if (direction > 0) g_osd.Show(hwnd, std::wstring(AppStrings::OSD_LastImage), false);
+                else g_osd.Show(hwnd, std::wstring(AppStrings::OSD_FirstImage), false);
+            }
+            return;
+        }
+
         if (!path.empty()) {
             g_editState.Reset();
             g_viewState.Reset();
@@ -6516,130 +7427,136 @@ void OnPaint(HWND hwnd) {
         float logicW = winPixelsW * 96.0f / dpiX;
         float logicH = winPixelsH * 96.0f / dpiY;
 
-        // Canvas and Image rendering are now handled entirely within the DirectComposition visual tree.
-        // Background clearing and grid drawing are moved to CompositionEngine surfaces.
-        SyncDCompState(hwnd, winPixelsW, winPixelsH);
+        if (IsCompareModeActive()) {
+            SyncDCompState(hwnd, winPixelsW, winPixelsH);
+            if (g_compare.dirty) {
+                if (RenderCompareComposite(hwnd)) {
+                    g_compare.dirty = false;
+                } else {
+                    ExitCompareMode(hwnd);
+                }
+            }
+        } else {
+            // Canvas and Image rendering are now handled entirely within the DirectComposition visual tree.
+            // Background clearing and grid drawing are moved to CompositionEngine surfaces.
+            SyncDCompState(hwnd, winPixelsW, winPixelsH);
 
-        // [Fix] Snapshot metadata to avoid dangling .c_str() if coroutine resets g_currentMetadata mid-paint.
-        const auto titanMeta = g_currentMetadata; // Value copy — safe from concurrent reset
+            // [Fix] Snapshot metadata to avoid dangling .c_str() if coroutine resets g_currentMetadata mid-paint.
+            const auto titanMeta = g_currentMetadata; // Value copy — safe from concurrent reset
 
-        // [Infinity Engine] Cascade Rendering Path
-        bool isTitan = g_imageEngine && g_imageEngine->IsTitanModeEnabled();
-        if (isTitan) {
-             // 1. Calculate Dimensions
-             float imgFullW = (float)titanMeta.Width;
-             float imgFullH = (float)titanMeta.Height;
+            // [Infinity Engine] Cascade Rendering Path
+            bool isTitan = g_imageEngine && g_imageEngine->IsTitanModeEnabled();
+            if (isTitan) {
+                 // 1. Calculate Dimensions
+                 float imgFullW = (float)titanMeta.Width;
+                 float imgFullH = (float)titanMeta.Height;
 
-             // 2. Calculate Absolute Scale
-             float fitScale = std::min(logicW / imgFullW, logicH / imgFullH);
-             float absoluteZoom = fitScale * g_viewState.Zoom; 
-             float invZoom = 1.0f / absoluteZoom;
-             
-             // Centers
-             float sCW = logicW / 2.0f;
-             float sCH = logicH / 2.0f;
-             float iCW = imgFullW / 2.0f;
-             float iCH = imgFullH / 2.0f;
-             
-             // Viewport Top-Left in Image Space
-             float viewL = (0.0f - sCW - g_viewState.PanX) * invZoom + iCW;
-             float viewT = (0.0f - sCH - g_viewState.PanY) * invZoom + iCH;
-             float viewW = logicW * invZoom;
-             float viewH = logicH * invZoom;
-             
-             QuickView::RegionRect vp = { (int)viewL, (int)viewT, (int)viewW, (int)viewH };
-             
-             // Calculate Base Preview Ratio (Preview / Original)
-             float baseRatio = 0.0f;
-             float previewW = g_imageResource.GetSize().width;
-             if (titanMeta.Width > 0) {
-                 baseRatio = previewW / (float)titanMeta.Width;
-             }
-
-             // [No-DC JXL Guard] For fake/tiny placeholder bases, force tile scheduling immediately.
-             std::wstring fmtUpper = titanMeta.Format;
-             std::transform(fmtUpper.begin(), fmtUpper.end(), fmtUpper.begin(), ::towupper);
-             bool isJxlLike = (fmtUpper.find(L"JXL") != std::wstring::npos || fmtUpper.find(L"JPEG XL") != std::wstring::npos);
-             if (!isJxlLike && !g_imagePath.empty()) {
-                 std::wstring pathLower = g_imagePath;
-                 std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
-                 if (pathLower.ends_with(L".jxl")) isJxlLike = true;
-             }
-
-             constexpr float kVirtualNoDcRatio = 0.125f; // 1:8
-             float previewH = g_imageResource.GetSize().height;
-             bool fakeBase = (titanMeta.LoaderName.find(L"Fake Base") != std::wstring::npos);
-             bool tinyPreview = (previewW <= 2.0f || previewH <= 2.0f);
-             bool weakPreview = (previewW <= 16.0f || previewH <= 16.0f); // Expanded threshold for 4x4 or 8x8
-
-             if (fakeBase || tinyPreview) {
-                 // Placeholder base (or missing base): force tiles on first frame.
-                 baseRatio = 0.0f;
-             } else if (weakPreview || baseRatio < 0.001f) {
-                 // Expanded safety net: if ratio is mathematically destroyed (< 0.1%),
-                 // treat it as a weak shell/fallback and force reasonable tile layering limit (LOD3/4)
-                 baseRatio = kVirtualNoDcRatio;
-             }
-
-             // Update Manager (Scheduling) - Guarded to prevent loop
-              static QuickView::RegionRect lastVP = { -1, -1, -1, -1 };
-              static float lastAbsZoom = 0;
-              static ImageID lastTileImageId = 0;
-              static uint64_t lastDispatchSerial = 0;
-              ImageID curTileImageId = g_currentImageId.load();
-              bool imageChanged = (curTileImageId != lastTileImageId);
-              uint64_t curDispatchSerial = g_titanDispatchSerial.load(std::memory_order_acquire);
-              bool dispatchChanged = (curDispatchSerial != lastDispatchSerial);
-              bool forceReseed = g_forceTitanTileReseed.exchange(false, std::memory_order_acq_rel);
-              if (imageChanged) {
-                  lastVP = { -1, -1, -1, -1 };
-                  lastAbsZoom = -1.0f;
-                  lastTileImageId = curTileImageId;
-              }
-              if (dispatchChanged) {
-                  lastDispatchSerial = curDispatchSerial;
-              }
-              if (imageChanged || dispatchChanged || forceReseed || vp.x != lastVP.x || vp.y != lastVP.y || vp.w != lastVP.w || vp.h != lastVP.h || absoluteZoom != lastAbsZoom) {
-                  if (imageChanged || dispatchChanged || forceReseed) {
-                      wchar_t tileDbg[320];
-                      swprintf_s(tileDbg,
-                          L"[Main] Titan schedule seed: id=%llu fmt=%s loader=%s meta=%dx%d previewW=%.1f baseRatio=%.4f zoom=%.4f\n",
-                         curTileImageId,
-                         titanMeta.Format.c_str(),
-                         titanMeta.LoaderName.c_str(),
-                         titanMeta.Width,
-                         titanMeta.Height,
-                         previewW,
-                         baseRatio,
-                         absoluteZoom);
-                     OutputDebugStringW(tileDbg);
+                 // 2. Calculate Absolute Scale
+                 float fitScale = std::min(logicW / imgFullW, logicH / imgFullH);
+                 float absoluteZoom = fitScale * g_viewState.Zoom; 
+                 float invZoom = 1.0f / absoluteZoom;
+                 
+                 // Centers
+                 float sCW = logicW / 2.0f;
+                 float sCH = logicH / 2.0f;
+                 float iCW = imgFullW / 2.0f;
+                 float iCH = imgFullH / 2.0f;
+                 
+                 // Viewport Top-Left in Image Space
+                 float viewL = (0.0f - sCW - g_viewState.PanX) * invZoom + iCW;
+                 float viewT = (0.0f - sCH - g_viewState.PanY) * invZoom + iCH;
+                 float viewW = logicW * invZoom;
+                 float viewH = logicH * invZoom;
+                 
+                 QuickView::RegionRect vp = { (int)viewL, (int)viewT, (int)viewW, (int)viewH };
+                 
+                 // Calculate Base Preview Ratio (Preview / Original)
+                 float baseRatio = 0.0f;
+                 float previewW = g_imageResource.GetSize().width;
+                 if (titanMeta.Width > 0) {
+                     baseRatio = previewW / (float)titanMeta.Width;
                  }
-                 g_imageEngine->UpdateTileViewport(vp, absoluteZoom, titanMeta.Width, titanMeta.Height, baseRatio, 0.0f, 0.0f);
-                 lastVP = vp;
-                 lastAbsZoom = absoluteZoom;
-             }
-             
-             // [Pure DComp] Render Titan View directly to DComp Surface
-              // Pure DComp rendering for Titan (Tiles)
-             // [Pure DComp] Update Virtual Tiles on the active layer
-             // Smart Dispatch in CompositionEngine handles creating/updating the Virtual Surface.
-             // We just signal "Update Tiles now".
-             
-             // [Fix] Pass visible rectangle for Culling (Image Space)
-             D2D1_RECT_F visibleRect = D2D1::RectF(viewL, viewT, viewL + viewW, viewT + viewH);
-             
-             HRESULT hrTile = g_compEngine->UpdateVirtualTiles(
-                 g_imageEngine->GetTileManager().get(),
-                 g_showTileGrid,
-                 &visibleRect
-             );
-             // [Throttle] Deferred tiles exist — request next frame to continue uploading
-             if (hrTile == S_FALSE) {
-                 // [Fix] Do not use RequestRepaint (which relies on InvalidateRect).
-                 // InvalidateRect might be cleared by ValidateRect if OnPaint hasn't returned.
-                 // Force a new message into the queue to guarantee the loop continues.
-                 PostMessageW(hwnd, WM_APP + 4, 0, 0); // WM_DEFERRED_REPAINT
-             }
+
+                 // [No-DC JXL Guard] For fake/tiny placeholder bases, force tile scheduling immediately.
+                 std::wstring fmtUpper = titanMeta.Format;
+                 std::transform(fmtUpper.begin(), fmtUpper.end(), fmtUpper.begin(), ::towupper);
+                 bool isJxlLike = (fmtUpper.find(L"JXL") != std::wstring::npos || fmtUpper.find(L"JPEG XL") != std::wstring::npos);
+                 if (!isJxlLike && !g_imagePath.empty()) {
+                     std::wstring pathLower = g_imagePath;
+                     std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
+                     if (pathLower.ends_with(L".jxl")) isJxlLike = true;
+                 }
+
+                 constexpr float kVirtualNoDcRatio = 0.125f; // 1:8
+                 float previewH = g_imageResource.GetSize().height;
+                 bool fakeBase = (titanMeta.LoaderName.find(L"Fake Base") != std::wstring::npos);
+                 bool tinyPreview = (previewW <= 2.0f || previewH <= 2.0f);
+                 bool weakPreview = (previewW <= 16.0f || previewH <= 16.0f); // Expanded threshold for 4x4 or 8x8
+
+                 if (fakeBase || tinyPreview) {
+                     // Placeholder base (or missing base): force tiles on first frame.
+                     baseRatio = 0.0f;
+                 } else if (weakPreview || baseRatio < 0.001f) {
+                     // Expanded safety net: if ratio is mathematically destroyed (< 0.1%),
+                     // treat it as a weak shell/fallback and force reasonable tile layering limit (LOD3/4)
+                     baseRatio = kVirtualNoDcRatio;
+                 }
+
+                 // Update Manager (Scheduling) - Guarded to prevent loop
+                  static QuickView::RegionRect lastVP = { -1, -1, -1, -1 };
+                  static float lastAbsZoom = 0;
+                  static ImageID lastTileImageId = 0;
+                  static uint64_t lastDispatchSerial = 0;
+                  ImageID curTileImageId = g_currentImageId.load();
+                  bool imageChanged = (curTileImageId != lastTileImageId);
+                  uint64_t curDispatchSerial = g_titanDispatchSerial.load(std::memory_order_acquire);
+                  bool dispatchChanged = (curDispatchSerial != lastDispatchSerial);
+                  bool forceReseed = g_forceTitanTileReseed.exchange(false, std::memory_order_acq_rel);
+                  if (imageChanged) {
+                      lastVP = { -1, -1, -1, -1 };
+                      lastAbsZoom = -1.0f;
+                      lastTileImageId = curTileImageId;
+                  }
+                  if (dispatchChanged) {
+                      lastDispatchSerial = curDispatchSerial;
+                  }
+                  if (imageChanged || dispatchChanged || forceReseed || vp.x != lastVP.x || vp.y != lastVP.y || vp.w != lastVP.w || vp.h != lastVP.h || absoluteZoom != lastAbsZoom) {
+                      if (imageChanged || dispatchChanged || forceReseed) {
+                          wchar_t tileDbg[320];
+                          swprintf_s(tileDbg,
+                              L"[Main] Titan schedule seed: id=%llu fmt=%s loader=%s meta=%dx%d previewW=%.1f baseRatio=%.4f zoom=%.4f\n",
+                             curTileImageId,
+                             titanMeta.Format.c_str(),
+                             titanMeta.LoaderName.c_str(),
+                             titanMeta.Width,
+                             titanMeta.Height,
+                             previewW,
+                             baseRatio,
+                             absoluteZoom);
+                         OutputDebugStringW(tileDbg);
+                     }
+                     g_imageEngine->UpdateTileViewport(vp, absoluteZoom, titanMeta.Width, titanMeta.Height, baseRatio, 0.0f, 0.0f);
+                     lastVP = vp;
+                     lastAbsZoom = absoluteZoom;
+                 }
+                 
+                 // [Pure DComp] Render Titan View directly to DComp Surface
+                 // [Fix] Pass visible rectangle for Culling (Image Space)
+                 D2D1_RECT_F visibleRect = D2D1::RectF(viewL, viewT, viewL + viewW, viewT + viewH);
+                 
+                 HRESULT hrTile = g_compEngine->UpdateVirtualTiles(
+                     g_imageEngine->GetTileManager().get(),
+                     g_showTileGrid,
+                     &visibleRect
+                 );
+                 // [Throttle] Deferred tiles exist — request next frame to continue uploading
+                 if (hrTile == S_FALSE) {
+                     // [Fix] Do not use RequestRepaint (which relies on InvalidateRect).
+                     // InvalidateRect might be cleared by ValidateRect if OnPaint hasn't returned.
+                     // Force a new message into the queue to guarantee the loop continues.
+                     PostMessageW(hwnd, WM_APP + 4, 0, 0); // WM_DEFERRED_REPAINT
+                 }
+            }
         }
         context->SetTransform(D2D1::Matrix3x2F::Identity());
         

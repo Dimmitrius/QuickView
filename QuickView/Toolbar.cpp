@@ -19,6 +19,13 @@ extern AppConfig g_config;
 #define ICON_WARNING L"\uE7BA"
 #define ICON_PIN L"\uE718"
 #define ICON_UNPIN L"\uE77A"
+#define ICON_COMPARE L"\uE7B8"
+#define ICON_SWAP L"\uE8AB"
+#define ICON_LAYOUT L"\uECA5"
+#define ICON_DELETE L"\uE74D"
+#define ICON_LINK L"\uE71B"
+#define ICON_PAN L"\uE7A5"
+#define ICON_EXIT L"\uE8BB"
 
 Toolbar::Toolbar() {
     // Define Buttons
@@ -37,7 +44,18 @@ Toolbar::Toolbar() {
         { ToolbarButtonID::RawToggle,   ICON_RAW[0], {}, false, false }, // Hidden/Disabled if not RAW
         { ToolbarButtonID::FixExtension, ICON_WARNING[0], {}, false, false, true }, // Hidden if no mismatch
         
-        { ToolbarButtonID::Pin,         ICON_PIN[0], {}, true, false }
+        { ToolbarButtonID::Pin,         ICON_PIN[0], {}, true, false },
+        { ToolbarButtonID::CompareToggle, ICON_COMPARE[0], {}, true, false },
+
+        // Compare mode buttons (hidden in normal mode)
+        { ToolbarButtonID::CompareSwap, ICON_SWAP[0], {}, true, false },
+        { ToolbarButtonID::CompareLayout, ICON_LAYOUT[0], {}, true, false },
+        { ToolbarButtonID::CompareInfo, ICON_INFO[0], {}, true, false },
+        { ToolbarButtonID::CompareDeleteLeft, ICON_DELETE[0], {}, true, false },
+        { ToolbarButtonID::CompareDeleteRight, ICON_DELETE[0], {}, true, false },
+        { ToolbarButtonID::CompareSyncZoom, ICON_LINK[0], {}, true, true },
+        { ToolbarButtonID::CompareSyncPan, ICON_PAN[0], {}, true, true },
+        { ToolbarButtonID::CompareExit, ICON_EXIT[0], {}, true, false }
     };
 }
 
@@ -112,8 +130,6 @@ void Toolbar::UpdateLayout(float winW, float winH) {
     // Skip layout if window has no valid size yet
     if (winW <= 0 || winH <= 0) return;
     
-    // [Phase 3] Check if window is too narrow for toolbar
-    m_windowTooNarrow = (winW < GetMinWidth());
     const float buttonSize = BUTTON_SIZE * m_uiScale;
     const float gap = GAP * m_uiScale;
     const float padX = PADDING_X * m_uiScale;
@@ -123,18 +139,44 @@ void Toolbar::UpdateLayout(float winW, float winH) {
     // [Fix] Always update layout to ensure Button State (e.g. Pin Toggle) is synced.
     // Optimization removed: static float s_lastW... inhibited state updates.
     
-    // Simpler: Count visible buttons
+    auto isCompareButton = [](ToolbarButtonID id) {
+        switch (id) {
+            case ToolbarButtonID::CompareSwap:
+            case ToolbarButtonID::CompareLayout:
+            case ToolbarButtonID::CompareInfo:
+            case ToolbarButtonID::CompareDeleteLeft:
+            case ToolbarButtonID::CompareDeleteRight:
+            case ToolbarButtonID::CompareSyncZoom:
+            case ToolbarButtonID::CompareSyncPan:
+            case ToolbarButtonID::CompareExit:
+                return true;
+            default:
+                return false;
+        }
+    };
+
+    auto isVisibleButton = [&](const ToolbarButton& btn) {
+        if (m_compareMode) {
+            return isCompareButton(btn.id);
+        }
+
+        if (isCompareButton(btn.id)) return false;
+        if (btn.id == ToolbarButtonID::RawToggle && !btn.isEnabled) return false;
+        if (btn.id == ToolbarButtonID::FixExtension && !btn.isWarning) return false;
+        return true;
+    };
+
+    // Count visible buttons
     int visibleCount = 0;
     for (const auto& btn : m_buttons) {
-        bool visible = true;
-        if (btn.id == ToolbarButtonID::RawToggle && !btn.isEnabled) visible = false; 
-        if (btn.id == ToolbarButtonID::FixExtension && !btn.isWarning) visible = false;
-        if (visible) visibleCount++;
+        if (isVisibleButton(btn)) visibleCount++;
     }
     
     // Calculate total width: padding + buttons + gaps between buttons
     float totalW = padX * 2 + (visibleCount * buttonSize);
     if (visibleCount > 1) totalW += (visibleCount - 1) * gap;
+    m_minRequiredWidth = totalW + (PADDING_X * 2 * m_uiScale);
+    m_windowTooNarrow = (winW < m_minRequiredWidth);
 
     float startX = (winW - totalW) / 2.0f;
     float startY = winH - bottomMargin - buttonSize - padY * 2;
@@ -149,9 +191,7 @@ void Toolbar::UpdateLayout(float winW, float winH) {
     float cy = startY + padY;
     
     for (auto& btn : m_buttons) {
-        bool visible = true;
-        if (btn.id == ToolbarButtonID::RawToggle && !btn.isEnabled) visible = false; 
-        if (btn.id == ToolbarButtonID::FixExtension && !btn.isWarning) visible = false;
+        bool visible = isVisibleButton(btn);
         
         // Sync Pin State
         if (btn.id == ToolbarButtonID::Pin) {
@@ -181,6 +221,15 @@ const wchar_t* GetTooltipText(const ToolbarButton& btn) {
         case ToolbarButtonID::RawToggle: return btn.isToggled ? AppStrings::Toolbar_Tooltip_RawFull : AppStrings::Toolbar_Tooltip_RawPreview;
         case ToolbarButtonID::FixExtension: return AppStrings::Toolbar_Tooltip_FixExtension;
         case ToolbarButtonID::Pin: return btn.isToggled ? AppStrings::Toolbar_Tooltip_Unpin : AppStrings::Toolbar_Tooltip_Pin;
+        case ToolbarButtonID::CompareToggle: return L"Compare";
+        case ToolbarButtonID::CompareSwap: return L"Swap Left/Right";
+        case ToolbarButtonID::CompareLayout: return L"Toggle Layout";
+        case ToolbarButtonID::CompareInfo: return L"Compare Info";
+        case ToolbarButtonID::CompareDeleteLeft: return L"Delete Left";
+        case ToolbarButtonID::CompareDeleteRight: return L"Delete Right";
+        case ToolbarButtonID::CompareSyncZoom: return btn.isToggled ? L"Zoom Sync: ON" : L"Zoom Sync: OFF";
+        case ToolbarButtonID::CompareSyncPan: return btn.isToggled ? L"Pan Sync: ON" : L"Pan Sync: OFF";
+        case ToolbarButtonID::CompareExit: return L"Exit Compare";
         default: return nullptr;
     }
 }
@@ -415,5 +464,16 @@ void Toolbar::SetExtensionWarning(bool hasMismatch) {
             btn.isWarning = hasMismatch; // Only visible if warning?
             // UpdateLayout should handle visibility based on isWarning flag logic I wrote above.
         }
+    }
+}
+
+void Toolbar::SetCompareMode(bool enabled) {
+    m_compareMode = enabled;
+}
+
+void Toolbar::SetCompareSyncStates(bool syncZoom, bool syncPan) {
+    for (auto& btn : m_buttons) {
+        if (btn.id == ToolbarButtonID::CompareSyncZoom) btn.isToggled = syncZoom;
+        if (btn.id == ToolbarButtonID::CompareSyncPan) btn.isToggled = syncPan;
     }
 }
