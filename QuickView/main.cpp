@@ -3027,17 +3027,28 @@ void AdjustWindowToImage(HWND hwnd) {
 
 
     // [v9.7] Fix: Use SetWindowPlacement to set dimensions.
-
-    // This handles Maximize/Snap states gracefully.
     // This handles Maximize/Snap states gracefully.
     WINDOWPLACEMENT wp = { sizeof(WINDOWPLACEMENT) };
     if (GetWindowPlacement(hwnd, &wp)) {
         wp.flags = 0;
         wp.showCmd = SW_SHOWNORMAL;
-        wp.rcNormalPosition.left = newLeft;
-        wp.rcNormalPosition.top = newTop;
-        wp.rcNormalPosition.right = newLeft + windowW;
-        wp.rcNormalPosition.bottom = newTop + windowH;
+        
+        // [Fix] Convert Screen Coordinates (newLeft/newTop) to Workspace Coordinates
+        // rcNormalPosition expects coordinates relative to the primary monitor's work area.
+        int offsetLeft = 0;
+        int offsetTop = 0;
+        if ((GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0) {
+            MONITORINFO pmi = { sizeof(MONITORINFO) };
+            if (GetMonitorInfoW(MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY), &pmi)) {
+                offsetLeft = pmi.rcWork.left - pmi.rcMonitor.left;
+                offsetTop = pmi.rcWork.top - pmi.rcMonitor.top;
+            }
+        }
+        
+        wp.rcNormalPosition.left = newLeft - offsetLeft;
+        wp.rcNormalPosition.top = newTop - offsetTop;
+        wp.rcNormalPosition.right = wp.rcNormalPosition.left + windowW;
+        wp.rcNormalPosition.bottom = wp.rcNormalPosition.top + windowH;
         
         SetWindowPlacement(hwnd, &wp);
     } else {
