@@ -761,7 +761,6 @@ HRESULT CompositionEngine::PlayPingPongCrossFade(float durationMs, bool isTransp
     }
     */
     
-    m_device->Commit();
     return S_OK;
 }
 

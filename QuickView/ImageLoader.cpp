@@ -5818,20 +5818,9 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
         std::string xml(data, data + size);
         
         try {
-            // Priority 1: viewBox="0 0 W H"
-            std::regex reViewBox("viewBox=\"([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+)\"");
             std::smatch m;
-            if (std::regex_search(xml, m, reViewBox)) {
-                float w = std::stof(m[3]);
-                float h = std::stof(m[4]);
-                if (w > 0 && h > 0) {
-                    pInfo->width = (int)w;
-                    pInfo->height = (int)h;
-                    return S_OK;
-                }
-            }
             
-            // Priority 2: width="..." height="..."
+            // Priority 1: width="..." height="..." (pixel rendering size per W3C SVG spec)
             std::regex reWidth("width=\"([0-9\\.]+)[a-z]*\"");
             std::regex reHeight("height=\"([0-9\\.]+)[a-z]*\"");
             float w = 0, h = 0;
@@ -5840,8 +5829,20 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
             if (std::regex_search(xml, m, reHeight)) h = std::stof(m[1]);
             
             if (w > 0 && h > 0) {
-                pInfo->width = (int)w;
-                pInfo->height = (int)h;
+                pInfo->width = (int)std::lround(w);
+                pInfo->height = (int)std::lround(h);
+                return S_OK;
+            }
+            
+            // Priority 2 (Fallback): viewBox="x y W H" (internal coordinate system)
+            std::regex reViewBox("viewBox=\"([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+)\"");
+            if (std::regex_search(xml, m, reViewBox)) {
+                float vw = std::stof(m[3]);
+                float vh = std::stof(m[4]);
+                if (vw > 0 && vh > 0) {
+                    pInfo->width = (int)std::lround(vw);
+                    pInfo->height = (int)std::lround(vh);
+                }
             }
         } catch (...) {
             // Ignore parsing errors, return default
@@ -8229,18 +8230,7 @@ static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height
     std::string header(buffer, bytesRead);
     std::smatch match;
     
-    // 1. Try viewBox="x y w h"
-    // Handles space or comma separators.
-    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
-    if (std::regex_search(header, match, reViewBox)) {
-        try {
-            *width = (uint32_t)std::stof(match[1].str());
-            *height = (uint32_t)std::stof(match[2].str());
-            return true;
-        } catch (...) {}
-    }
-    
-    // 2. Try width="..." height="..."
+    // 1. Try width="..." height="..." (pixel rendering size - takes priority per W3C SVG spec)
     // Handles "100px", "100", "100pt" roughly
     std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
     std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
@@ -8255,10 +8245,21 @@ static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height
         try { h = std::stof(match[1].str()); foundH = true; } catch(...) {}
     }
     
-    if (foundW && foundH) {
-        *width = (uint32_t)w;
-        *height = (uint32_t)h;
+    if (foundW && foundH && w > 0 && h > 0) {
+        *width = (uint32_t)std::lround(w);
+        *height = (uint32_t)std::lround(h);
         return true;
+    }
+    
+    // 2. Fallback: viewBox="x y w h" (internal coordinate system)
+    // Handles space or comma separators.
+    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
+    if (std::regex_search(header, match, reViewBox)) {
+        try {
+            *width = (uint32_t)std::lround(std::stof(match[1].str()));
+            *height = (uint32_t)std::lround(std::stof(match[2].str()));
+            return true;
+        } catch (...) {}
     }
     
     return false;
@@ -8871,18 +8872,25 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             std::string svgContent(fileData.begin(), fileData.end());
 
             try {
-                // Try viewBox="x y w h"
-                std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
                 std::smatch match;
-                if (std::regex_search(svgContent, match, reViewBox)) {
-                    svgW = std::stof(match[1]);
-                    svgH = std::stof(match[2]);
+                
+                // Priority 1: width="..." height="..." (pixel rendering size per W3C SVG spec)
+                std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
+                std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
+                float pw = 0, ph = 0;
+                if (std::regex_search(svgContent, match, reWidth)) pw = std::stof(match[1]);
+                if (std::regex_search(svgContent, match, reHeight)) ph = std::stof(match[1]);
+                
+                if (pw > 0 && ph > 0) {
+                    svgW = pw;
+                    svgH = ph;
                 } else {
-                     // Try width/height (basic)
-                    std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
-                    std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
-                    if (std::regex_search(svgContent, match, reWidth)) svgW = std::stof(match[1]);
-                    if (std::regex_search(svgContent, match, reHeight)) svgH = std::stof(match[1]);
+                    // Priority 2 (Fallback): viewBox="x y w h" (internal coordinate system)
+                    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
+                    if (std::regex_search(svgContent, match, reViewBox)) {
+                        svgW = std::stof(match[1]);
+                        svgH = std::stof(match[2]);
+                    }
                 }
             } catch (...) {
                 OutputDebugStringW(L"[SVG] Dimension parse failed, using default\n");
@@ -8893,8 +8901,8 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
 
             // 3. Populate RawImageFrame
             outFrame->format = PixelFormat::SVG_XML;
-            outFrame->width = (int)svgW;
-            outFrame->height = (int)svgH;
+            outFrame->width = (int)std::lround(svgW);
+            outFrame->height = (int)std::lround(svgH);
             outFrame->stride = 0; // No pixels
             outFrame->pixels = nullptr;
             

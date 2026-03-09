@@ -49,7 +49,8 @@ public:
     ID2D1DeviceContext* BeginPendingUpdate(UINT width, UINT height, bool isTitan = false, UINT fullWidth = 0, UINT fullHeight = 0);
     HRESULT EndPendingUpdate();
     
-    // PlayPingPongCrossFade: Animate transition from Active to Pending
+    // PlayPingPongCrossFade: Animate transition from Active to Pending.
+    // Caller is responsible for the final Commit after any transform/state sync.
     // isTransparent: If true, cross-fade both layers. If false, only fade out old.
     HRESULT PlayPingPongCrossFade(float durationMs, bool isTransparent = false);
     
