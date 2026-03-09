@@ -4663,6 +4663,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              return 0;
         }
 
+        if (action == SettingsAction::DragWindow) {
+             if (!g_isFullScreen) {
+                 ReleaseCapture();
+                 SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+             }
+             return 0;
+        }
+
         if (action != SettingsAction::None) {
              if (action == SettingsAction::RepaintAll) {
                  RefreshWindowDpi(hwnd);

@@ -12,7 +12,8 @@ enum class SettingsAction {
     None,
     RepaintStatic, // Only UI layer needs update (Tab switch, Hover)
     RepaintAll,    // Config changed, partial or full image redraw might be needed
-    OpenHelp       // Close Settings and Open Help Overlay (Handoff)
+    OpenHelp,      // Close Settings and Open Help Overlay (Handoff)
+    DragWindow     // Native window drag via HTCAPTION
 };
 
 enum class OptionType {

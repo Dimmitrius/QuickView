@@ -1,4 +1,5 @@
-﻿#include "pch.h"
+#include "pch.h"
+#pragma execution_character_set("utf-8")
 #include "SettingsOverlay.h"
 #include "HelpOverlay.h"
 #include "AppStrings.h"
@@ -789,12 +790,12 @@ void SettingsOverlay::BuildMenu() {
     itemLang.options = { 
         L"Auto", 
         L"English", 
-        L"中文 (简体)", 
-        L"中文 (繁體)", 
-        L"日本語", 
-        L"Русский", 
-        L"Deutsch", 
-        L"Español" 
+        L"Chinese (Simplified)", 
+        L"Chinese (Traditional)", 
+        L"Japanese", 
+        L"Russian", 
+        L"German", 
+        L"Spanish" 
     };
     itemLang.onChange = [this]() {
         AppStrings::SetLanguage((AppStrings::Language)g_config.Language);
@@ -2350,7 +2351,7 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
             }
             tabY += tabStep;
         }
-        return SettingsAction::RepaintStatic; // Clicked sidebar blank area - consume
+        return SettingsAction::DragWindow; // Clicked sidebar blank area - native drag
     }
 
     // 3. Active Combo Processing
@@ -2371,8 +2372,10 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
              int idx = (int)((y - dropRect.top) / itemH);
              if (idx >= 0 && idx < count) {
                  if (m_pActiveCombo->pIntVal) {
-                     *m_pActiveCombo->pIntVal = idx;
-                     if (m_pActiveCombo->onChange) m_pActiveCombo->onChange();
+                     if (*m_pActiveCombo->pIntVal != idx) {
+                         *m_pActiveCombo->pIntVal = idx;
+                         if (m_pActiveCombo->onChange) m_pActiveCombo->onChange();
+                     }
                  }
                  m_pActiveCombo = nullptr; // Close
                  return SettingsAction::RepaintAll;
@@ -2490,8 +2493,8 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         }
     }
 
-    // Clicked content background - consume
-    return (m_pActiveCombo) ? SettingsAction::RepaintAll : SettingsAction::RepaintStatic;
+    // Clicked content background - trigger window drag (unless combo box is active)
+    return (m_pActiveCombo) ? SettingsAction::RepaintAll : SettingsAction::DragWindow;
 }
 
 SettingsAction SettingsOverlay::OnLButtonUp(float x, float y) {
