@@ -254,6 +254,8 @@ static D2D1_RECT_F g_filenameRect = {};  // Filename click area
 static D2D1_RECT_F g_panelToggleRect = {}; // Expand/Collapse Button Rect
 static D2D1_RECT_F g_panelCloseRect = {};  // Close Button Rect
 bool g_isLoading = false;           // Show Wait Cursor
+std::atomic<bool> g_isPhase2Debouncing{false}; // Suppress IsIdle logic during phase 2 delay
+bool g_isNavigatingToTitan = false; // Is the currently loading image a Titan image?
 static std::atomic<uint64_t> g_currentNavToken = 0; // [Phase 3] Navigation Token (deprecated)
 static std::atomic<ImageID> g_currentImageId{0}; // [ImageID] Stable path hash for event filtering
 static int g_imageQualityLevel = 0;         // [v3.1] 0: Void, 1: Wiki/Scout, 2: Truth/Heavy
@@ -1424,10 +1426,12 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
     
     // Track surface size for WM_MOUSEWHEEL and WM_SIZE calculations
     g_lastSurfaceSize = D2D1::SizeF((float)surfW, (float)surfH);
-    // [Fix] Instant swap to prevent scaling artifacts
-    // Applying the same DComp scaling matrix across visuals of different internal 
-    // resolutions during a cross-fade causes visual pop/stretch artifacts.
-    g_compEngine->PlayPingPongCrossFade(0, isTransparent);
+    
+    // [Fix] Enable smooth cross-fade transition.
+    // Use 150ms fade to eliminate transparent flicker.
+    // Note: If visual pop/stretch artifacts appear due to DComp global scaling matrix,
+    // further fixes may be needed to decouple old layer scaling. 
+    g_compEngine->PlayPingPongCrossFade(150.0f, isTransparent);
     if (g_compEngine->IsInitialized()) {
         SyncDCompState(hwnd, (float)winW, (float)winH);
     }
@@ -3924,6 +3928,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 KillTimer(hwnd, 996);
             }
         }
+        
+        // Titan Base Decode UI Heartbeat (995)
+        if (wParam == 995) {
+            if (g_isLoading) {
+                RequestRepaint(PaintLayer::Dynamic);
+            } else {
+                KillTimer(hwnd, 995);
+            }
+        }
         return 0;
     }
     case WM_GETMINMAXINFO: {
@@ -4629,7 +4642,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         
 
-        
     case WM_PAINT:
         OnPaint(hwnd);
         // Gallery Animation Loop if visible
@@ -6722,6 +6734,7 @@ void ProcessEngineEvents(HWND hwnd) {
 
                 // Cleanup
                 g_isLoading = false;
+                KillTimer(hwnd, 995); // Stop UI heartbeat timer
                 
                 // Cursor Update
                 POINT pt;
@@ -6842,7 +6855,7 @@ void ProcessEngineEvents(HWND hwnd) {
          }
     }
 
-    if (g_imageEngine->IsIdle()) {
+    if (g_imageEngine->IsIdle() && !g_isPhase2Debouncing.load(std::memory_order_acquire)) {
         if (g_isLoading) {  // Was loading, now finished
             g_isLoading = false;
             // Force cursor update immediately
@@ -7119,15 +7132,12 @@ static void PrimePhase1Placeholder(HWND hwnd, const std::wstring& path, ImageID 
     // result appears directly. Titan images (>8192px or >50MP) still benefit
     // from the placeholder chain because their decode can take 1-5 seconds.
     {
-        bool isTitan = (sourceW > 8192 || sourceH > 8192 ||
-                       ((uint64_t)sourceW * (uint64_t)sourceH > 50000000ULL));
+        bool isTitan = g_isNavigatingToTitan;
         if (!isTitan) {
-            OutputDebugStringW(L"[Phase1] Non-Titan: Skip Shell/WIC thumbnail. Skeleton only.\n");
-            auto skeleton = MakePhase1SkeletonFrame();
-            if (skeleton) {
-                ApplyPhase1PlaceholderFrame(hwnd, path, imageId, skeleton, sourceW, sourceH, L"Skeleton (Direct)");
-            }
-            return; // No Shell/WIC extraction for non-Titan images
+            OutputDebugStringW(L"[Phase1] Non-Titan: Skip Phase 1 completely.\n");
+            // [Fix] Do not apply skeleton. Leave current image intact for visual continuity.
+            // Do not update metadata early to avoid DComp scaling artifacts on the old layer.
+            return; // No Shell/WIC extraction and NO skeleton for non-Titan images
         }
     }
 
@@ -7265,6 +7275,7 @@ static FireAndForget RunPhase2DispatchLoop() {
             task.navToken != g_currentNavToken.load() ||
             g_imagePath != task.path) {
             OutputDebugStringW(L"[Phase2] QueueDispatch skipped stale task.\n");
+            g_isPhase2Debouncing.store(false, std::memory_order_release);
             co_await ResumeBackground{};
             continue;
         }
@@ -7283,6 +7294,8 @@ static FireAndForget RunPhase2DispatchLoop() {
             task.navToken,
             task.navigatorIndex,
             task.dir);
+
+        g_isPhase2Debouncing.store(false, std::memory_order_release);
 
         co_await ResumeBackground{};
     }
@@ -7343,6 +7356,8 @@ static void EnqueuePhase2NavigationTask(
         navigatorIndex);
     OutputDebugStringW(pushBuf);
 
+    g_isPhase2Debouncing.store(true, std::memory_order_release);
+
     if (!g_phase2NavLoopRunning.exchange(true)) {
         RunPhase2DispatchLoop();
     }
@@ -7383,6 +7398,20 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
     }
     
     g_isLoading = true;
+    
+    // [Fix] Reliable Titan Detection
+    // Use the robust Phase 2 logic (which checks exact dimensions + file size) 
+    // to determine if we should show the Titan decode progress bar.
+    int idx = g_navigator.FindIndex(path);
+    uintmax_t fileSize = 0;
+    if (idx != -1) {
+        fileSize = g_navigator.GetFileSize(idx);
+    }
+    g_isNavigatingToTitan = ShouldUsePhase2TitanDebounce(path, fileSize);
+    if (g_isNavigatingToTitan) {
+        SetTimer(hwnd, 995, 16, nullptr); // ~60 FPS UI Heartbeat for progress bar
+    }
+    
     g_isCrossFading = false;
     g_ghostBitmap = nullptr; // Clear previous ghost
     g_isBlurry = true; // Reset for new image
@@ -7420,13 +7449,7 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
     PostMessage(hwnd, WM_SETCURSOR, (WPARAM)hwnd, MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
     
 // Phase 2 Kick: queue-drop debounce (Titan only)
-    // Phase 3.1: Pass file size for Threshold Lane Decision
-    uintmax_t fileSize = 0;
-    // Fast lookup if path matches current navigator state (most likely)
-    int idx = g_navigator.FindIndex(path);
-    if (idx != -1) {
-        fileSize = g_navigator.GetFileSize(idx);
-    }
+    // (Moved fileSize lookup to top of StartNavigation)
 
     if (ShouldUsePhase2TitanDebounce(path, fileSize)) {
         EnqueuePhase2NavigationTask(hwnd, path, fileSize, idx, myToken, myImageId, dir);
@@ -7661,7 +7684,11 @@ void OnPaint(HWND hwnd) {
                   if (dispatchChanged) {
                       lastDispatchSerial = curDispatchSerial;
                   }
-                  if (imageChanged || dispatchChanged || forceReseed || vp.x != lastVP.x || vp.y != lastVP.y || vp.w != lastVP.w || vp.h != lastVP.h || absoluteZoom != lastAbsZoom) {
+                  
+                  // [Performance] Block TileManager from evaluating tiles until Base Layer finishes loading (!g_isLoading)
+                  // This prevents the Phase1 thumbnail from triggering a flood of deep zoom tile
+                  // decodes that starve the Base Layer threads.
+                  if (!g_isLoading && (imageChanged || dispatchChanged || forceReseed || vp.x != lastVP.x || vp.y != lastVP.y || vp.w != lastVP.w || vp.h != lastVP.h || absoluteZoom != lastAbsZoom)) {
                       if (imageChanged || dispatchChanged || forceReseed) {
                           wchar_t tileDbg[320];
                           swprintf_s(tileDbg,

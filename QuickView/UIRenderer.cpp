@@ -24,6 +24,7 @@ extern void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect);
 
 extern RuntimeConfig g_runtime;
 extern bool g_isLoading; // [Fix] Loading indicator for progress bar
+extern bool g_isNavigatingToTitan; // [Fix] Restrict decode progress bar to Titan images
 extern ViewState g_viewState;  // [v3.2] For Nav Indicators
 extern CImageLoader::ImageMetadata g_currentMetadata;  // [v3.2] For Info Panel
 extern std::wstring g_imagePath;  // [v3.2] For Info Panel
@@ -664,7 +665,12 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
     // [Fix] g_isLoading is the authoritative "load in progress" flag from main thread.
     // It bypasses telemetry conditions which can be stale (e.g. Phase 1 skeleton sets
     // baseLayerReady=true before Phase 2 resets it, leaving no OnPaint trigger between).
-    const bool decodingActive = hasTileProgressGap || baseLoading || (g_isLoading && !tilePipelineActive);
+    bool decodingActive = hasTileProgressGap || baseLoading || (g_isLoading && !tilePipelineActive);
+    
+    // [Fix] Only show decode progress bar for Titan images as per user requirement.
+    if (!g_isNavigatingToTitan && !hasTileProgressGap && !baseLoading) {
+        decodingActive = false;
+    }
 
     const DWORD now = GetTickCount();
     if (m_decodeWasActive && !decodingActive) {
@@ -741,10 +747,10 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
     D2D1_RECT_F fullBarShadow = D2D1::RectF(0.0f, barY + 1.0f, drawW, barY + barThickness + 2.0f);
 
     ComPtr<ID2D1SolidColorBrush> trackBrush;
-    D2D1_COLOR_F trackColor = D2D1::ColorF(0.66f, 0.86f, 1.0f, 0.20f * alpha);
+    D2D1_COLOR_F trackColor = D2D1::ColorF(0.20f, 0.45f, 0.85f, 0.25f * alpha); // [Fix] Deeper blue track
     if (alpha > 0.0f) {
         ComPtr<ID2D1SolidColorBrush> trackShadowBrush;
-        D2D1_COLOR_F trackShadow = D2D1::ColorF(0.12f, 0.22f, 0.34f, 0.90f * alpha);
+        D2D1_COLOR_F trackShadow = D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha); // [Fix] Deeper shadow
         dc->CreateSolidColorBrush(trackShadow, &trackShadowBrush);
         dc->FillRectangle(fullBarShadow, trackShadowBrush.Get());
 
@@ -752,14 +758,14 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
         dc->FillRectangle(fullBar, trackBrush.Get());
 
         ComPtr<ID2D1SolidColorBrush> trackStrokeBrush;
-        D2D1_COLOR_F trackStroke = D2D1::ColorF(0.92f, 0.98f, 1.0f, 0.50f * alpha);
+        D2D1_COLOR_F trackStroke = D2D1::ColorF(0.40f, 0.65f, 0.95f, 0.40f * alpha); // [Fix] Deeper stroke
         dc->CreateSolidColorBrush(trackStroke, &trackStrokeBrush);
         dc->FillRectangle(D2D1::RectF(0.0f, barY, drawW, barY + 1.0f), trackStrokeBrush.Get());
     }
 
     if (alpha > 0.0f && scanningMode) {
         // Electric-arc flow: one-directional packet with trailing streaks.
-        m_decodeScanPhase += 0.012f; // slower than previous pulse
+        m_decodeScanPhase += 0.005f; // [Fix] Slower scanning mode (was 0.012f)
         if (m_decodeScanPhase >= 1.0f) m_decodeScanPhase -= 1.0f;
 
         float packetW = drawW * 0.18f;
@@ -778,15 +784,15 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
             D2D1_RECT_F segShadow = D2D1::RectF(left, barY + 1.0f, right, barY + barThickness + 2.0f);
 
             ComPtr<ID2D1SolidColorBrush> segShadowBrush;
-            dc->CreateSolidColorBrush(D2D1::ColorF(0.12f, 0.22f, 0.34f, 0.90f * alpha), &segShadowBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha), &segShadowBrush);
             dc->FillRectangle(segShadow, segShadowBrush.Get());
 
             ComPtr<ID2D1SolidColorBrush> segGlowBrush;
-            dc->CreateSolidColorBrush(D2D1::ColorF(0.66f, 0.90f, 1.0f, (glowAlpha + 0.06f) * alpha), &segGlowBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.50f, 0.95f, (glowAlpha + 0.06f) * alpha), &segGlowBrush);
             dc->FillRectangle(segGlow, segGlowBrush.Get());
 
             ComPtr<ID2D1SolidColorBrush> segBrush;
-            dc->CreateSolidColorBrush(D2D1::ColorF(0.84f, 0.97f, 1.0f, (bodyAlpha + 0.04f) * alpha), &segBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.70f, 1.0f, (bodyAlpha + 0.04f) * alpha), &segBrush);
             dc->FillRectangle(seg, segBrush.Get());
         };
 
@@ -817,14 +823,14 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
             }
         }
 
-        D2D1_COLOR_F fillColor = D2D1::ColorF(0.82f, 0.96f, 1.0f, alpha + flashBoost);
+        D2D1_COLOR_F fillColor = D2D1::ColorF(0.30f, 0.60f, 0.95f, alpha + flashBoost); // [Fix] Deeper fill
         if (fillColor.a > 1.0f) fillColor.a = 1.0f;
         ComPtr<ID2D1SolidColorBrush> fillGlowBrush;
-        D2D1_COLOR_F glowColor = D2D1::ColorF(0.64f, 0.90f, 1.0f, 0.30f * alpha + flashBoost * 0.40f);
+        D2D1_COLOR_F glowColor = D2D1::ColorF(0.15f, 0.40f, 0.85f, 0.40f * alpha + flashBoost * 0.40f); // [Fix] Deeper glow
         if (glowColor.a > 1.0f) glowColor.a = 1.0f;
         dc->CreateSolidColorBrush(glowColor, &fillGlowBrush);
         ComPtr<ID2D1SolidColorBrush> fillShadowBrush;
-        D2D1_COLOR_F fillShadowColor = D2D1::ColorF(0.12f, 0.22f, 0.34f, 0.90f * alpha);
+        D2D1_COLOR_F fillShadowColor = D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha); // [Fix] Deeper shadow
         dc->CreateSolidColorBrush(fillShadowColor, &fillShadowBrush);
         dc->FillRectangle(fillShadow, fillShadowBrush.Get());
         dc->FillRectangle(fillGlow, fillGlowBrush.Get());
@@ -832,7 +838,7 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
         dc->FillRectangle(fillRect, fillBrush.Get());
 
         ComPtr<ID2D1SolidColorBrush> fillStrokeBrush;
-        D2D1_COLOR_F fillStroke = D2D1::ColorF(0.97f, 1.0f, 1.0f, 0.56f * alpha + flashBoost * 0.50f);
+        D2D1_COLOR_F fillStroke = D2D1::ColorF(0.60f, 0.80f, 1.0f, 0.46f * alpha + flashBoost * 0.50f); // [Fix] Deeper stroke
         if (fillStroke.a > 1.0f) fillStroke.a = 1.0f;
         dc->CreateSolidColorBrush(fillStroke, &fillStrokeBrush);
         dc->FillRectangle(D2D1::RectF(0.0f, barY, fillW, barY + 1.0f), fillStrokeBrush.Get());
@@ -844,7 +850,7 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
             if (headW > 6.0f) headW = 6.0f;
             D2D1_RECT_F headRect = D2D1::RectF(fillW - headW, barY - glowPad * 0.35f, fillW, barY + barThickness + glowPad * 0.35f);
             ComPtr<ID2D1SolidColorBrush> headBrush;
-            D2D1_COLOR_F headColor = D2D1::ColorF(0.96f, 1.0f, 1.0f, 0.56f * alpha + flashBoost * 0.35f);
+            D2D1_COLOR_F headColor = D2D1::ColorF(0.70f, 0.85f, 1.0f, 0.46f * alpha + flashBoost * 0.35f); // [Fix] Deeper highlight
             if (headColor.a > 1.0f) headColor.a = 1.0f;
             dc->CreateSolidColorBrush(headColor, &headBrush);
             dc->FillRectangle(headRect, headBrush.Get());
