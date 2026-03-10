@@ -1612,6 +1612,7 @@ tile_decode_done: ; // [P14] Jump target for fast path (skip legacy TJ decode)
                 }
                 
                 evt.type = EventType::FullReady;
+                evt.isScaled = !job.isFullDecode;
 
                 // [Standard] Deep Copy to Heap (since Arena is reused/reset)
                 auto safeFrame = std::make_shared<QuickView::RawImageFrame>();
@@ -2464,6 +2465,7 @@ HRESULT HeavyLanePool::LaunchDecodeWorker(
 
     STARTUPINFOW si{};
     si.cb = sizeof(si);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK; // Prevent OS Wait Cursor during background worker launch
     PROCESS_INFORMATION pi{};
 
     // [Phase 4.1] Double check cancel before creating process
