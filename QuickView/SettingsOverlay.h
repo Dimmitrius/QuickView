@@ -164,13 +164,13 @@ private:
     ComPtr<IDWriteTextFormat> m_textFormatIcon;
 
     // Layout Constants
-    const float SIDEBAR_WIDTH = 200.0f;
-    const float ITEM_HEIGHT = 40.0f;
-    const float PADDING = 20.0f;
+    const float SIDEBAR_WIDTH = 150.0f;
+    const float ITEM_HEIGHT = 32.0f;
+    const float PADDING = 16.0f;
     
     std::wstring m_debugInfo; // Debugging Icon Loading
-    const float HUD_WIDTH = 800.0f;
-    const float HUD_HEIGHT = 650.0f;
+    const float HUD_WIDTH = 680.0f;
+    const float HUD_HEIGHT = 560.0f;
 
     HWND m_hwnd = nullptr; // For Resize Logic
     ComPtr<IDWriteTextFormat> m_textFormatSymbol; // Segoe MDL2 Assets

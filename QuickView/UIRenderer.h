@@ -174,10 +174,10 @@ private:
     D2D1_RECT_F m_gpsLinkRect = {};
     
     // Grid Layout Constants
-    static constexpr float GRID_ICON_WIDTH = 20.0f;
-    static constexpr float GRID_LABEL_WIDTH = 55.0f;
-    static constexpr float GRID_ROW_HEIGHT = 18.0f;
-    static constexpr float GRID_PADDING = 8.0f;
+    static constexpr float GRID_ICON_WIDTH = 16.0f;
+    static constexpr float GRID_LABEL_WIDTH = 45.0f;
+    static constexpr float GRID_ROW_HEIGHT = 17.0f;
+    static constexpr float GRID_PADDING = 6.0f;
     
     // OSD 状态
     std::wstring m_osdText;

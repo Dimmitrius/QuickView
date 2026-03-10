@@ -111,7 +111,7 @@ void Toolbar::CreateResources(ID2D1RenderTarget* pRT) {
         DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL,
-        20.0f * m_uiScale,
+        16.0f * m_uiScale,
         L"en-us",
         &m_textFormatIcon
     );

@@ -65,9 +65,9 @@ private:
 
 
     // Layout
-    const float WIDTH = 600.0f;
-    const float MAX_HEIGHT = 700.0f;
-    const float ROW_HEIGHT = 35.0f;
-    const float HEADER_HEIGHT = 50.0f;
+    const float WIDTH = 500.0f;
+    const float MAX_HEIGHT = 600.0f;
+    const float ROW_HEIGHT = 28.0f;
+    const float HEADER_HEIGHT = 40.0f;
     D2D1_RECT_F m_finalRect = {};
 };

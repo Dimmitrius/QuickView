@@ -72,11 +72,11 @@ public:
 
 private:
     // Layout Constants
-    const float BUTTON_SIZE = 40.0f;
-    const float GAP = 8.0f;
-    const float PADDING_X = 12.0f;
-    const float PADDING_Y = 6.0f;
-    const float BOTTOM_MARGIN = 30.0f; // Gap from window bottom
+    const float BUTTON_SIZE = 32.0f;
+    const float GAP = 6.0f;
+    const float PADDING_X = 10.0f;
+    const float PADDING_Y = 4.0f;
+    const float BOTTOM_MARGIN = 24.0f; // Gap from window bottom
 
     // Animation
     float m_opacity = 0.0f;

@@ -47,9 +47,9 @@ void HelpOverlay::CreateResources(ID2D1RenderTarget* pRT) {
 
     if (!m_dwriteFactory) return;
     if (!m_fmtHeader || !m_fmtKey || !m_fmtDesc || !m_fmtTip || !m_fmtIcon) {
-        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f * m_uiScale, L"", &m_fmtHeader);
-        m_dwriteFactory->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f * m_uiScale, L"", &m_fmtKey);
-        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 15.0f * m_uiScale, L"", &m_fmtDesc);
+        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.0f * m_uiScale, L"", &m_fmtHeader);
+        m_dwriteFactory->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f * m_uiScale, L"", &m_fmtKey);
+        m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f * m_uiScale, L"", &m_fmtDesc);
         m_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f * m_uiScale, L"", &m_fmtTip);
         m_dwriteFactory->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f * m_uiScale, L"", &m_fmtIcon);
     }
@@ -228,7 +228,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         if (item.isHeader) {
             contentY += 20;
             pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, contentY, x + panelW - 24.0f * s, contentY + 30.0f * s), m_brushHeader.Get());
-            contentY += 35.0f * s;
+            contentY += 28.0f * s;
         } 
         else if (item.desc.empty()) {
             // Full Width Text (Tip)
@@ -246,7 +246,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 layout->GetMetrics(&metrics);
                 float h = metrics.height;
                 pRT->DrawTextLayout(D2D1::Point2F(x + 24.0f * s, contentY), layout.Get(), m_brushText.Get());
-                contentY += h + 15.0f * s; // Padding
+                contentY += h + 10.0f * s; // Padding
             }
         }
         else {
@@ -259,7 +259,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             // Value
             pRT->DrawTextW(item.desc.c_str(), (UINT32)item.desc.length(), m_fmtDesc.Get(), D2D1::RectF(x + 50.0f * s + keyW, contentY, x + panelW - 24.0f * s, contentY + rowH), m_brushText.Get());
             
-            contentY += 28.0f * s;
+            contentY += 24.0f * s;
         }
     }
     

@@ -326,7 +326,7 @@ void UIRenderer::EnsureTextFormats() {
         m_dwriteFactory->CreateTextFormat(
             L"Segoe UI", nullptr,
             DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            18.0f * s, L"en-us", &m_osdFormat
+            14.0f * s, L"en-us", &m_osdFormat
         );
         if (m_osdFormat) {
             // Use LEADING alignment since we use DrawTextLayout with explicit origin
@@ -339,7 +339,7 @@ void UIRenderer::EnsureTextFormats() {
         m_dwriteFactory->CreateTextFormat(
             L"Consolas", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            12.0f * s, L"en-us", &m_debugFormat
+            12.0f, L"en-us", &m_debugFormat
         );
     }
     
@@ -380,7 +380,7 @@ void UIRenderer::EnsureTextFormats() {
         m_dwriteFactory->CreateTextFormat(
             L"Segoe UI", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            13.0f * s, L"en-us", &m_panelFormat
+            11.0f * s, L"en-us", &m_panelFormat
         );
         if (m_panelFormat) {
             m_panelFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -867,8 +867,8 @@ void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
     if (m_width < 200) return;
     const float s = m_uiScale;
     
-    float btnW = 46.0f * s;
-    float btnH = 32.0f * s;
+    float btnW = 38.0f * s;
+    float btnH = 28.0f * s;
     
     // [Fix] Only apply offset when MAXIMIZED (has hidden border)
     // Fullscreen has NO border, so no offset needed
@@ -1527,9 +1527,9 @@ void UIRenderer::DrawCompactInfo(ID2D1DeviceContext* dc) {
     if (!meta.empty()) info += L"   " + meta;
     
     float textW = MeasureTextWidth(info);
-    float totalW = textW + 70.0f * s;
+    float totalW = textW + 56.0f * s;
     
-    D2D1_RECT_F rect = D2D1::RectF(20.0f * s, 10.0f * s, 20.0f * s + textW, 40.0f * s);
+    D2D1_RECT_F rect = D2D1::RectF(16.0f * s, 8.0f * s, 16.0f * s + textW, 32.0f * s);
     
     // Shadow Text
     ComPtr<ID2D1SolidColorBrush> brushShadow, brushText, brushYellow, brushRed;
@@ -1543,13 +1543,13 @@ void UIRenderer::DrawCompactInfo(ID2D1DeviceContext* dc) {
     dc->DrawTextW(info.c_str(), (UINT32)info.length(), m_panelFormat.Get(), rect, brushText.Get());
 
     // Expand Button [+]
-    m_panelToggleRect = D2D1::RectF(rect.right + 8.0f * s, rect.top, rect.right + 38.0f * s, rect.bottom);
+    m_panelToggleRect = D2D1::RectF(rect.right + 6.0f * s, rect.top, rect.right + 30.0f * s, rect.bottom);
     D2D1_RECT_F shadowRect1 = D2D1::RectF(m_panelToggleRect.left + 1.0f * s, m_panelToggleRect.top + 1.0f * s, m_panelToggleRect.right + 1.0f * s, m_panelToggleRect.bottom + 1.0f * s);
     dc->DrawTextW(L"[+]", 3, m_panelFormat.Get(), shadowRect1, brushShadow.Get());
     dc->DrawTextW(L"[+]", 3, m_panelFormat.Get(), m_panelToggleRect, brushYellow.Get());
     
     // Close Button [x]
-    m_panelCloseRect = D2D1::RectF(m_panelToggleRect.right + 5.0f * s, rect.top, m_panelToggleRect.right + 35.0f * s, rect.bottom);
+    m_panelCloseRect = D2D1::RectF(m_panelToggleRect.right + 4.0f * s, rect.top, m_panelToggleRect.right + 28.0f * s, rect.bottom);
     D2D1_RECT_F shadowRect2 = D2D1::RectF(m_panelCloseRect.left + 1.0f * s, m_panelCloseRect.top + 1.0f * s, m_panelCloseRect.right + 1.0f * s, m_panelCloseRect.bottom + 1.0f * s);
     dc->DrawTextW(L"[x]", 3, m_panelFormat.Get(), shadowRect2, brushShadow.Get());
     dc->DrawTextW(L"[x]", 3, m_panelFormat.Get(), m_panelCloseRect, brushRed.Get());
@@ -1560,11 +1560,11 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     const float s = m_uiScale;
     
     // Panel Rect
-    float padding = 10.0f * s;
-    float width = 300.0f * s; 
-    float height = 220.0f * s; 
-    float startX = 20.0f * s;
-    float startY = 40.0f * s; 
+    float padding = 8.0f * s;
+    float width = 260.0f * s; 
+    float height = 230.0f * s; 
+    float startX = 16.0f * s;
+    float startY = 32.0f * s; 
     
     if (g_currentMetadata.HasGPS) height += 50.0f * s;
     if (g_runtime.InfoPanelExpanded && !g_currentMetadata.HistL.empty()) height += 100.0f * s;
@@ -1579,11 +1579,11 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 8.0f * s, 8.0f * s), brushBg.Get());
     
     // Buttons
-    m_panelCloseRect = D2D1::RectF(startX + width - 25.0f * s, startY + 5.0f * s, startX + width - 5.0f * s, startY + 25.0f * s);
-    dc->DrawTextW(L"x", 1, m_panelFormat.Get(), D2D1::RectF(m_panelCloseRect.left + 5.0f * s, m_panelCloseRect.top, m_panelCloseRect.right, m_panelCloseRect.bottom), brushWhite.Get());
+    m_panelCloseRect = D2D1::RectF(startX + width - 20.0f * s, startY + 4.0f * s, startX + width - 4.0f * s, startY + 20.0f * s);
+    dc->DrawTextW(L"x", 1, m_panelFormat.Get(), D2D1::RectF(m_panelCloseRect.left + 4.0f * s, m_panelCloseRect.top, m_panelCloseRect.right, m_panelCloseRect.bottom), brushWhite.Get());
     
-    m_panelToggleRect = D2D1::RectF(startX + width - 50.0f * s, startY + 5.0f * s, startX + width - 30.0f * s, startY + 25.0f * s);
-    dc->DrawTextW(L"-", 1, m_panelFormat.Get(), D2D1::RectF(m_panelToggleRect.left + 6.0f * s, m_panelToggleRect.top, m_panelToggleRect.right, m_panelToggleRect.bottom), brushWhite.Get());
+    m_panelToggleRect = D2D1::RectF(startX + width - 40.0f * s, startY + 4.0f * s, startX + width - 24.0f * s, startY + 20.0f * s);
+    dc->DrawTextW(L"-", 1, m_panelFormat.Get(), D2D1::RectF(m_panelToggleRect.left + 5.0f * s, m_panelToggleRect.top, m_panelToggleRect.right, m_panelToggleRect.bottom), brushWhite.Get());
 
     // Grid - Build and Draw
     BuildInfoGrid();  // Populate m_infoGrid from g_currentMetadata
@@ -1592,8 +1592,8 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     
     // Histogram
     if (!g_currentMetadata.HistR.empty()) {
-        float histH = 80.0f * s;
-        float histY = startY + height - padding - histH - (g_currentMetadata.HasGPS ? 50.0f * s : 0);
+        float histH = 70.0f * s;
+        float histY = startY + height - padding - histH - (g_currentMetadata.HasGPS ? 45.0f * s : 0);
         DrawHistogram(dc, D2D1::RectF(startX + padding, histY, startX + width - padding, histY + histH));
     }
     

@@ -605,15 +605,15 @@ void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
     // Use the system font face
     const wchar_t* fontFace = ncm.lfMessageFont.lfFaceName;
 
-    float fontSizeHeader = 20.0f;
-    float fontSizeItem = 15.0f;
+    float fontSizeHeader = 16.0f;
+    float fontSizeItem = 12.0f;
 
-    // Increase font size for CJK languages for better readability
+    // Increase font size slightly for CJK languages for better readability
     if (g_config.Language == (int)AppStrings::Language::ChineseSimplified || 
         g_config.Language == (int)AppStrings::Language::ChineseTraditional ||
         g_config.Language == (int)AppStrings::Language::Japanese) {
-        fontSizeHeader = 22.0f;
-        fontSizeItem = 17.0f;
+        fontSizeHeader = 17.0f;
+        fontSizeItem = 13.0f;
     }
 
     if (!m_dwriteFactory) {
@@ -621,10 +621,10 @@ void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
     }
 
     if (!m_textFormatHeader || !m_textFormatItem || !m_textFormatIcon || !m_textFormatSymbol) {
-        fontSizeHeader *= m_uiScale;
-        fontSizeItem *= m_uiScale;
-        m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeHeader, L"en-us", &m_textFormatHeader);
-        m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizeItem, L"en-us", &m_textFormatItem);
+        float scaledHeader = fontSizeHeader * m_uiScale;
+        float scaledItem = fontSizeItem * m_uiScale;
+        m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, scaledHeader, L"en-us", &m_textFormatHeader);
+        m_dwriteFactory->CreateTextFormat(fontFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, scaledItem, L"en-us", &m_textFormatItem);
     }
     
     // [v9.98] Font Fallback Logic (Unified)
@@ -649,10 +649,10 @@ void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
 
     // Icon font
     if (!m_textFormatIcon) {
-        m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 18.0f * m_uiScale, L"en-us", &m_textFormatIcon);
+        m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f * m_uiScale, L"en-us", &m_textFormatIcon);
     }
     if (!m_textFormatSymbol) {
-        m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 20.0f * m_uiScale, L"en-us", &m_textFormatSymbol); // For small button icons
+        m_dwriteFactory->CreateTextFormat(selectedFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.0f * m_uiScale, L"en-us", &m_textFormatSymbol); // For small button icons
     }
 
     if (m_textFormatItem) {
@@ -1240,7 +1240,33 @@ void SettingsOverlay::BuildMenu() {
     SettingsItem itemHeader = { L"QuickView", OptionType::AboutHeader };
     // Use __DATE__ for dynamic build date (Simple conversion)
     auto GetBuildDate = []() -> std::wstring {
-        std::string s = __DATE__; // "Mmm dd yyyy"
+        std::string s = __DATE__; // "Mmm dd yyyy" e.g., "Mar 10 2026" or "Mar  5 2026"
+        if (s.length() >= 11) {
+            std::string monthStr = s.substr(0, 3);
+            std::string dayStr = s.substr(4, 2);
+            std::string yearStr = s.substr(7, 4);
+            
+            // map month shortname to number string
+            std::string m = "01";
+            if (monthStr == "Jan") m = "01";
+            else if (monthStr == "Feb") m = "02";
+            else if (monthStr == "Mar") m = "03";
+            else if (monthStr == "Apr") m = "04";
+            else if (monthStr == "May") m = "05";
+            else if (monthStr == "Jun") m = "06";
+            else if (monthStr == "Jul") m = "07";
+            else if (monthStr == "Aug") m = "08";
+            else if (monthStr == "Sep") m = "09";
+            else if (monthStr == "Oct") m = "10";
+            else if (monthStr == "Nov") m = "11";
+            else if (monthStr == "Dec") m = "12";
+            
+            // handle " 5" -> "05"
+            if (dayStr[0] == ' ') dayStr[0] = '0';
+            
+            std::string result = yearStr + m + dayStr;
+            return std::wstring(result.begin(), result.end());
+        }
         return std::wstring(s.begin(), s.end());
     };
     itemHeader.disabledText = std::wstring(AppStrings::Settings_Label_Version) + L" " + GetAppVersion() + L" (" + AppStrings::Settings_Label_Build + L" " + GetBuildDate() + L")";
@@ -1523,8 +1549,8 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 // This means the visual center axis should be the center of (Icon + "QuickView").
                 // Version text hangs to the right.
                 
-                float iconSize = 80.0f; 
-                float paddingX = 20.0f;
+                float iconSize = 64.0f; 
+                float paddingX = 16.0f;
                 float titleW = 120.0f; // Approx width for "QuickView"
                 float centerBaseW = iconSize + paddingX + titleW;
                 
