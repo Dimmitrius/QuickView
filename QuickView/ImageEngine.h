@@ -90,8 +90,7 @@ public:
     // [v3.1] Cancel Heavy Lane when Fast Pass succeeds
     void CancelHeavy();  // Implementation in ImageEngine.cpp
     
-    // [Two-Stage] Request full resolution decode for current image
-    // Called after 300ms idle when viewing a scaled image
+    // Request full resolution decode for current image (used by JXL serial pipeline)
     void RequestFullDecode(const std::wstring& path, ImageID imageId);
     
     // [JXL Sequential] Trigger pending Heavy task after FastLane completes
@@ -174,7 +173,7 @@ public:
         ImageID renderHash = 0;
         wchar_t loaderName[64] = { 0 };
         bool syncStatus = false; // Green/Yellow/Red logic helper
-        bool isScaled = false;   // [Two-Stage] True if current image is IDCT scaled
+        bool isScaled = false;   // True if current image is IDCT scaled
         bool isTitan = false;    // [Titan] True if Titan Mode is active
         int tileCount = 0;       // [Titan] Viewport target-LOD total tiles
         int tilesReady = 0;      // [Titan] Viewport target-LOD ready tiles
@@ -202,7 +201,7 @@ public:
             int lastDecodeMs = 0;  // [Dual Timing] Pure decode
             int lastTotalMs = 0;   // [Dual Timing] Total processing
             wchar_t loaderName[64] = { 0 }; // [Phase 11]
-            bool isFullDecode = false;      // [Two-Stage] Match WorkerSnapshot layout
+            bool isFullDecode = false;      // Match WorkerSnapshot layout
             bool isTileDecode = false;      // [UI Fix] For Tile overrides
             bool isCopyOnly = false;        // [HUD] True when worker mainly did cache/MMF copy
         } heavyWorkers[16]; // Fixed size for snapshot
@@ -353,10 +352,10 @@ private:
     std::wstring m_pendingJxlHeavyPath;
     ImageID m_pendingJxlHeavyId = 0;
 
-    // [Two-Stage] State Tracking
-    bool m_isViewingScaledImage = false; // True if current view is Fast/Stage1 (Scaled)
-    bool m_stage2Requested = false;      // True if Stage 2 (Full) has been requested
-    std::chrono::steady_clock::time_point m_stage1Time; // When Stage 1 finished
+    // [JXL Serial] State Tracking
+    bool m_isViewingScaledImage = false; // True if current view is Fast/Preview (Scaled)
+    bool m_stage2Requested = false;      // True if Full decode has been requested
+    std::chrono::steady_clock::time_point m_stage1Time; // When preview finished
 
     // === Phase 3: Prefetch System ===
     FileNavigator* m_navigator = nullptr;

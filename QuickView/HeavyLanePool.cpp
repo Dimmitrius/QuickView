@@ -516,7 +516,9 @@ void HeavyLanePool::Submit(const std::wstring& path, ImageID imageId, std::share
     job.imageId = imageId;
     job.submitTime = std::chrono::steady_clock::now(); 
     job.mmf = mmf;
-    job.isFullDecode = true; // [TEMPORARY FORCE FULL]    job.priority = 200; 
+    // Non-Titan: full decode only (JPEG upgrade path removed). Titan: scaled base layer.
+    job.isFullDecode = !m_isTitanMode;
+    job.priority = 200; 
     job.genID = m_generationID.load(); // [Smart Pull] Stamp Generation
     
     m_pendingJobs.push_back(job);
@@ -900,7 +902,7 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         // Decode complete
         m_busyCount.fetch_sub(1);
         self.lastActiveTime = t1;
-        self.isFullDecode = job.isFullDecode; // [Two-Stage] Save status
+        self.isFullDecode = job.isFullDecode; // Save decode mode
         
         // [User Feedback] Decision: become hot-spare or destroy?
         if (ShouldBecomeHotSpare(workerId)) {
@@ -1780,7 +1782,7 @@ void HeavyLanePool::GetWorkerSnapshots(WorkerSnapshot* outBuffer, int capacity, 
              ws.lastTotalMs = w.lastTotalMs;
              // [Phase 11] Copy Loader Name
              wcsncpy_s(ws.loaderName, w.loaderName.c_str(), 63);
-             ws.isFullDecode = w.isFullDecode; // [Two-Stage]
+             ws.isFullDecode = w.isFullDecode; // Full vs scaled decode
              ws.isTileDecode = w.isTileDecode;
              ws.isCopyOnly = w.isCopyOnly;
         } else {

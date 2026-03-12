@@ -260,9 +260,7 @@ bool g_isNavigatingToTitan = false; // Is the currently loading image a Titan im
 static std::atomic<uint64_t> g_currentNavToken = 0; // [Phase 3] Navigation Token (deprecated)
 static std::atomic<ImageID> g_currentImageId{0}; // [ImageID] Stable path hash for event filtering
 static int g_imageQualityLevel = 0;         // [v3.1] 0: Void, 1: Wiki/Scout, 2: Truth/Heavy
-static bool g_isImageScaled = false;         // [Two-Stage] True if current image is IDCT scaled
-static DWORD g_scaledDecodeTime = 0;         // [Two-Stage] Tick when scaled image was shown
-static constexpr UINT_PTR IDT_FULL_DECODE = 42;  // Timer ID for 300ms full decode trigger
+static bool g_isImageScaled = false;         // True if current image was decoded at reduced resolution
 static constexpr UINT_PTR IDT_SVG_RERENDER = 44; // [SVG Lossless] Timer for lazy high-res re-render
 static constexpr UINT_PTR IDT_INTERACTION = 1001; // Interaction debounce for HQ redraw/surface upgrade
 
@@ -1530,9 +1528,9 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
     
     // [Fix] Enable smooth cross-fade transition.
     // Use 150ms fade to eliminate transparent flicker.
-    // Note: If visual pop/stretch artifacts appear due to DComp global scaling matrix,
-    // further fixes may be needed to decouple old layer scaling. 
-    g_compEngine->PlayPingPongCrossFade(150.0f, isTransparent);
+    // For fast upgrades (same image, new surface size), swap instantly to avoid scale-jump artifacts.
+    float fadeMs = isFastUpgrade ? 0.0f : 150.0f;
+    g_compEngine->PlayPingPongCrossFade(fadeMs, isTransparent);
     if (g_compEngine->IsInitialized()) {
         SyncDCompState(hwnd, (float)winW, (float)winH);
     }
@@ -3943,21 +3941,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_TIMER: {
         static const UINT_PTR OSD_TIMER_ID = 999;
-        
-
-        
-        // [Two-Stage Decode] Full Resolution Trigger (IDT_FULL_DECODE = 42)
-        if (wParam == IDT_FULL_DECODE) {
-            KillTimer(hwnd, IDT_FULL_DECODE);
-            
-            // Only trigger if still showing a scaled image AND not navigating
-            if (g_isImageScaled && g_imageEngine && !g_imagePath.empty()) {
-                
-                // Re-submit current image for full decode (targetWidth=0 means no scaling)
-                g_imageEngine->RequestFullDecode(g_imagePath, g_currentImageId.load());
-            }
-        }
-
         // [SVG Adaptive] Re-rasterize SVG at current zoom's needed resolution
         if (wParam == IDT_SVG_RERENDER) {
             KillTimer(hwnd, IDT_SVG_RERENDER);
@@ -6531,8 +6514,8 @@ void ProcessEngineEvents(HWND hwnd) {
             if (g_imageQualityLevel >= 2 && isPreview) break;
 
 
-            // - If we are at Level 2 (Full), ignore another Level 2 unless "Scaled" (Upgrade).
-            if (g_imageQualityLevel >= 2 && !g_isImageScaled && !isPreview) break;
+            // - If we are at Level 2 (Full), ignore another Level 2 (no upgrade path).
+            if (g_imageQualityLevel >= 2 && !isPreview) break;
 
             ComPtr<ID2D1Bitmap> bitmap;
             HRESULT hr = E_FAIL;
@@ -6630,7 +6613,7 @@ void ProcessEngineEvents(HWND hwnd) {
                 // 1. Dimensions: Decoder knows best. Async might fail (WIC).
                 // [v10.0] Shrink Protection: Never overwrite full dimensions with smaller preview dimensions.
                 // [Phase 6 Fix] Fake Base Protection: Do not let 1x1 or 4x4 fake Titan bases overwrite global metadata.
-                // [SVG Fix] SVG has no two-stage decode, so always accept SVG dimensions.
+                // [SVG Fix] SVG has no scaled/full upgrade, so always accept SVG dimensions.
                 {
                     bool acceptDimUpdate = (finalMetadata.Width >= g_currentMetadata.Width && finalMetadata.Width > 16);
                     if (g_imageResource.isSvg && finalMetadata.Width > 0) acceptDimUpdate = true;
@@ -6780,14 +6763,7 @@ void ProcessEngineEvents(HWND hwnd) {
                         evt.filePath.substr(evt.filePath.find_last_of(L"\\/") + 1).c_str(), 
                         g_szWindowTitle);
                      
-                     if (evt.isScaled) {
-                          g_isImageScaled = true;
-                          g_scaledDecodeTime = GetTickCount();
-                          SetTimer(hwnd, IDT_FULL_DECODE, 300, nullptr);
-                     } else {
-                          g_isImageScaled = false;
-                          KillTimer(hwnd, IDT_FULL_DECODE);
-                     }
+                     g_isImageScaled = evt.isScaled;
                 }
                 SetWindowTextW(hwnd, titleBuf);
                 
@@ -6800,11 +6776,6 @@ void ProcessEngineEvents(HWND hwnd) {
                                        (evt.metadata.Format.find(L"Alpha") != std::wstring::npos) ||
                                        (evt.rawFrame && evt.rawFrame->format == QuickView::PixelFormat::BGRA8888);
 
-                // [Two-Stage] Detect same-image upgrade (scaled ?full)
-                // Fast transition when: was scaled, now full, same image ID
-                bool isSameImageUpgrade = g_isImageScaled && !evt.isScaled && 
-                                          (evt.imageId == g_currentImageId.load());
-
                 if (IsCompareModeActive() && (g_currentMetadata.Width > 8192 || g_currentMetadata.Height > 8192)) {
                     ExitCompareMode(hwnd);
                     g_osd.Show(hwnd, L"Compare mode exited: Titan image is not supported yet.", true);
@@ -6815,7 +6786,7 @@ void ProcessEngineEvents(HWND hwnd) {
                     MarkCompareDirty();
                 } else {
                     // Update DComp Visual (Base Preview for Titan, or full image for standard)
-                    RenderImageToDComp(hwnd, g_imageResource, hasTransparency, isSameImageUpgrade);
+                    RenderImageToDComp(hwnd, g_imageResource, hasTransparency, false);
                     
                     // [Optimization] GPU-Assistant Surface Rotation Complete
                     // The Surface is now physically rotated. Neutralize global Exif.
@@ -7910,7 +7881,7 @@ void OnPaint(HWND hwnd) {
             s.fps = shouldCompute ? g_fps : 0.0f;
             s.renderHash = ComputePathHash(g_imagePath);
             s.syncStatus = (s.targetHash == s.renderHash);
-            s.isScaled = g_isImageScaled; // [Two-Stage] Pass scaled state to HUD
+            s.isScaled = g_isImageScaled; // Pass scaled state to HUD
 
             if (shouldCompute) {
                 g_debugMetrics.heavyCancellations = s.heavyCancellations; // [HUD V4] Sync

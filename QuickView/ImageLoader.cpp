@@ -349,7 +349,7 @@ HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size,
         
         // Calculate Scaling
         tjscalingfactor chosenFactor = {1, 1};
-        if (false /* targetWidth > 0 || targetHeight > 0 */) {
+        if (targetWidth > 0 || targetHeight > 0) {
             int numFactors;
             tjscalingfactor* factors = tj3GetScalingFactors(&numFactors);
             
@@ -3701,7 +3701,7 @@ namespace QuickView {
                 cinfo.scale_num = 1;
                 cinfo.scale_denom = 1;
 
-                if (false /* ctx.targetWidth > 0 && ctx.targetHeight > 0 */) {
+                if (ctx.targetWidth > 0 && ctx.targetHeight > 0) {
                     while (cinfo.scale_denom < 8) {
                         int nextDenom = cinfo.scale_denom * 2;
                         int scaledW = (cinfo.image_width + nextDenom - 1) / nextDenom;
@@ -5055,7 +5055,7 @@ HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ct
             }
         }
         else if (fmt == L"JXL") {
-             // [Two-Stage] Only use DC Preview if scaling is requested (Stage 1)
+            // [JXL DC] Only use DC Preview if scaling is requested (Stage 1)
              // or if explicitly forcing preview.
              // [Fix] User Requirement: 提取缩略图逻辑仅在 titan 模式下进行，普通模式下不进行缩略图逻辑
              if (ctx.isTitanMode && (ctx.targetWidth > 0 || ctx.targetHeight > 0 || ctx.forceRenderFull)) {
@@ -8492,7 +8492,7 @@ CImageLoader::ImageHeaderInfo CImageLoader::PeekHeader(LPCWSTR filePath) {
     int64_t pixels = result.GetPixelCount();
     
     // Type A (Express Lane ONLY): Small enough for fast full decode
-    // Type B (Heavy Lane): Large images needing scaled decode
+    // Type B (Heavy Lane): Large images routed to Heavy Lane (full decode for non-Titan)
     
     // [v4.1] JXL Optimization: Always allow Sprint (Scout Lane)
     // Small JXL -> Fast Full Decode (via fallback if needed? Currently DC only in LoadFastPass)
@@ -8510,7 +8510,7 @@ CImageLoader::ImageHeaderInfo CImageLoader::PeekHeader(LPCWSTR filePath) {
     }
     else if (result.format == L"JPEG" || result.format == L"BMP") {
         // JPEG/BMP: ≤8.5MP → Express (full decode is fast)
-        // >8.5MP → Heavy (needs scaled decode, Scout extracts thumb if hasEmbeddedThumb)
+        // >8.5MP → Heavy (Scout may extract thumb if hasEmbeddedThumb)
         // [v3.3] Safety: If pixels unknown (0), default to Heavy (Scout might choke on huge image)
         if (pixels > 0 && pixels <= 8500000) {
             result.type = ImageType::TypeA_Sprint;
@@ -8678,7 +8678,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             }
         }
         
-        /* [TEMPORARY DISABLE] Force No Software Resizing
+        // [Fix] Software Downscale if Unified Codec ignored target dimensions
         if (targetWidth > 0 && targetHeight > 0 && 
            ((int)res.width > targetWidth || (int)res.height > targetHeight)) {
             
@@ -8715,7 +8715,6 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                 // res.metadata.FormatDetails += L" (SwRescaled)";
             }
         }
-        */
         
         outFrame->pixels = res.pixels;
         outFrame->width = res.width;

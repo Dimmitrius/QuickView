@@ -84,15 +84,14 @@ void ImageEngine::CancelHeavy() {
     }
 }
 
-// [Two-Stage] Request full resolution decode for current image
-// Called after 300ms idle when viewing a scaled image
+// Request full resolution decode for current image (used by JXL serial pipeline)
 void ImageEngine::RequestFullDecode(const std::wstring& path, ImageID imageId) {
     if (path.empty()) return;
     if (!m_heavyPool) return;
     
     // Only proceed if this is still the current image
     if (imageId != m_currentImageId.load()) {
-        OutputDebugStringW(L"[Two-Stage] RequestFullDecode cancelled - image changed\n");
+        OutputDebugStringW(L"[FullDecode] RequestFullDecode cancelled - image changed\n");
         return;
     }
     
@@ -100,7 +99,7 @@ void ImageEngine::RequestFullDecode(const std::wstring& path, ImageID imageId) {
     // The Base Layer is already loaded (Scaled). We do NOT want a Full Decode 
     // because it causes OOM/Seconds-long stall and logic issue.
     if (m_mmf && m_mmf->IsValid()) {
-        OutputDebugStringW(L"[Two-Stage] RequestFullDecode skipped - Titan Mode Active (Tiles Handle Detail)\n");
+        OutputDebugStringW(L"[FullDecode] RequestFullDecode skipped - Titan Mode Active (Tiles Handle Detail)\n");
         return;
     }
 
@@ -111,7 +110,7 @@ void ImageEngine::RequestFullDecode(const std::wstring& path, ImageID imageId) {
     m_heavyPool->SubmitFullDecode(path, imageId, m_mmf);
     
     wchar_t buf[256];
-    swprintf_s(buf, L"[Two-Stage] Full decode requested: ImageID=%zu\n", imageId);
+    swprintf_s(buf, L"[FullDecode] Full decode requested: ImageID=%zu\n", imageId);
     OutputDebugStringW(buf);
 }
 
@@ -368,7 +367,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
     // 3. Classification Logic (Refined)
     if (info.type == CImageLoader::ImageType::TypeA_Sprint) {
         // Small/Fast images -> FastLane Only
-        // [v4.1] Exception: JXL (TypeA) uses Heavy/Two-Stage logic
+        // [v4.1] Exception: JXL (TypeA) uses Heavy/serial logic
         if (info.format != L"JXL" && info.format != L"WebP") {
              useHeavy = false;
         }
@@ -386,9 +385,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
                  useFastLane = true;
                  useHeavy = false;
              } else {
-                 // [v7.2 Fix] Large WebP -> Force Direct Full Decode (Stage 2 immediately).
-                 // Standard 'useHeavy' path uses Submit() which defaults to 'isFullDecode=false' (Scaled).
-                 // For true Titan scaling, we just Submit to Heavy Lane for a base layer!
+                // [v7.2 Fix] Large WebP -> Force Heavy Direct (non-Titan is full decode).
                  OutputDebugStringW(L"[Dispatch] -> WebP Large: Heavy Direct\n");
                  m_heavyPool->Submit(path, imageId, primaryMMF);
                  return; 
@@ -409,7 +406,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
              return;
         }
         
-        // Other heavy formats use standard scaling -> Stage 2 logic
+        // Other heavy formats use standard Heavy path (full decode for non-Titan)
     }
     
     // 5. JXL Special Logic (User "Ultimate Strategy")
@@ -534,7 +531,7 @@ void ImageEngine::NavigateTo(const std::wstring& path, uintmax_t fileSize, uint6
     m_currentNavPath = path;
     m_lastInputTime = std::chrono::steady_clock::now();
 
-    // [Two-Stage] Reset State
+    // [JXL Serial] Reset State
     m_isViewingScaledImage = false;
     m_stage2Requested = false;
     m_baseLayerReady.store(false);
@@ -604,7 +601,7 @@ std::vector<EngineEvent> ImageEngine::PollState() {
          batch.push_back(std::move(*e));
     }
 
-    // 3. [Two-Stage] Track state and Trigger Stage 2
+    // 3. [JXL Serial] Track state and trigger full decode
     for (const auto& e : batch) {
         if (e.imageId == m_currentImageId.load()) {
             if ((e.type == EventType::PreviewReady || e.type == EventType::FullReady) &&
@@ -1343,7 +1340,7 @@ void ImageEngine::ScheduleJob(int index, QuickView::Priority pri) {
                 m_pendingPaths.insert(path);
             }
             
-            // [v9.3] Alignment: JXL uses Direct Full Decode (Two-Stage Cancelled).
+            // [v9.3] Alignment: JXL uses Direct Full Decode (serial upgrade cancelled).
             // Prefetch must also be Full to prevent stuck Scaled/Blurry image.
             if (info.format == L"JXL") {
                 m_heavyPool->SubmitFullDecode(path, ComputePathHash(path));

@@ -67,7 +67,7 @@ public:
     // [ImageID] Uses stable path hash instead of incrementing token
     void Submit(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf = nullptr);
     
-    // [Two-Stage] Submit for full resolution decode (no scaling)
+    // Full resolution decode (no scaling)
     void SubmitFullDecode(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf = nullptr);
     
     // [Titan Engine] Submit a tile decode task
@@ -113,7 +113,7 @@ public:
         int lastDecodeMs;         // Pure decode time
         int lastTotalMs;          // Total processing time (decode + WIC + metadata)
         wchar_t loaderName[64] = { 0 }; // [Phase 11]
-        bool isFullDecode = false;      // [Two-Stage]
+        bool isFullDecode = false;      // True if last decode was full-res
         bool isTileDecode = false;      // [UI Fix] Prioritize tile decoder name
         bool isCopyOnly = false;        // [HUD] True when worker mainly did cache/MMF copy
     };
@@ -137,7 +137,7 @@ private:
         int lastTotalMs = 0;     // [Dual Timing] Total processing time
         ImageID lastImageId = 0; // [Phase 10] For sync (clear on nav)
         std::wstring loaderName; // [Phase 11] Capture actual decoder name
-        bool isFullDecode = false; // [Two-Stage] Records if last decode was full res
+        bool isFullDecode = false; // Records if last decode was full res
         bool isTileDecode = false; // [UI Fix] Records if last decode was a tile
         bool isCopyOnly = false;   // [HUD] Distinguish copy path vs real decode
         
@@ -250,7 +250,7 @@ private:
         std::shared_ptr<QuickView::MappedFile> mmf; // [Optimization] Zero-Copy MMF Source
         
         // Standard
-        bool isFullDecode = false;  // [Two-Stage] true = full resolution, false = scaled
+        bool isFullDecode = false;  // true = full resolution, false = scaled
         
         // Tile
         QuickView::RegionRequest region; // [Titan] Rect + Scale
@@ -283,7 +283,7 @@ private:
     void ShrinkerLoop(std::stop_token st);
     
     // Perform actual decode (calls into ImageLoader)
-    // [Two-Stage] unpacks job info
+    // Unpacks job info
     void PerformDecode(int workerId, const JobInfo& job, std::stop_token st, std::wstring* outLoaderName);
     
     // Expansion/Shrink logic
