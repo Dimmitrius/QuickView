@@ -4398,6 +4398,25 @@ namespace QuickView {
                 }
                 OutputDebugStringW(L"[RawCodec] open_file OK\n");
 
+                // [v10.1] Capture RAW orientation early
+                int flip = RawProcessor.imgdata.sizes.flip;
+                int exifOrientation = 1;
+                // Mapping: LibRaw internal flip enum -> EXIF orientation tag
+                if (flip == 3) exifOrientation = 3;      // 180
+                else if (flip == 6) exifOrientation = 6; // 90 CW (Rotate 90)
+                else if (flip == 5) exifOrientation = 8; // 90 CCW (Rotate 270)
+                else if (flip == 1) exifOrientation = 2; // Flipped
+                else if (flip == 2) exifOrientation = 4;
+                else if (flip == 4) exifOrientation = 5;
+                else if (flip == 7) exifOrientation = 7;
+                else exifOrientation = 1;
+
+                result.metadata.ExifOrientation = exifOrientation;
+
+                // [v10.1] Force NOT flipping in LibRaw so UI Renderer can handle it with zero-copy/fast-path
+                // This ensures consistency with JPEG/WebP/PNG loaders which don't rotate pixels.
+                RawProcessor.imgdata.params.user_flip = 0; 
+
                 // 2. Strategy Check
                 // Force Raw Logic: If enabled, we skip embedded preview and force full process. // [USER REQUEST]
                 bool forceRawStart = g_runtime.ForceRawDecode; 
@@ -4426,6 +4445,8 @@ namespace QuickView {
                                     RawProcessor.dcraw_clear_mem(thumb);
                                     // Override Metadata
                                     result.metadata.LoaderName = L"LibRaw (Preview)";
+                                    // We keep the ExifOrientation from JPEG::Load or the one we captured above
+                                    if (result.metadata.ExifOrientation <= 1) result.metadata.ExifOrientation = exifOrientation;
                                     OutputDebugStringW(L"[RawCodec] Preview JPEG decoded OK\n");
                                     return S_OK;
                                 }
@@ -4465,6 +4486,7 @@ namespace QuickView {
                                         result.metadata.FormatDetails = L"Embedded Bitmap";
                                         result.metadata.Width = w;
                                         result.metadata.Height = h;
+                                        result.metadata.ExifOrientation = exifOrientation; // [Fix] Preserve orientation
                                         
                                         RawProcessor.dcraw_clear_mem(thumb);
                                         return S_OK;

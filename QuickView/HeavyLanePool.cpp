@@ -1643,6 +1643,7 @@ tile_decode_done: ; // [P14] Jump target for fast path (skip legacy TJ decode)
                     safeFrame->formatDetails = rawFrame.formatDetails;
                     safeFrame->srcWidth = rawFrame.srcWidth;   // [v10.1] Preserve original resolution
                     safeFrame->srcHeight = rawFrame.srcHeight;
+                    safeFrame->exifOrientation = rawFrame.exifOrientation; // [Fix] Propagate Orientation to cache
                     safeFrame->memoryDeleter = [](uint8_t* p) { delete[] p; };
                 }
                 
