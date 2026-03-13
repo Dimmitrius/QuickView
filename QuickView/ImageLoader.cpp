@@ -8240,6 +8240,39 @@ HRESULT CImageLoader::LoadFastPass(LPCWSTR filePath, ThumbData* pData) {
 }
 
 
+// [Optimization] Fast Multi-Replacement Utility
+// Avoids O(N^2) complexity of iterative std::string::replace by using single-pass construction
+template <typename Container>
+static void MultiReplace(std::string& str, const Container& replacements) {
+    if (replacements.empty() || str.empty()) return;
+
+    for (auto const& [oldVal, newVal] : replacements) {
+        if (oldVal.empty()) continue;
+
+        size_t firstMatch = str.find(oldVal);
+        if (firstMatch == std::string::npos) continue;
+
+        std::string result;
+        // Pre-allocate to avoid reallocations
+        result.reserve(str.size() + (newVal.size() > oldVal.size() ? 1024 : 0));
+
+        // Append part before first match
+        result.append(str, 0, firstMatch);
+        result.append(newVal);
+
+        size_t pos = firstMatch + oldVal.length();
+        size_t matchPos;
+        while ((matchPos = str.find(oldVal, pos)) != std::string::npos) {
+            result.append(str, pos, matchPos - pos);
+            result.append(newVal);
+            pos = matchPos + oldVal.length();
+        }
+
+        result.append(str, pos, str.length() - pos);
+        str = std::move(result);
+    }
+}
+
 // Helper: Parse SVG dimensions using Regex (Header only)
 static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height) {
     if (!width || !height) return false;
@@ -8829,13 +8862,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                     
                     // Apply ID Replacements
                     if (!replacements.empty()) {
-                        for (auto const& [oldVal, newVal] : replacements) {
-                            size_t pos = 0;
-                            while ((pos = svgContent.find(oldVal, pos)) != std::string::npos) {
-                                 svgContent.replace(pos, oldVal.length(), newVal);
-                                 pos += newVal.length();
-                            }
-                        }
+                        MultiReplace(svgContent, replacements);
                         wchar_t msg[128];
                         swprintf_s(msg, L"[SVG] Sanitized %d Unsafe IDs.\n", (int)replacements.size());
                         OutputDebugStringW(msg);
@@ -8869,12 +8896,28 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                         
                         std::string searchPattern = "class=\"" + className + "\"";
                         std::string replacePattern = "fill=\"" + fillVal + "\" class=\"" + className + "\"";
-                        
-                        size_t pos = 0;
-                        while ((pos = svgContent.find(searchPattern, pos)) != std::string::npos) {
-                            svgContent.replace(pos, searchPattern.length(), replacePattern);
-                            pos += replacePattern.length();
-                            inlinedCount++;
+
+                        if (!searchPattern.empty()) {
+                            size_t firstMatch = svgContent.find(searchPattern);
+                            if (firstMatch != std::string::npos) {
+                                std::string result;
+                                result.reserve(svgContent.size() + svgContent.size() / 10);
+
+                                result.append(svgContent, 0, firstMatch);
+                                result.append(replacePattern);
+                                inlinedCount++;
+
+                                size_t pos = firstMatch + searchPattern.length();
+                                size_t match_pos;
+                                while ((match_pos = svgContent.find(searchPattern, pos)) != std::string::npos) {
+                                    result.append(svgContent, pos, match_pos - pos);
+                                    result.append(replacePattern);
+                                    pos = match_pos + searchPattern.length();
+                                    inlinedCount++;
+                                }
+                                result.append(svgContent, pos, svgContent.length() - pos);
+                                svgContent = std::move(result);
+                            }
                         }
                     }
                     
