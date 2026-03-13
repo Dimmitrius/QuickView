@@ -114,9 +114,6 @@ void ImageEngine::RequestFullDecode(const std::wstring& path, ImageID imageId) {
     OutputDebugStringW(buf);
 }
 
-// [Phase 2 Stub Removed (Implemented above)]
-// void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, uintmax_t fileSize) { ... }
-
 // [Phase 2] Dispatcher Implementation
 void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, uintmax_t fileSize) {
     // 1. Peek Header
