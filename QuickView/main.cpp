@@ -6271,9 +6271,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              break;
 
         case IDM_RENDER_RAW: {
-             // Toggle Force RAW Decode (same as toolbar RawToggle)
-             g_config.ForceRawDecode = !g_config.ForceRawDecode;
-             g_runtime.ForceRawDecode = g_config.ForceRawDecode; // Sync runtime
+             // [Fix] Toggle Force RAW Decode TEMPORARILY (only for runtime)
+             // Clicking the toolbar button should NOT modify the global system setting (config).
+             g_runtime.ForceRawDecode = !g_runtime.ForceRawDecode;
              g_toolbar.SetRawState(true, g_runtime.ForceRawDecode); // Update toolbar icon
              
              if (!g_imagePath.empty()) {
@@ -6285,7 +6285,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                  LoadImageAsync(hwnd, g_imagePath.c_str()); 
              }
              
-             std::wstring msg = g_config.ForceRawDecode ? L"RAW: Full Decode (High Quality)" : L"RAW: Embedded Preview (Fast)";
+             std::wstring msg = g_runtime.ForceRawDecode ? L"RAW: Full Decode (Temporary)" : L"RAW: Embedded Preview (Temporary)";
              g_osd.Show(hwnd, msg, false);
              RequestRepaint(PaintLayer::All);
              break;
