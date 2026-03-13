@@ -353,9 +353,11 @@ struct CompareState {
     float splitRatio = 0.5f;
     bool syncZoom = true;
     bool syncPan = true;
-    bool draggingWipe = false;
+    bool draggingDivider = false;
     ComparePane activePane = ComparePane::Right;
     ComparePane contextPane = ComparePane::Right;
+    ComparePane selectedPane = ComparePane::Right;
+    bool lockSelection = false;
     bool dirty = false;
     bool autoExpandedWindow = false;
 };
@@ -461,6 +463,40 @@ static std::wstring FormatBytesWithCommas(UINT64 bytes) {
         insertPos -= 3;
     }
     return num + L" B";
+}
+
+static std::wstring FormatBytesShort(UINT64 bytes) {
+    if (bytes == 0) return L"-";
+    const wchar_t* units[] = { L"B", L"KB", L"MB", L"GB", L"TB" };
+    double size = (double)bytes;
+    int unit = 0;
+    while (size >= 1024.0 && unit < 4) {
+        size /= 1024.0;
+        ++unit;
+    }
+    wchar_t buf[64];
+    if (unit == 0) {
+        swprintf_s(buf, L"%llu B", (unsigned long long)bytes);
+    } else if (size < 10.0) {
+        swprintf_s(buf, L"%.2f %s", size, units[unit]);
+    } else if (size < 100.0) {
+        swprintf_s(buf, L"%.1f %s", size, units[unit]);
+    } else {
+        swprintf_s(buf, L"%.0f %s", size, units[unit]);
+    }
+    return buf;
+}
+
+static std::wstring FormatMegaPixels(UINT width, UINT height) {
+    if (width == 0 || height == 0) return L"-";
+    double mp = (double)width * (double)height / 1000000.0;
+    wchar_t buf[64];
+    swprintf_s(buf, L"%.2f MP", mp);
+    return buf;
+}
+
+static std::wstring FormatOptional(const std::wstring& value) {
+    return value.empty() ? L"-" : value;
 }
 
 // Helper: Calculate visible rect in Document Space (without margin)
@@ -597,10 +633,30 @@ static bool IsCompareModeActive() {
     return g_compare.mode != ViewMode::Single;
 }
 
+static bool IsCompareContextLeft() {
+    return IsCompareModeActive() && g_compare.contextPane == ComparePane::Left;
+}
+
+static const std::wstring& GetCompareContextPath() {
+    return IsCompareContextLeft() ? g_compare.left.path : g_imagePath;
+}
+
+static const CImageLoader::ImageMetadata& GetCompareContextMetadata() {
+    return IsCompareContextLeft() ? g_compare.left.metadata : g_currentMetadata;
+}
+
+static bool HasCompareContextImage() {
+    return IsCompareContextLeft() ? g_compare.left.valid : (bool)g_imageResource;
+}
+
 static float ClampCompareRatio(float value) {
     if (value < 0.1f) return 0.1f;
     if (value > 0.9f) return 0.9f;
     return value;
+}
+
+static float GetCompareSplitRatio() {
+    return (g_compare.mode == ViewMode::CompareSideBySide) ? 0.5f : ClampCompareRatio(g_compare.splitRatio);
 }
 
 static void MarkCompareDirty() {
@@ -633,14 +689,15 @@ static float ComputeZoomStep(float wheelDelta) {
 
 static void ZoomCompareViewAtPoint(CompareView& view,
                                    const ImageResource& res,
-                                   const D2D1_RECT_F& viewport,
+                                   const D2D1_RECT_F& fitViewport,
+                                   const D2D1_RECT_F& centerViewport,
                                    float wheelDelta,
                                    const POINT& mousePt) {
     const D2D1_SIZE_F oriented = GetOrientedSize(res, view.ExifOrientation);
     if (oriented.width <= 0.0f || oriented.height <= 0.0f) return;
 
-    const float vpW = viewport.right - viewport.left;
-    const float vpH = viewport.bottom - viewport.top;
+    const float vpW = fitViewport.right - fitViewport.left;
+    const float vpH = fitViewport.bottom - fitViewport.top;
     if (vpW <= 1.0f || vpH <= 1.0f) return;
 
     float fit = std::min(vpW / oriented.width, vpH / oriented.height);
@@ -654,8 +711,8 @@ static void ZoomCompareViewAtPoint(CompareView& view,
     if (newZoom > 80.0f) newZoom = 80.0f;
 
     const float ratio = newZoom / oldZoom;
-    const float centerX = (viewport.left + viewport.right) * 0.5f;
-    const float centerY = (viewport.top + viewport.bottom) * 0.5f;
+    const float centerX = (centerViewport.left + centerViewport.right) * 0.5f;
+    const float centerY = (centerViewport.top + centerViewport.bottom) * 0.5f;
     const float dx = (float)mousePt.x - centerX;
     const float dy = (float)mousePt.y - centerY;
 
@@ -669,7 +726,7 @@ static D2D1_RECT_F GetCompareViewport(HWND hwnd, ComparePane pane) {
     GetClientRect(hwnd, &rc);
     const float w = (float)(rc.right - rc.left);
     const float h = (float)(rc.bottom - rc.top);
-    const float splitX = g_compare.splitRatio * w;
+    const float splitX = GetCompareSplitRatio() * w;
 
     if (g_compare.mode == ViewMode::CompareSideBySide) {
         if (pane == ComparePane::Left) {
@@ -680,6 +737,21 @@ static D2D1_RECT_F GetCompareViewport(HWND hwnd, ComparePane pane) {
 
     // Wipe mode: both occupy full viewport.
     return D2D1::RectF(0.0f, 0.0f, w, h);
+}
+
+static D2D1_RECT_F GetCompareInteractionViewport(HWND hwnd, ComparePane pane) {
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const float w = (float)(rc.right - rc.left);
+    const float h = (float)(rc.bottom - rc.top);
+    const float splitX = (g_compare.mode == ViewMode::CompareWipe)
+        ? ClampCompareRatio(g_compare.splitRatio) * w
+        : 0.5f * w;
+
+    if (pane == ComparePane::Left) {
+        return D2D1::RectF(0.0f, 0.0f, splitX, h);
+    }
+    return D2D1::RectF(splitX, 0.0f, w, h);
 }
 
 static D2D1_SIZE_F GetOrientedSize(const ImageResource& res, int exifOrientation) {
@@ -697,8 +769,84 @@ static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient) {
     RECT rc{};
     GetClientRect(hwnd, &rc);
     const float w = (float)(rc.right - rc.left);
-    const float splitX = g_compare.splitRatio * w;
+    const float splitX = GetCompareSplitRatio() * w;
     return ((float)ptClient.x < splitX) ? ComparePane::Left : ComparePane::Right;
+}
+
+static bool IsNearCompareDivider(HWND hwnd, const POINT& ptClient, float threshold = 6.0f) {
+    if (!IsCompareModeActive() || g_compare.mode != ViewMode::CompareWipe) return false;
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const float w = (float)(rc.right - rc.left);
+    if (w <= 1.0f) return false;
+    const float splitX = ClampCompareRatio(g_compare.splitRatio) * w;
+    return fabsf((float)ptClient.x - splitX) <= threshold;
+}
+
+static std::wstring BuildCompareInfoMessage(const CImageLoader::ImageMetadata& l, const CImageLoader::ImageMetadata& r) {
+    std::wstring msg;
+    auto appendLine = [&](const std::wstring& line) {
+        msg += line;
+        msg += L"\n";
+    };
+    auto formatFormat = [&](const CImageLoader::ImageMetadata& m) -> std::wstring {
+        if (m.Format.empty()) return L"-";
+        if (m.FormatDetails.empty()) return m.Format;
+        return m.Format + L" (" + m.FormatDetails + L")";
+    };
+    auto formatLoader = [&](const CImageLoader::ImageMetadata& m) -> std::wstring {
+        std::wstring name = FormatOptional(m.LoaderName);
+        if (m.LoadTimeMs > 0) {
+            name += L" (" + std::to_wstring(m.LoadTimeMs) + L" ms)";
+        }
+        return name;
+    };
+    auto betterTag = [&](int cmp) -> std::wstring {
+        if (cmp > 0) return L"L";
+        if (cmp < 0) return L"R";
+        return L"=";
+    };
+    auto hasFileTime = [&](const FILETIME& ft) -> bool {
+        return ft.dwLowDateTime != 0 || ft.dwHighDateTime != 0;
+    };
+
+    const uint64_t lPixels = (uint64_t)l.Width * (uint64_t)l.Height;
+    const uint64_t rPixels = (uint64_t)r.Width * (uint64_t)r.Height;
+    const int resCmp = (lPixels > 0 && rPixels > 0) ? (lPixels > rPixels ? 1 : (lPixels < rPixels ? -1 : 0)) : 0;
+    std::wstring lRes = (l.Width && l.Height)
+        ? (std::to_wstring(l.Width) + L"x" + std::to_wstring(l.Height) + L" (" + FormatMegaPixels(l.Width, l.Height) + L")")
+        : L"-";
+    std::wstring rRes = (r.Width && r.Height)
+        ? (std::to_wstring(r.Width) + L"x" + std::to_wstring(r.Height) + L" (" + FormatMegaPixels(r.Width, r.Height) + L")")
+        : L"-";
+    appendLine(L"Resolution: L " + lRes + L" | R " + rRes + L" | Better: " + betterTag(resCmp));
+
+    const int sizeCmp = (l.FileSize > 0 && r.FileSize > 0) ? (l.FileSize < r.FileSize ? 1 : (l.FileSize > r.FileSize ? -1 : 0)) : 0;
+    std::wstring lSize = (l.FileSize > 0) ? (FormatBytesShort(l.FileSize) + L" (" + FormatBytesWithCommas(l.FileSize) + L")") : L"-";
+    std::wstring rSize = (r.FileSize > 0) ? (FormatBytesShort(r.FileSize) + L" (" + FormatBytesWithCommas(r.FileSize) + L")") : L"-";
+    appendLine(L"File size:  L " + lSize + L" | R " + rSize + L" | Better: " + betterTag(sizeCmp) + L" (smaller)");
+
+    appendLine(L"Format:     L " + formatFormat(l) + L" | R " + formatFormat(r));
+    appendLine(L"ColorSpace: L " + FormatOptional(l.ColorSpace) + L" | R " + FormatOptional(r.ColorSpace));
+
+    int dateCmp = 0;
+    if (hasFileTime(l.LastWriteTime) && hasFileTime(r.LastWriteTime)) {
+        dateCmp = CompareFileTime(&l.LastWriteTime, &r.LastWriteTime);
+    }
+    std::wstring dateTag = (dateCmp == 0) ? L"-" : betterTag(dateCmp);
+    appendLine(L"Date:       L " + FormatOptional(l.Date) + L" | R " + FormatOptional(r.Date) + L" | Newer: " + dateTag);
+
+    const int loadCmp = (l.LoadTimeMs > 0 && r.LoadTimeMs > 0) ? (l.LoadTimeMs < r.LoadTimeMs ? 1 : (l.LoadTimeMs > r.LoadTimeMs ? -1 : 0)) : 0;
+    appendLine(L"Loader:     L " + formatLoader(l) + L" | R " + formatLoader(r) + L" | Faster: " + betterTag(loadCmp));
+
+    std::wstring lExif = l.GetCompactString();
+    std::wstring rExif = r.GetCompactString();
+    if (!lExif.empty() || !rExif.empty()) {
+        appendLine(L"EXIF:       L " + FormatOptional(lExif) + L" | R " + FormatOptional(rExif));
+    }
+
+    if (!msg.empty()) msg.pop_back(); // remove trailing newline
+    return msg;
 }
 
 static void DrawResourceIntoViewport(ID2D1DeviceContext* ctx,
@@ -859,22 +1007,83 @@ static bool RenderCompareComposite(HWND hwnd) {
 
     ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
     const CompareView rightView = GetRightCompareView();
+    auto DrawDividerHandle = [&](float splitX, float winH, float opacity) {
+        const float handleHalfW = 7.0f;
+        const float handleHalfH = 26.0f;
+        const float centerY = winH * 0.5f;
+        if (winH < handleHalfH * 2.0f + 4.0f) return;
+
+        ComPtr<ID2D1SolidColorBrush> outerBrush;
+        ComPtr<ID2D1SolidColorBrush> innerBrush;
+        if (FAILED(ctx->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.45f * opacity), &outerBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * opacity), &innerBrush))) return;
+
+        D2D1_ROUNDED_RECT outerRect = D2D1::RoundedRect(
+            D2D1::RectF(splitX - handleHalfW, centerY - handleHalfH, splitX + handleHalfW, centerY + handleHalfH),
+            4.0f, 4.0f);
+        D2D1_ROUNDED_RECT innerRect = D2D1::RoundedRect(
+            D2D1::RectF(splitX - handleHalfW + 2.0f, centerY - handleHalfH + 8.0f,
+                        splitX + handleHalfW - 2.0f, centerY + handleHalfH - 8.0f),
+            3.0f, 3.0f);
+
+        ctx->FillRoundedRectangle(outerRect, outerBrush.Get());
+        ctx->FillRoundedRectangle(innerRect, innerBrush.Get());
+
+        ComPtr<ID2D1SolidColorBrush> gripBrush;
+        if (SUCCEEDED(ctx->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.2f, 0.2f, 0.6f * opacity), &gripBrush))) {
+            ctx->DrawLine(D2D1::Point2F(splitX - 3.0f, centerY - 6.0f), D2D1::Point2F(splitX + 3.0f, centerY - 6.0f), gripBrush.Get(), 1.0f);
+            ctx->DrawLine(D2D1::Point2F(splitX - 3.0f, centerY), D2D1::Point2F(splitX + 3.0f, centerY), gripBrush.Get(), 1.0f);
+            ctx->DrawLine(D2D1::Point2F(splitX - 3.0f, centerY + 6.0f), D2D1::Point2F(splitX + 3.0f, centerY + 6.0f), gripBrush.Get(), 1.0f);
+        }
+    };
+    auto DrawActivePaneIndicator = [&](ComparePane pane, float splitX, float winW, float winH) {
+        const float inset = 2.0f;
+        const float thickness = 2.0f;
+        if (winW < 20.0f || winH < 20.0f) return;
+
+        ComPtr<ID2D1SolidColorBrush> brush;
+        if (FAILED(ctx->CreateSolidColorBrush(D2D1::ColorF(0.10f, 0.65f, 1.0f, 0.75f), &brush))) return;
+
+        if (pane == ComparePane::Left) {
+            ctx->DrawLine(D2D1::Point2F(inset, inset),
+                          D2D1::Point2F(splitX - inset, inset), brush.Get(), thickness);
+            ctx->DrawLine(D2D1::Point2F(inset, winH - inset),
+                          D2D1::Point2F(splitX - inset, winH - inset), brush.Get(), thickness);
+            ctx->DrawLine(D2D1::Point2F(inset, inset),
+                          D2D1::Point2F(inset, winH - inset), brush.Get(), thickness);
+        } else {
+            ctx->DrawLine(D2D1::Point2F(splitX + inset, inset),
+                          D2D1::Point2F(winW - inset, inset), brush.Get(), thickness);
+            ctx->DrawLine(D2D1::Point2F(splitX + inset, winH - inset),
+                          D2D1::Point2F(winW - inset, winH - inset), brush.Get(), thickness);
+            ctx->DrawLine(D2D1::Point2F(winW - inset, inset),
+                          D2D1::Point2F(winW - inset, winH - inset), brush.Get(), thickness);
+        }
+    };
 
     if (g_compare.mode == ViewMode::CompareWipe) {
         const D2D1_RECT_F full = D2D1::RectF(0.0f, 0.0f, (float)winW, (float)winH);
-        DrawResourceIntoViewport(ctx, g_compare.left.resource, g_compare.left.view.ExifOrientation, g_compare.left.view, full);
-
         const float splitX = ClampCompareRatio(g_compare.splitRatio) * (float)winW;
-        const D2D1_RECT_F reveal = D2D1::RectF(0.0f, 0.0f, splitX, (float)winH);
-        DrawResourceIntoViewport(ctx, g_imageResource, g_viewState.ExifOrientation, rightView, reveal);
+        const D2D1_RECT_F leftClip = D2D1::RectF(0.0f, 0.0f, splitX, (float)winH);
+        const D2D1_RECT_F rightClip = D2D1::RectF(splitX, 0.0f, (float)winW, (float)winH);
+
+        ctx->PushAxisAlignedClip(leftClip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        DrawResourceIntoViewport(ctx, g_compare.left.resource, g_compare.left.view.ExifOrientation, g_compare.left.view, full);
+        ctx->PopAxisAlignedClip();
+
+        ctx->PushAxisAlignedClip(rightClip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        DrawResourceIntoViewport(ctx, g_imageResource, g_viewState.ExifOrientation, rightView, full);
+        ctx->PopAxisAlignedClip();
 
         ComPtr<ID2D1SolidColorBrush> dividerBrush;
         ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f), &dividerBrush);
         if (dividerBrush) {
             ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 2.0f);
         }
+        DrawDividerHandle(splitX, (float)winH, g_compare.draggingDivider ? 1.0f : 0.85f);
+        DrawActivePaneIndicator(g_compare.selectedPane, splitX, (float)winW, (float)winH);
     } else {
-        const float splitX = ClampCompareRatio(g_compare.splitRatio) * (float)winW;
+        const float splitX = 0.5f * (float)winW;
         const D2D1_RECT_F leftVp = D2D1::RectF(0.0f, 0.0f, splitX, (float)winH);
         const D2D1_RECT_F rightVp = D2D1::RectF(splitX, 0.0f, (float)winW, (float)winH);
 
@@ -886,6 +1095,7 @@ static bool RenderCompareComposite(HWND hwnd) {
         if (dividerBrush) {
             ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 1.0f);
         }
+        DrawActivePaneIndicator(g_compare.selectedPane, splitX, (float)winW, (float)winH);
     }
 
     g_compEngine->EndPendingUpdate();
@@ -924,16 +1134,19 @@ static void EnterCompareMode(HWND hwnd) {
     }
 
     g_compare.mode = ViewMode::CompareSideBySide;
-    g_compare.splitRatio = 0.5f;
+    g_compare.splitRatio = ClampCompareRatio(g_compare.splitRatio);
     g_compare.syncZoom = true;
     g_compare.syncPan = true;
-    g_compare.draggingWipe = false;
+    g_compare.draggingDivider = false;
     g_compare.activePane = ComparePane::Right;
     g_compare.contextPane = ComparePane::Right;
+    g_compare.selectedPane = ComparePane::Right;
+    g_compare.lockSelection = false;
     MarkCompareDirty();
 
     g_toolbar.SetCompareMode(true);
     g_toolbar.SetCompareSyncStates(g_compare.syncZoom, g_compare.syncPan);
+    g_toolbar.SetCompareLockState(g_compare.lockSelection);
     RECT rc{};
     GetClientRect(hwnd, &rc);
     g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
@@ -970,9 +1183,11 @@ static void ExitCompareMode(HWND hwnd) {
     if (!IsCompareModeActive()) return;
 
     g_compare.mode = ViewMode::Single;
-    g_compare.draggingWipe = false;
+    g_compare.draggingDivider = false;
     g_compare.contextPane = ComparePane::Right;
     g_compare.activePane = ComparePane::Right;
+    g_compare.selectedPane = ComparePane::Right;
+    g_compare.lockSelection = false;
     g_compare.dirty = false;
 
     g_toolbar.SetCompareMode(false);
@@ -4198,13 +4413,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
           if (IsCompareModeActive()) {
               g_compare.activePane = HitTestComparePane(hwnd, pt);
           }
-          if (IsCompareModeActive() && g_compare.mode == ViewMode::CompareWipe) {
-              RECT rcSplit{};
-              GetClientRect(hwnd, &rcSplit);
-              float splitX = g_compare.splitRatio * (float)(rcSplit.right - rcSplit.left);
-              if (fabsf((float)pt.x - splitX) <= 6.0f) {
-                  SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
-              }
+          if (IsNearCompareDivider(hwnd, pt)) {
+              SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
           }
           
           SettingsAction action = g_settingsOverlay.OnMouseMove((float)pt.x, (float)pt.y);
@@ -4364,7 +4574,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              return 0;
          }
 
-         if (IsCompareModeActive() && g_compare.draggingWipe && g_compare.mode == ViewMode::CompareWipe) {
+         if (IsCompareModeActive() && g_compare.draggingDivider) {
              RECT rcSplit{};
              GetClientRect(hwnd, &rcSplit);
              const float w = (float)(rcSplit.right - rcSplit.left);
@@ -4940,15 +5150,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         if (IsCompareModeActive()) {
             g_compare.activePane = HitTestComparePane(hwnd, pt);
-            if (g_compare.mode == ViewMode::CompareWipe) {
-                RECT rcSplit{};
-                GetClientRect(hwnd, &rcSplit);
-                float splitX = g_compare.splitRatio * (float)(rcSplit.right - rcSplit.left);
-                if (fabsf((float)pt.x - splitX) <= 6.0f) {
-                    g_compare.draggingWipe = true;
-                    SetCapture(hwnd);
-                    return 0;
-                }
+            if (!g_compare.lockSelection) {
+                g_compare.selectedPane = g_compare.activePane;
+            }
+            if (IsNearCompareDivider(hwnd, pt)) {
+                g_compare.draggingDivider = true;
+                SetCapture(hwnd);
+                return 0;
             }
         }
         
@@ -5019,8 +5227,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (IsCompareModeActive()) {
             g_compare.activePane = HitTestComparePane(hwnd, pt);
         }
-        if (IsCompareModeActive() && g_compare.draggingWipe) {
-            g_compare.draggingWipe = false;
+        if (IsCompareModeActive() && g_compare.draggingDivider) {
+            g_compare.draggingDivider = false;
             ReleaseCapture();
             return 0;
         }
@@ -5156,26 +5364,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         g_compare.mode = (g_compare.mode == ViewMode::CompareSideBySide)
                             ? ViewMode::CompareWipe
                             : ViewMode::CompareSideBySide;
+                        g_compare.draggingDivider = false;
+                        ReleaseCapture();
                         MarkCompareDirty();
                         RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                    }
+                    break;
+                case ToolbarButtonID::CompareLock:
+                    if (IsCompareModeActive()) {
+                        g_compare.lockSelection = !g_compare.lockSelection;
+                        g_toolbar.SetCompareLockState(g_compare.lockSelection);
+                        RequestRepaint(PaintLayer::Static);
                     }
                     break;
                 case ToolbarButtonID::CompareInfo:
                     if (IsCompareModeActive() && g_compare.left.valid && g_imageResource) {
                         const auto& l = g_compare.left.metadata;
                         const auto& r = g_currentMetadata;
-                        wchar_t msg[1024];
-                        swprintf_s(
-                            msg,
-                            L"Resolution: L %ux%u / R %ux%u (%s)\nFile size: L %llu / R %llu bytes (%s)\nFormat: L %s / R %s",
-                            l.Width, l.Height, r.Width, r.Height,
-                            (uint64_t)l.Width * l.Height >= (uint64_t)r.Width * r.Height ? L"L better" : L"R better",
-                            (unsigned long long)l.FileSize, (unsigned long long)r.FileSize,
-                            (l.FileSize > 0 && r.FileSize > 0 && l.FileSize <= r.FileSize) ? L"L better" : L"R better",
-                            l.Format.c_str(), r.Format.c_str()
-                        );
+                        std::wstring msg = BuildCompareInfoMessage(l, r);
+                        if (msg.empty()) {
+                            msg = L"No compare data available.";
+                        }
                         std::vector<DialogButton> buttons = { { DialogResult::Yes, L"OK", true } };
-                        ShowQuickViewDialog(hwnd, L"Compare Info", msg, D2D1::ColorF(D2D1::ColorF::CornflowerBlue), buttons, false, L"", L"");
+                        ShowQuickViewDialog(hwnd, L"Compare Info", msg.c_str(), D2D1::ColorF(D2D1::ColorF::CornflowerBlue), buttons, false, L"", L"");
                     }
                     break;
                 case ToolbarButtonID::CompareDeleteLeft:
@@ -5320,13 +5531,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             auto zoomPane = [&](ComparePane p, const POINT& mappedPt) {
                 if (p == ComparePane::Left) {
                     if (!g_compare.left.valid) return;
-                    D2D1_RECT_F vp = GetCompareViewport(hwnd, ComparePane::Left);
-                    ZoomCompareViewAtPoint(g_compare.left.view, g_compare.left.resource, vp, delta, mappedPt);
+                    D2D1_RECT_F fitVp = GetCompareViewport(hwnd, ComparePane::Left);
+                    D2D1_RECT_F centerVp = GetCompareInteractionViewport(hwnd, ComparePane::Left);
+                    ZoomCompareViewAtPoint(g_compare.left.view, g_compare.left.resource, fitVp, centerVp, delta, mappedPt);
                 } else {
                     if (!g_imageResource) return;
                     CompareView right = GetRightCompareView();
-                    D2D1_RECT_F vp = GetCompareViewport(hwnd, ComparePane::Right);
-                    ZoomCompareViewAtPoint(right, g_imageResource, vp, delta, mappedPt);
+                    D2D1_RECT_F fitVp = GetCompareViewport(hwnd, ComparePane::Right);
+                    D2D1_RECT_F centerVp = GetCompareInteractionViewport(hwnd, ComparePane::Right);
+                    ZoomCompareViewAtPoint(right, g_imageResource, fitVp, centerVp, delta, mappedPt);
                     SetRightCompareView(right);
                 }
             };
@@ -5334,16 +5547,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             zoomPane(pane, mousePt);
             if (g_compare.syncZoom) {
                 POINT mapped = mousePt;
-                if (g_compare.mode == ViewMode::CompareSideBySide) {
-                    D2D1_RECT_F fromVp = GetCompareViewport(hwnd, pane);
-                    D2D1_RECT_F toVp = GetCompareViewport(hwnd, other);
-                    float fromW = fromVp.right - fromVp.left;
-                    float fromH = fromVp.bottom - fromVp.top;
-                    float nx = (fromW > 1.0f) ? ((float)mousePt.x - fromVp.left) / fromW : 0.5f;
-                    float ny = (fromH > 1.0f) ? ((float)mousePt.y - fromVp.top) / fromH : 0.5f;
-                    mapped.x = (LONG)(toVp.left + nx * (toVp.right - toVp.left));
-                    mapped.y = (LONG)(toVp.top + ny * (toVp.bottom - toVp.top));
-                }
+                D2D1_RECT_F fromVp = GetCompareInteractionViewport(hwnd, pane);
+                D2D1_RECT_F toVp = GetCompareInteractionViewport(hwnd, other);
+                float fromW = fromVp.right - fromVp.left;
+                float fromH = fromVp.bottom - fromVp.top;
+                float nx = (fromW > 1.0f) ? ((float)mousePt.x - fromVp.left) / fromW : 0.5f;
+                float ny = (fromH > 1.0f) ? ((float)mousePt.y - fromVp.top) / fromH : 0.5f;
+                mapped.x = (LONG)(toVp.left + nx * (toVp.right - toVp.left));
+                mapped.y = (LONG)(toVp.top + ny * (toVp.bottom - toVp.top));
                 zoomPane(other, mapped);
             }
 
@@ -5546,7 +5757,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
             SendMessage(hwnd, WM_COMMAND, IDM_OPEN, 0);
             break; // O or Ctrl+O: Open
-        case 'E': SendMessage(hwnd, WM_COMMAND, IDM_EDIT, 0); break; // E: Edit
+        case 'E':
+            if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
+            SendMessage(hwnd, WM_COMMAND, IDM_EDIT, 0);
+            break; // E: Edit
         case VK_F1: // Help
              if (g_settingsOverlay.IsVisible()) g_settingsOverlay.SetVisible(false);
              g_helpOverlay.Toggle();
@@ -5560,13 +5774,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
             SendMessage(hwnd, WM_COMMAND, IDM_DELETE, 0);
             break; // Del: Delete
-        case 'P': if (ctrl) { SendMessage(hwnd, WM_COMMAND, IDM_PRINT, 0); } break; // Ctrl+P: Print
+        case 'P':
+            if (ctrl) {
+                if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
+                SendMessage(hwnd, WM_COMMAND, IDM_PRINT, 0);
+            }
+            break; // Ctrl+P: Print
         case 'C': // Ctrl+C: Copy image, Ctrl+Alt+C: Copy path
             if (ctrl && alt) {
-                if (!g_imagePath.empty() && CopyToClipboard(hwnd, g_imagePath)) {
-                    g_osd.Show(hwnd, AppStrings::OSD_FilePathCopied, false);
-                }
+                if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
+                SendMessage(hwnd, WM_COMMAND, IDM_COPY_PATH, 0);
             } else if (ctrl) {
+                if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
                 SendMessage(hwnd, WM_COMMAND, IDM_COPY_IMAGE, 0);
             }
             break;
@@ -5747,6 +5966,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (IsCompareModeActive()) {
             g_compare.contextPane = HitTestComparePane(hwnd, ptClient);
             g_compare.activePane = g_compare.contextPane;
+            if (!g_compare.lockSelection) {
+                g_compare.selectedPane = g_compare.contextPane;
+            }
         }
         
         bool hasImage = g_imageResource;
@@ -5786,6 +6008,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_COMMAND: {
         UINT cmdId = LOWORD(wParam);
+        const bool contextLeft = IsCompareContextLeft();
+        const std::wstring& contextPath = contextLeft ? g_compare.left.path : g_imagePath;
+        const CImageLoader::ImageMetadata& contextMeta = contextLeft ? g_compare.left.metadata : g_currentMetadata;
         switch (cmdId) {
         case IDM_OPEN: {
             if (!CheckUnsavedChanges(hwnd)) break;
@@ -5821,8 +6046,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case IDM_OPENWITH_DEFAULT: {
             if (!CheckUnsavedChanges(hwnd)) break;
             // Use rundll32 to show proper "Open With" dialog
-            if (!g_imagePath.empty()) {
-                std::wstring args = L"shell32.dll,OpenAs_RunDLL " + g_imagePath;
+            if (!contextPath.empty()) {
+                std::wstring args = L"shell32.dll,OpenAs_RunDLL " + contextPath;
                 ShellExecuteW(hwnd, nullptr, L"rundll32.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
             }
             break;
@@ -5830,26 +6055,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case IDM_EDIT: {
             if (!CheckUnsavedChanges(hwnd)) break;
             // Open with default editor (use "edit" verb, fallback to mspaint)
-            if (!g_imagePath.empty()) {
-                HINSTANCE result = ShellExecuteW(hwnd, L"edit", g_imagePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            if (!contextPath.empty()) {
+                HINSTANCE result = ShellExecuteW(hwnd, L"edit", contextPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 if ((intptr_t)result <= 32) {
                     // No editor registered, try mspaint
-                    ShellExecuteW(hwnd, nullptr, L"mspaint.exe", g_imagePath.c_str(), nullptr, SW_SHOWNORMAL);
+                    ShellExecuteW(hwnd, nullptr, L"mspaint.exe", contextPath.c_str(), nullptr, SW_SHOWNORMAL);
                 }
             }
             break;
         }
         case IDM_SHOW_IN_EXPLORER: {
             if (!CheckUnsavedChanges(hwnd)) break;
-            if (!g_imagePath.empty()) {
-                std::wstring cmd = L"/select,\"" + g_imagePath + L"\"";
+            if (!contextPath.empty()) {
+                std::wstring cmd = L"/select,\"" + contextPath + L"\"";
                 ShellExecuteW(nullptr, nullptr, L"explorer.exe", cmd.c_str(), nullptr, SW_SHOWNORMAL);
             }
             break;
         }
         case IDM_COPY_PATH: {
             if (!CheckUnsavedChanges(hwnd)) break;
-            std::wstring pathToCopy = g_imagePath;
+            std::wstring pathToCopy = contextPath;
             
             if (!pathToCopy.empty() && OpenClipboard(hwnd)) {
                 EmptyClipboard();
@@ -5870,18 +6095,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case IDM_COPY_IMAGE: {
             if (!CheckUnsavedChanges(hwnd)) break;
             // Copy file to clipboard (can paste in Explorer or other apps)
-            if (!g_imagePath.empty() && OpenClipboard(hwnd)) {
+            if (!contextPath.empty() && OpenClipboard(hwnd)) {
                 EmptyClipboard();
                 
                 // CF_HDROP format for file copy
-                size_t pathLen = (g_imagePath.length() + 1) * sizeof(wchar_t);
+                size_t pathLen = (contextPath.length() + 1) * sizeof(wchar_t);
                 size_t totalSize = sizeof(DROPFILES) + pathLen + sizeof(wchar_t); // Extra null for double-null terminator
                 HGLOBAL hDrop = GlobalAlloc(GHND, totalSize);
                 if (hDrop) {
                     DROPFILES* df = (DROPFILES*)GlobalLock(hDrop);
                     df->pFiles = sizeof(DROPFILES);
                     df->fWide = TRUE;
-                    memcpy((char*)df + sizeof(DROPFILES), g_imagePath.c_str(), pathLen);
+                    memcpy((char*)df + sizeof(DROPFILES), contextPath.c_str(), pathLen);
                     GlobalUnlock(hDrop);
                     SetClipboardData(CF_HDROP, hDrop);
                 }
@@ -5894,14 +6119,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case IDM_PRINT: {
             if (!CheckUnsavedChanges(hwnd)) break;
-            if (!g_imagePath.empty()) {
+            if (!contextPath.empty()) {
                 // Windows 10/11: Use "print" verb directly - Windows handles the print dialog
                 // This works for most image formats via Windows photo printing
-                HINSTANCE result = ShellExecuteW(hwnd, L"print", g_imagePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                HINSTANCE result = ShellExecuteW(hwnd, L"print", contextPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 
                 if ((intptr_t)result <= 32) {
                     // Fallback: Open in default app and show OSD instructions
-                    ShellExecuteW(hwnd, L"open", g_imagePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                    ShellExecuteW(hwnd, L"open", contextPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                     g_osd.Show(hwnd, AppStrings::OSD_PrintInstruction, false);
                     RequestRepaint(PaintLayer::Dynamic);
                 }
@@ -6276,13 +6501,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
              g_runtime.ForceRawDecode = !g_runtime.ForceRawDecode;
              g_toolbar.SetRawState(true, g_runtime.ForceRawDecode); // Update toolbar icon
              
-             if (!g_imagePath.empty()) {
-                 if (g_imageEngine) {
-                     g_imageEngine->UpdateConfig(g_runtime); // [Fix] Push config to engine
-                     g_imageEngine->SetForceRefresh(true);
+             if (!contextPath.empty()) {
+                 if (contextLeft) {
+                     if (LoadImageIntoCompareLeftSlot(contextPath)) {
+                         g_compare.activePane = ComparePane::Left;
+                         MarkCompareDirty();
+                         RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                     }
+                 } else {
+                     if (g_imageEngine) {
+                         g_imageEngine->UpdateConfig(g_runtime); // [Fix] Push config to engine
+                         g_imageEngine->SetForceRefresh(true);
+                     }
+                     ReleaseImageResources();
+                     LoadImageAsync(hwnd, contextPath.c_str()); 
                  }
-                 ReleaseImageResources();
-                 LoadImageAsync(hwnd, g_imagePath.c_str()); 
              }
              
              std::wstring msg = g_runtime.ForceRawDecode ? L"RAW: Full Decode (Temporary)" : L"RAW: Embedded Preview (Temporary)";
@@ -6294,7 +6527,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case IDM_WALLPAPER_FILL:
         case IDM_WALLPAPER_FIT:
         case IDM_WALLPAPER_TILE: {
-            if (!g_imagePath.empty()) {
+            if (!contextPath.empty()) {
                 // Use IDesktopWallpaper COM interface
                 CoInitialize(nullptr);
                 IDesktopWallpaper* pWallpaper = nullptr;
@@ -6306,7 +6539,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     else if (cmdId == IDM_WALLPAPER_TILE) pos = DWPOS_TILE;
                     
                     pWallpaper->SetPosition(pos);
-                    hr = pWallpaper->SetWallpaper(nullptr, g_imagePath.c_str());
+                    hr = pWallpaper->SetWallpaper(nullptr, contextPath.c_str());
                     pWallpaper->Release();
                     
                     if (SUCCEEDED(hr)) {
@@ -6322,8 +6555,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case IDM_FIX_EXTENSION: {
-            if (!g_imagePath.empty() && !g_currentMetadata.Format.empty()) {
-                std::wstring fmt = g_currentMetadata.Format;
+            if (!contextPath.empty() && !contextMeta.Format.empty()) {
+                std::wstring fmt = contextMeta.Format;
                 std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::towlower);
                 
                 std::wstring newExt;
@@ -6349,11 +6582,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 else if (fmt == L"pnm") newExt = L".pnm";
                 
                 if (!newExt.empty()) {
-                    size_t lastDot = g_imagePath.find_last_of(L'.');
-                    std::wstring basePath = (lastDot != std::wstring::npos) ? g_imagePath.substr(0, lastDot) : g_imagePath;
+                    size_t lastDot = contextPath.find_last_of(L'.');
+                    std::wstring basePath = (lastDot != std::wstring::npos) ? contextPath.substr(0, lastDot) : contextPath;
                     std::wstring newPath = basePath + newExt;
                     
-                    std::wstring msg = L"Format detected: " + g_currentMetadata.Format + L"\nChange extension to " + newExt + L"?";
+                    std::wstring msg = L"Format detected: " + contextMeta.Format + L"\nChange extension to " + newExt + L"?";
                     
                     std::vector<DialogButton> buttons = {
                         { DialogResult::Yes, L"Rename", true },
@@ -6362,14 +6595,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     
                     DialogResult result = ShowQuickViewDialog(hwnd, L"Fix Extension", msg, D2D1::ColorF(D2D1::ColorF::Orange), buttons);
                     if (result == DialogResult::Yes) {
-                        ReleaseImageResources();
-                        if (MoveFileW(g_imagePath.c_str(), newPath.c_str())) {
-                            g_imagePath = newPath;
-                            LoadImageAsync(hwnd, newPath);
-                            g_osd.Show(hwnd, L"Extension Fixed", false);
+                        if (contextLeft) {
+                            if (MoveFileW(contextPath.c_str(), newPath.c_str())) {
+                                if (LoadImageIntoCompareLeftSlot(newPath)) {
+                                    g_osd.Show(hwnd, L"Extension Fixed (Left)", false);
+                                    MarkCompareDirty();
+                                    RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+                                }
+                            } else {
+                                g_osd.Show(hwnd, std::wstring(L"Rename Failed"), true);
+                            }
                         } else {
-                            LoadImageAsync(hwnd, g_imagePath); // Reload old
-                            g_osd.Show(hwnd, std::wstring(L"Rename Failed"), true);
+                            ReleaseImageResources();
+                            if (MoveFileW(contextPath.c_str(), newPath.c_str())) {
+                                g_imagePath = newPath;
+                                LoadImageAsync(hwnd, newPath);
+                                g_osd.Show(hwnd, L"Extension Fixed", false);
+                            } else {
+                                LoadImageAsync(hwnd, g_imagePath); // Reload old
+                                g_osd.Show(hwnd, std::wstring(L"Rename Failed"), true);
+                            }
                         }
                     }
                     RequestRepaint(PaintLayer::All);
@@ -7576,59 +7821,84 @@ FireAndForget LoadImageAsync(HWND hwnd, std::wstring path, bool showOSD, QuickVi
 
 
 void Navigate(HWND hwnd, int direction) {
-    if (g_navigator.Count() <= 0) return;
-    if (CheckUnsavedChanges(hwnd)) {
-        std::wstring path = (direction > 0) 
-            ? g_navigator.Next(g_config.LoopNavigation) 
-            : g_navigator.Previous(g_config.LoopNavigation);
-        
-        if (IsCompareModeActive()) {
-            if (!path.empty()) {
-                // Keep old right image as left baseline, then load new right image.
-                CaptureCurrentImageAsCompareLeft();
-                g_compare.activePane = ComparePane::Right;
-                g_compare.contextPane = ComparePane::Right;
-                g_editState.Reset();
-                g_viewState.Reset();
-                QuickView::BrowseDirection browseDir = (direction > 0)
-                    ? QuickView::BrowseDirection::FORWARD
-                    : QuickView::BrowseDirection::BACKWARD;
-                LoadImageAsync(hwnd, path, true, browseDir);
-                MarkCompareDirty();
-            } else if (g_navigator.HitEnd()) {
-                if (direction > 0) g_osd.Show(hwnd, std::wstring(AppStrings::OSD_LastImage), false);
-                else g_osd.Show(hwnd, std::wstring(AppStrings::OSD_FirstImage), false);
-            }
-            return;
-        }
+    if (IsCompareModeActive() && g_compare.selectedPane == ComparePane::Left) {
+        if (!g_compare.left.valid || g_compare.left.path.empty()) return;
+        FileNavigator tempNav;
+        tempNav.Initialize(g_compare.left.path);
+        if (tempNav.Count() <= 0) return;
+
+        std::wstring path = (direction > 0)
+            ? tempNav.Next(g_config.LoopNavigation)
+            : tempNav.Previous(g_config.LoopNavigation);
 
         if (!path.empty()) {
+            if (LoadImageIntoCompareLeftSlot(path)) {
+                g_compare.activePane = ComparePane::Left;
+                g_compare.contextPane = ComparePane::Left;
+                MarkCompareDirty();
+                RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+            }
+        } else if (tempNav.HitEnd()) {
+            if (direction > 0) g_osd.Show(hwnd, std::wstring(AppStrings::OSD_LastImage), false);
+            else g_osd.Show(hwnd, std::wstring(AppStrings::OSD_FirstImage), false);
+        }
+        return;
+    }
+
+    if (g_navigator.Count() <= 0) return;
+    if (!CheckUnsavedChanges(hwnd)) return;
+
+    std::wstring path = (direction > 0)
+        ? g_navigator.Next(g_config.LoopNavigation)
+        : g_navigator.Previous(g_config.LoopNavigation);
+
+    if (IsCompareModeActive()) {
+        if (!path.empty()) {
+            g_compare.activePane = ComparePane::Right;
+            g_compare.contextPane = ComparePane::Right;
+            if (!g_compare.lockSelection) {
+                g_compare.selectedPane = ComparePane::Right;
+            }
             g_editState.Reset();
             g_viewState.Reset();
-            
-            // [Fix Race Condition] 
-            // Call UpdateView FIRST to clear old queue and set direction.
-            // THEN call LoadImageAsync (which calls NavigateTo -> Push) to queue the new critical job.
-            
-            // [Phase 3] Notify prefetch system of navigation direction
-            // [Phase 3] Notify prefetch system of navigation direction
-            QuickView::BrowseDirection browseDir = (direction > 0) 
-                ? QuickView::BrowseDirection::FORWARD 
+            QuickView::BrowseDirection browseDir = (direction > 0)
+                ? QuickView::BrowseDirection::FORWARD
                 : QuickView::BrowseDirection::BACKWARD;
-            
-            // [v8.16 Fix] Pass direction to LoadImageAsync -> StartNavigation
-            // Do NOT call UpdateView directly here, as LoadImageAsync calls StartNavigation which calls UpdateView.
-            // Previously, StartNavigation hardcoded IDLE, overwriting our direction.
-            // g_imageEngine->UpdateView(g_navigator.Index(), browseDir); // REMOVED
-            
             LoadImageAsync(hwnd, path, true, browseDir);
+            MarkCompareDirty();
         } else if (g_navigator.HitEnd()) {
-            // Show OSD when reaching end without looping
-            if (direction > 0) {
-                g_osd.Show(hwnd, std::wstring(AppStrings::OSD_LastImage), false);
-            } else {
-                g_osd.Show(hwnd, std::wstring(AppStrings::OSD_FirstImage), false);
-            }
+            if (direction > 0) g_osd.Show(hwnd, std::wstring(AppStrings::OSD_LastImage), false);
+            else g_osd.Show(hwnd, std::wstring(AppStrings::OSD_FirstImage), false);
+        }
+        return;
+    }
+
+    if (!path.empty()) {
+        g_editState.Reset();
+        g_viewState.Reset();
+        
+        // [Fix Race Condition] 
+        // Call UpdateView FIRST to clear old queue and set direction.
+        // THEN call LoadImageAsync (which calls NavigateTo -> Push) to queue the new critical job.
+        
+        // [Phase 3] Notify prefetch system of navigation direction
+        // [Phase 3] Notify prefetch system of navigation direction
+        QuickView::BrowseDirection browseDir = (direction > 0) 
+            ? QuickView::BrowseDirection::FORWARD 
+            : QuickView::BrowseDirection::BACKWARD;
+        
+        // [v8.16 Fix] Pass direction to LoadImageAsync -> StartNavigation
+        // Do NOT call UpdateView directly here, as LoadImageAsync calls StartNavigation which calls UpdateView.
+        // Previously, StartNavigation hardcoded IDLE, overwriting our direction.
+        // g_imageEngine->UpdateView(g_navigator.Index(), browseDir); // REMOVED
+        
+        LoadImageAsync(hwnd, path, true, browseDir);
+    } else if (g_navigator.HitEnd()) {
+        // Show OSD when reaching end without looping
+        if (direction > 0) {
+            g_osd.Show(hwnd, std::wstring(AppStrings::OSD_LastImage), false);
+        } else {
+            g_osd.Show(hwnd, std::wstring(AppStrings::OSD_FirstImage), false);
         }
     }
 }
