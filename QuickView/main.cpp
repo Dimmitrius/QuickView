@@ -1198,7 +1198,7 @@ static bool RenderCompareComposite(HWND hwnd) {
     }
 
     g_compEngine->EndPendingUpdate();
-    g_compEngine->PlayPingPongCrossFade(0.0f, true);
+    g_compEngine->PlayPingPongCrossFade(0.0f);
 
     VisualState vs{};
     vs.PhysicalSize = D2D1::SizeF((float)winW, (float)winH);
@@ -1517,7 +1517,7 @@ static bool UpgradeSvgSurface(HWND hwnd, ImageResource& res) {
     // Apply instant swap (0ms) to avoid visual pop.
     // DComp Matrix applies to a shared container - crossfading two differently sized surfaces 
     // using the newly calculated zoom matrix causes the old surface to instantly jump in size.
-    g_compEngine->PlayPingPongCrossFade(0.0f, true);
+    g_compEngine->PlayPingPongCrossFade(0.0f);
     
     // [Refactor] Use Unified SyncDCompState
     // This ensures the new surface is displayed correctly based on VisualState
@@ -1666,7 +1666,7 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
         if (!ctx) return false;
         ctx->Clear(D2D1::ColorF(0, 0, 0, 0)); // Transparent
         g_compEngine->EndPendingUpdate();
-        g_compEngine->PlayPingPongCrossFade(0, true); // Instant
+        g_compEngine->PlayPingPongCrossFade(0); // Instant
         g_compEngine->Commit();
         return true;
     }
