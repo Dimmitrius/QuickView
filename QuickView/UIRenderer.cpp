@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "UIRenderer.h"
 #include "DebugMetrics.h"
 #include "Toolbar.h"
@@ -1433,11 +1433,11 @@ void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY
         
         // Icon column
         D2D1_RECT_F iconRect = D2D1::RectF(startX, y, startX + iconW, y + rowH);
-        dc->DrawTextW(row.icon.c_str(), (UINT32)row.icon.length(), m_panelFormat.Get(), iconRect, brushWhite.Get());
+        dc->DrawText(row.icon.c_str(), (UINT32)row.icon.length(), m_panelFormat.Get(), iconRect, brushWhite.Get());
         
         // Label column (gray)
         D2D1_RECT_F labelRect = D2D1::RectF(startX + iconW, y, valueColStart, y + rowH);
-        dc->DrawTextW(row.label.c_str(), (UINT32)row.label.length(), m_panelFormat.Get(), labelRect, brushGray.Get());
+        dc->DrawText(row.label.c_str(), (UINT32)row.label.length(), m_panelFormat.Get(), labelRect, brushGray.Get());
         
         // Value column - apply truncation
         float subWidth = row.valueSub.empty() ? 0 : MeasureTextWidth(row.valueSub) + 5.0f * s;
@@ -1454,12 +1454,12 @@ void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY
         
         // Draw main value
         D2D1_RECT_F valueRect = D2D1::RectF(valueColStart, y, valueColStart + mainMaxWidth, y + rowH);
-        dc->DrawTextW(row.displayText.c_str(), (UINT32)row.displayText.length(), m_panelFormat.Get(), valueRect, brushWhite.Get());
+        dc->DrawText(row.displayText.c_str(), (UINT32)row.displayText.length(), m_panelFormat.Get(), valueRect, brushWhite.Get());
         
         // Draw sub value (gray)
         if (!row.valueSub.empty()) {
             D2D1_RECT_F subRect = D2D1::RectF(valueColStart + mainMaxWidth, y, startX + width, y + rowH);
-            dc->DrawTextW(row.valueSub.c_str(), (UINT32)row.valueSub.length(), m_panelFormat.Get(), subRect, brushGray.Get());
+            dc->DrawText(row.valueSub.c_str(), (UINT32)row.valueSub.length(), m_panelFormat.Get(), subRect, brushGray.Get());
         }
         
         y += rowH;
@@ -1547,20 +1547,20 @@ void UIRenderer::DrawCompactInfo(ID2D1DeviceContext* dc) {
     dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.3f, 0.3f), &brushRed);
     
     D2D1_RECT_F shadowRect = D2D1::RectF(rect.left + 1.0f * s, rect.top + 1.0f * s, rect.right + 1.0f * s, rect.bottom + 1.0f * s);
-    dc->DrawTextW(info.c_str(), (UINT32)info.length(), m_panelFormat.Get(), shadowRect, brushShadow.Get());
-    dc->DrawTextW(info.c_str(), (UINT32)info.length(), m_panelFormat.Get(), rect, brushText.Get());
+    dc->DrawText(info.c_str(), (UINT32)info.length(), m_panelFormat.Get(), shadowRect, brushShadow.Get());
+    dc->DrawText(info.c_str(), (UINT32)info.length(), m_panelFormat.Get(), rect, brushText.Get());
 
     // Expand Button [+]
     m_panelToggleRect = D2D1::RectF(rect.right + 6.0f * s, rect.top, rect.right + 30.0f * s, rect.bottom);
     D2D1_RECT_F shadowRect1 = D2D1::RectF(m_panelToggleRect.left + 1.0f * s, m_panelToggleRect.top + 1.0f * s, m_panelToggleRect.right + 1.0f * s, m_panelToggleRect.bottom + 1.0f * s);
-    dc->DrawTextW(L"[+]", 3, m_panelFormat.Get(), shadowRect1, brushShadow.Get());
-    dc->DrawTextW(L"[+]", 3, m_panelFormat.Get(), m_panelToggleRect, brushYellow.Get());
+    dc->DrawText(L"[+]", 3, m_panelFormat.Get(), shadowRect1, brushShadow.Get());
+    dc->DrawText(L"[+]", 3, m_panelFormat.Get(), m_panelToggleRect, brushYellow.Get());
     
     // Close Button [x]
     m_panelCloseRect = D2D1::RectF(m_panelToggleRect.right + 4.0f * s, rect.top, m_panelToggleRect.right + 28.0f * s, rect.bottom);
     D2D1_RECT_F shadowRect2 = D2D1::RectF(m_panelCloseRect.left + 1.0f * s, m_panelCloseRect.top + 1.0f * s, m_panelCloseRect.right + 1.0f * s, m_panelCloseRect.bottom + 1.0f * s);
-    dc->DrawTextW(L"[x]", 3, m_panelFormat.Get(), shadowRect2, brushShadow.Get());
-    dc->DrawTextW(L"[x]", 3, m_panelFormat.Get(), m_panelCloseRect, brushRed.Get());
+    dc->DrawText(L"[x]", 3, m_panelFormat.Get(), shadowRect2, brushShadow.Get());
+    dc->DrawText(L"[x]", 3, m_panelFormat.Get(), m_panelCloseRect, brushRed.Get());
 }
 
 void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
@@ -1588,10 +1588,10 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     
     // Buttons
     m_panelCloseRect = D2D1::RectF(startX + width - 20.0f * s, startY + 4.0f * s, startX + width - 4.0f * s, startY + 20.0f * s);
-    dc->DrawTextW(L"x", 1, m_panelFormat.Get(), D2D1::RectF(m_panelCloseRect.left + 4.0f * s, m_panelCloseRect.top, m_panelCloseRect.right, m_panelCloseRect.bottom), brushWhite.Get());
+    dc->DrawText(L"x", 1, m_panelFormat.Get(), D2D1::RectF(m_panelCloseRect.left + 4.0f * s, m_panelCloseRect.top, m_panelCloseRect.right, m_panelCloseRect.bottom), brushWhite.Get());
     
     m_panelToggleRect = D2D1::RectF(startX + width - 40.0f * s, startY + 4.0f * s, startX + width - 24.0f * s, startY + 20.0f * s);
-    dc->DrawTextW(L"-", 1, m_panelFormat.Get(), D2D1::RectF(m_panelToggleRect.left + 5.0f * s, m_panelToggleRect.top, m_panelToggleRect.right, m_panelToggleRect.bottom), brushWhite.Get());
+    dc->DrawText(L"-", 1, m_panelFormat.Get(), D2D1::RectF(m_panelToggleRect.left + 5.0f * s, m_panelToggleRect.top, m_panelToggleRect.right, m_panelToggleRect.bottom), brushWhite.Get());
 
     // Grid - Build and Draw
     BuildInfoGrid();  // Populate m_infoGrid from g_currentMetadata
@@ -1614,18 +1614,18 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
         wchar_t gpsBuf[128];
         swprintf_s(gpsBuf, L"GPS: %.5f, %.5f", g_currentMetadata.Latitude, g_currentMetadata.Longitude);
         m_gpsCoordRect = D2D1::RectF(startX + padding, gpsY, startX + width - padding, gpsY + 18.0f * s);
-        dc->DrawTextW(gpsBuf, (UINT32)wcslen(gpsBuf), m_panelFormat.Get(), m_gpsCoordRect, brushWhite.Get());
+        dc->DrawText(gpsBuf, (UINT32)wcslen(gpsBuf), m_panelFormat.Get(), m_gpsCoordRect, brushWhite.Get());
         
         float line2Y = gpsY + 20.0f * s;
         if (g_currentMetadata.Altitude != 0) {
             wchar_t altBuf[64]; swprintf_s(altBuf, L"Alt: %.1fm", g_currentMetadata.Altitude);
-            dc->DrawTextW(altBuf, (UINT32)wcslen(altBuf), m_panelFormat.Get(), D2D1::RectF(startX + padding, line2Y, startX + width - 90.0f * s, line2Y + 18.0f * s), brushWhite.Get());
+            dc->DrawText(altBuf, (UINT32)wcslen(altBuf), m_panelFormat.Get(), D2D1::RectF(startX + padding, line2Y, startX + width - 90.0f * s, line2Y + 18.0f * s), brushWhite.Get());
         }
         
         m_gpsLinkRect = D2D1::RectF(startX + width - 85.0f * s, line2Y, startX + width - padding, line2Y + 18.0f * s);
         ComPtr<ID2D1SolidColorBrush> brushLink;
         dc->CreateSolidColorBrush(D2D1::ColorF(0.4f, 0.7f, 1.0f), &brushLink);
-        dc->DrawTextW(L"OpenMap", 7, m_panelFormat.Get(), m_gpsLinkRect, brushLink.Get());
+        dc->DrawText(L"OpenMap", 7, m_panelFormat.Get(), m_gpsLinkRect, brushLink.Get());
     }
 }
 
@@ -1659,7 +1659,7 @@ void UIRenderer::DrawGridTooltip(ID2D1DeviceContext* dc) {
     dc->DrawRoundedRectangle(D2D1::RoundedRect(boxRect, 4.0f * s, 4.0f * s), brushBorder.Get(), 1.0f * s);
     
     D2D1_RECT_F textRect = D2D1::RectF(x + padding, y + 2.0f * s, x + boxWidth - padding, y + boxHeight);
-    dc->DrawTextW(row.fullText.c_str(), (UINT32)row.fullText.length(), m_panelFormat.Get(), textRect, brushText.Get());
+    dc->DrawText(row.fullText.c_str(), (UINT32)row.fullText.length(), m_panelFormat.Get(), textRect, brushText.Get());
 }
 
 void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
@@ -1846,155 +1846,118 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     if (!m_panelFormat) return;
 
     const float s = m_uiScale;
-    const float panelW = std::min(620.0f * s, m_width - 40.0f * s);
+    const float panelW = std::min(680.0f * s, m_width - 40.0f * s);
     const float panelX = (m_width - panelW) * 0.5f;
-    float panelY = 70.0f * s;
-    if (panelY < 12.0f * s) panelY = 12.0f * s;
+    float panelY = 80.0f * s;
+    if (panelY < 20.0f * s) panelY = 20.0f * s;
 
-    const float labelW = 180.0f * s;
+    const float labelW = 160.0f * s;
     const float colW = (panelW - labelW) * 0.5f;
-    const float rowH = 22.0f * s;
-    const float headerH = 26.0f * s;
-    const float sectionGap = 8.0f * s;
-    const float padding = 12.0f * s;
+    const float rowH = 20.0f * s;
+    const float headerH = 28.0f * s;
+    const float sectionGap = 6.0f * s;
+    const float padding = 14.0f * s;
 
-    const int rowCount = 3 + 3 + 3 + 1; // baseline + quality + encoding + hint
-    const float panelH = padding * 2 + headerH + rowCount * rowH + sectionGap * 2;
+    struct DisplayRow {
+        std::wstring label;
+        std::wstring lval;
+        std::wstring rval;
+        int betterSide = 0; // -1 for left, 1 for right, 0 for none
+        bool isHeader = false;
+        bool isAlwaysShow = false;
+    };
+
+    std::vector<DisplayRow> rows;
+
+    auto betterHigher = [](double l, double r) -> int { return (l > r) ? -1 : ((l < r) ? 1 : 0); };
+    auto betterLower = [](double l, double r) -> int { return (l < r) ? -1 : ((l > r) ? 1 : 0); };
+    auto isDiff = [](const std::wstring& l, const std::wstring& r) { return l != r && !l.empty() && !r.empty(); };
+
+    // Group 1: Identity & Format (Always Show)
+    rows.push_back({ L"Baseline", L"", L"", 0, true, true });
+    
+    // Dimensions
+    const std::wstring lDim = (left.Width > 0) ? (std::to_wstring(left.Width) + L" x " + std::to_wstring(left.Height)) : L"-";
+    const std::wstring rDim = (right.Width > 0) ? (std::to_wstring(right.Width) + L" x " + std::to_wstring(right.Height)) : L"-";
+    rows.push_back({ L"Dimensions", lDim, rDim, (left.Width > 0 && right.Width > 0) ? betterHigher((double)left.Width * left.Height, (double)right.Width * right.Height) : 0, false, true });
+
+    // File Size
+    const std::wstring lSize = (left.FileSize > 0) ? FormatBytesShortLocal(left.FileSize) : L"-";
+    const std::wstring rSize = (right.FileSize > 0) ? FormatBytesShortLocal(right.FileSize) : L"-";
+    rows.push_back({ L"File Size", lSize, rSize, (left.FileSize > 0 && right.FileSize > 0) ? betterLower((double)left.FileSize, (double)right.FileSize) : 0, false, true });
+
+    // Format
+    rows.push_back({ L"Format", left.Format, right.Format, 0, false, true });
+
+    // Group 2: Differential Info
+    // Quality
+    bool hasQualHeader = false;
+    auto checkQual = [&]() { if (!hasQualHeader) { rows.push_back({ L"Quality", L"", L"", 0, true }); hasQualHeader = true; } };
+
+    if (left.HasSharpness || right.HasSharpness) {
+        if (left.Sharpness != right.Sharpness) {
+            checkQual();
+            rows.push_back({ L"Sharpness", FormatDouble(left.Sharpness, 0), FormatDouble(right.Sharpness, 0), betterHigher(left.Sharpness, right.Sharpness) });
+        }
+    }
+    if (left.HasEntropy || right.HasEntropy) {
+        if (std::abs(left.Entropy - right.Entropy) > 0.01) {
+            checkQual();
+            rows.push_back({ L"Entropy", FormatDouble(left.Entropy, 2), FormatDouble(right.Entropy, 2), betterHigher(left.Entropy, right.Entropy) });
+        }
+    }
+
+    // Capture / EXIF
+    bool hasExifHeader = false;
+    auto checkExif = [&]() { if (!hasExifHeader) { rows.push_back({ L"Capture Details", L"", L"", 0, true }); hasExifHeader = true; } };
+    
+    if (isDiff(left.ISO, right.ISO)) { checkExif(); rows.push_back({ L"ISO", left.ISO, right.ISO }); }
+    if (isDiff(left.Shutter, right.Shutter)) { checkExif(); rows.push_back({ L"Shutter", left.Shutter, right.Shutter }); }
+    if (isDiff(left.Aperture, right.Aperture)) { checkExif(); rows.push_back({ L"Aperture", left.Aperture, right.Aperture }); }
+    if (isDiff(left.Focal, right.Focal)) { checkExif(); rows.push_back({ L"Focal Length", left.Focal, right.Focal }); }
+    if (isDiff(left.ExposureBias, right.ExposureBias)) { checkExif(); rows.push_back({ L"Exposure Bias", left.ExposureBias, right.ExposureBias }); }
+    if (isDiff(left.ColorSpace, right.ColorSpace)) { checkExif(); rows.push_back({ L"Color Profile", left.ColorSpace, right.ColorSpace }); }
+
+    // Final Calculation for Height
+    int actualRowCount = 0;
+    for (const auto& r : rows) actualRowCount++;
+    const float panelH = padding * 2 + headerH + actualRowCount * rowH + sectionGap;
 
     D2D1_RECT_F panelRect = D2D1::RectF(panelX, panelY, panelX + panelW, panelY + panelH);
 
     ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText, brushDim, brushGood;
-    dc->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.10f, 0.90f), &brushBg);
-    dc->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.35f, 0.9f), &brushBorder);
-    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &brushText);
-    dc->CreateSolidColorBrush(D2D1::ColorF(0.70f, 0.72f, 0.78f, 0.9f), &brushDim);
-    dc->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.85f, 0.55f, 0.95f), &brushGood);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.05f, 0.05f, 0.07f, 0.92f), &brushBg);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.25f, 0.25f, 0.30f, 0.8f), &brushBorder);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White, 0.95f), &brushText);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.6f, 0.62f, 0.68f, 0.8f), &brushDim);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.25f, 0.85f, 0.45f, 0.95f), &brushGood);
 
-    if (brushBg) {
-        dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 8.0f * s, 8.0f * s), brushBg.Get());
-    }
-    if (brushBorder) {
-        dc->DrawRoundedRectangle(D2D1::RoundedRect(panelRect, 8.0f * s, 8.0f * s), brushBorder.Get(), 1.0f * s);
-    }
+    if (brushBg) dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 6.0f * s, 6.0f * s), brushBg.Get());
+    if (brushBorder) dc->DrawRoundedRectangle(D2D1::RoundedRect(panelRect, 6.0f * s, 6.0f * s), brushBorder.Get(), 0.8f * s);
 
-    float xLeft = panelX + padding;
-    float xLabel = panelX + colW + padding;
-    float xRight = xLabel + labelW;
     float y = panelY + padding;
-
-    const std::wstring title = L"Compare Info";
     D2D1_RECT_F titleRect = D2D1::RectF(panelX + padding, y, panelX + panelW - padding, y + headerH);
-    dc->DrawTextW(title.c_str(), (UINT32)title.length(), m_panelFormat.Get(), titleRect, brushText.Get());
+    dc->DrawText(L"Image Comparison HUD", 20, m_panelFormat.Get(), titleRect, brushText.Get());
     y += headerH + sectionGap;
 
-    auto betterHigher = [](double l, double r) -> int {
-        if (l > r) return -1;
-        if (l < r) return 1;
-        return 0;
-    };
-    auto betterLower = [](double l, double r) -> int {
-        if (l < r) return -1;
-        if (l > r) return 1;
-        return 0;
-    };
+    for (const auto& row : rows) {
+        if (row.isHeader) {
+            D2D1_RECT_F hr = D2D1::RectF(panelX + padding, y, panelX + panelW - padding, y + rowH);
+            dc->DrawText(row.label.c_str(), (UINT32)row.label.length(), m_osdFormat.Get(), hr, brushDim.Get());
+            y += rowH;
+            continue;
+        }
 
-    auto drawRow = [&](const std::wstring& label, const std::wstring& lval, const std::wstring& rval, int betterSide) {
-        D2D1_RECT_F leftRect = D2D1::RectF(xLeft, y, xLeft + colW - 6.0f * s, y + rowH);
-        D2D1_RECT_F labelRect = D2D1::RectF(xLabel, y, xLabel + labelW, y + rowH);
-        D2D1_RECT_F rightRect = D2D1::RectF(xRight + 6.0f * s, y, xRight + colW, y + rowH);
+        D2D1_RECT_F lRect = D2D1::RectF(panelX + padding, y, panelX + padding + colW - 8 * s, y + rowH);
+        D2D1_RECT_F labelRect = D2D1::RectF(panelX + padding + colW, y, panelX + padding + colW + labelW, y + rowH);
+        D2D1_RECT_F rRect = D2D1::RectF(panelX + padding + colW + labelW + 8 * s, y, panelX + panelW - padding, y + rowH);
 
-        ID2D1SolidColorBrush* lBrush = (betterSide == -1) ? brushGood.Get() : brushText.Get();
-        ID2D1SolidColorBrush* rBrush = (betterSide == 1) ? brushGood.Get() : brushText.Get();
+        ID2D1SolidColorBrush* lBrush = (row.betterSide == -1) ? brushGood.Get() : brushText.Get();
+        ID2D1SolidColorBrush* rBrush = (row.betterSide == 1) ? brushGood.Get() : brushText.Get();
 
-        dc->DrawTextW(lval.c_str(), (UINT32)lval.length(), m_panelFormat.Get(), leftRect, lBrush);
-        dc->DrawTextW(label.c_str(), (UINT32)label.length(), m_panelFormat.Get(), labelRect, brushDim.Get());
-        dc->DrawTextW(rval.c_str(), (UINT32)rval.length(), m_panelFormat.Get(), rightRect, rBrush);
+        dc->DrawText(row.lval.c_str(), (UINT32)row.lval.length(), m_panelFormat.Get(), lRect, lBrush);
+        dc->DrawText(row.label.c_str(), (UINT32)row.label.length(), m_panelFormat.Get(), labelRect, brushDim.Get());
+        dc->DrawText(row.rval.c_str(), (UINT32)row.rval.length(), m_panelFormat.Get(), rRect, rBrush);
         y += rowH;
-    };
-
-    auto drawSection = [&](const std::wstring& name) {
-        D2D1_RECT_F rect = D2D1::RectF(panelX + padding, y, panelX + panelW - padding, y + rowH);
-        dc->DrawTextW(name.c_str(), (UINT32)name.length(), m_panelFormat.Get(), rect, brushDim.Get());
-        y += rowH;
-    };
-
-    // Baseline
-    drawSection(L"Baseline");
-    const uint64_t lPixels = (uint64_t)left.Width * (uint64_t)left.Height;
-    const uint64_t rPixels = (uint64_t)right.Width * (uint64_t)right.Height;
-    const std::wstring lDim = (left.Width > 0 && left.Height > 0) ? (std::to_wstring(left.Width) + L" x " + std::to_wstring(left.Height)) : L"-";
-    const std::wstring rDim = (right.Width > 0 && right.Height > 0) ? (std::to_wstring(right.Width) + L" x " + std::to_wstring(right.Height)) : L"-";
-    drawRow(L"Dimensions", lDim, rDim, (left.Width > 0 && right.Width > 0) ? betterHigher((double)lPixels, (double)rPixels) : 0);
-
-    std::wstring sizeLabel = L"File Size";
-    if (left.FileSize > 0 && right.FileSize > 0) {
-        const double diff = ((double)right.FileSize - (double)left.FileSize) / (double)left.FileSize * 100.0;
-        wchar_t diffBuf[32]{};
-        swprintf_s(diffBuf, L" (Δ %+0.1f%%)", diff);
-        sizeLabel += diffBuf;
     }
-    const std::wstring lSize = (left.FileSize > 0) ? FormatBytesShortLocal(left.FileSize) : L"-";
-    const std::wstring rSize = (right.FileSize > 0) ? FormatBytesShortLocal(right.FileSize) : L"-";
-    drawRow(sizeLabel, lSize, rSize, (left.FileSize > 0 && right.FileSize > 0) ? betterLower((double)left.FileSize, (double)right.FileSize) : 0);
-
-    auto computeBpp = [](const CImageLoader::ImageMetadata& m, double& outBpp) -> bool {
-        if (m.FileSize == 0 || m.Width == 0 || m.Height == 0) return false;
-        const double pixels = (double)m.Width * (double)m.Height;
-        outBpp = ((double)m.FileSize * 8.0) / pixels;
-        return true;
-    };
-    double lBpp = 0.0, rBpp = 0.0;
-    const bool hasLBpp = computeBpp(left, lBpp);
-    const bool hasRBpp = computeBpp(right, rBpp);
-    drawRow(L"BPP", hasLBpp ? (FormatDouble(lBpp, 2) + L" bpp") : L"-",
-            hasRBpp ? (FormatDouble(rBpp, 2) + L" bpp") : L"-",
-            (hasLBpp && hasRBpp) ? betterLower(lBpp, rBpp) : 0);
-
-    y += sectionGap;
-
-    // Quality
-    drawSection(L"Quality");
-    const std::wstring lSharp = left.HasSharpness ? FormatDouble(left.Sharpness, 0) : L"-";
-    const std::wstring rSharp = right.HasSharpness ? FormatDouble(right.Sharpness, 0) : L"-";
-    drawRow(L"Sharpness (Laplacian)", lSharp, rSharp,
-            (left.HasSharpness && right.HasSharpness) ? betterHigher(left.Sharpness, right.Sharpness) : 0);
-
-    const std::wstring lEnt = left.HasEntropy ? FormatDouble(left.Entropy, 2) : L"-";
-    const std::wstring rEnt = right.HasEntropy ? FormatDouble(right.Entropy, 2) : L"-";
-    drawRow(L"Entropy", lEnt, rEnt,
-            (left.HasEntropy && right.HasEntropy) ? betterHigher(left.Entropy, right.Entropy) : 0);
-
-    int sharpCmp = (left.HasSharpness && right.HasSharpness) ? betterHigher(left.Sharpness, right.Sharpness) : 0;
-    int entCmp = (left.HasEntropy && right.HasEntropy) ? betterHigher(left.Entropy, right.Entropy) : 0;
-    int winner = 0;
-    if (sharpCmp == -1 && entCmp == -1) winner = -1;
-    else if (sharpCmp == 1 && entCmp == 1) winner = 1;
-
-    drawRow(L"Quality Hint",
-            (winner == -1) ? L"Left" : L"-",
-            (winner == 1) ? L"Right" : L"-",
-            winner);
-
-    y += sectionGap;
-
-    // Encoding & Color
-    drawSection(L"Encoding & Color");
-    drawRow(L"Color Profile",
-            left.ColorSpace.empty() ? L"-" : left.ColorSpace,
-            right.ColorSpace.empty() ? L"-" : right.ColorSpace,
-            0);
-
-    const std::wstring lBit = ExtractBitDepth(left.FormatDetails);
-    const std::wstring rBit = ExtractBitDepth(right.FormatDetails);
-    int lBitVal = _wtoi(lBit.c_str());
-    int rBitVal = _wtoi(rBit.c_str());
-    drawRow(L"Bit Depth", lBit, rBit,
-            (lBitVal > 0 && rBitVal > 0) ? betterHigher((double)lBitVal, (double)rBitVal) : 0);
-
-    int lChromaRank = -1;
-    int rChromaRank = -1;
-    const std::wstring lChroma = ExtractChroma(left.FormatDetails, lChromaRank);
-    const std::wstring rChroma = ExtractChroma(right.FormatDetails, rChromaRank);
-    drawRow(L"Chroma Subsampling", lChroma, rChroma,
-            (lChromaRank >= 0 && rChromaRank >= 0) ? betterHigher((double)lChromaRank, (double)rChromaRank) : 0);
 }

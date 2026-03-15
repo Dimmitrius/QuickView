@@ -3953,7 +3953,7 @@ static bool ReadSingleInstanceFlag() {
 // [Phase 0] Master flag — true if this process runs the pipe server.
 static bool g_isMasterProcess = false;
 
-// 强制将窗口置顶并获取焦点的辅助函数
+// Helper to force window to foreground and take focus
 static void ForceForegroundWindow(HWND hwnd) {
     if (!hwnd) return;
     
@@ -3962,13 +3962,9 @@ static void ForceForegroundWindow(HWND hwnd) {
     DWORD idThreadCurrent = GetCurrentThreadId();
     
     if (idThreadCurrent != idThreadForeground) {
-        // 附加当前线程的输入处理到前台线程
         AttachThreadInput(idThreadCurrent, idThreadForeground, TRUE);
-        
         SetForegroundWindow(hwnd);
         SetFocus(hwnd);
-        
-        // 解除附加
         AttachThreadInput(idThreadCurrent, idThreadForeground, FALSE);
     } else {
         SetForegroundWindow(hwnd);
@@ -4150,7 +4146,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     g_toolbar.SetPinned(g_config.LockBottomToolbar); // Lock toolbar from config
     
     ShowWindow(hwnd, nCmdShow); UpdateWindow(hwnd);
-    ForceForegroundWindow(hwnd); // 强制获取焦点，避免被系统拦截在后台
+    ForceForegroundWindow(hwnd); // Ensure window takes focus
     
     // Initialize Toolbar layout with window size (fixes initial rendering issue)
     {
@@ -4285,6 +4281,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
     }
     case WM_NCCALCSIZE: if (wParam) return 0; break;
+
     case WM_ERASEBKGND: return 1;  // Prevent system background erase (D2D handles this)
     case WM_APP + 1: {
         auto handle = std::coroutine_handle<>::from_address((void*)lParam);
@@ -4299,7 +4296,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_navigator.Initialize(*pathStr);
             LoadImageAsync(hwnd, *pathStr);
             if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
-            ForceForegroundWindow(hwnd); // 替代原本可能失效的 SetForegroundWindow
+            ForceForegroundWindow(hwnd);
         }
         delete pathStr;
         return 0;
@@ -4878,7 +4875,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         
 
         
-    case WM_LBUTTONDBLCLK:
+    case WM_LBUTTONDBLCLK: {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        if (g_toolbar.IsVisible() && g_toolbar.HitTest((float)pt.x, (float)pt.y)) {
+            return 0;
+        }
         // [Fix] Fullscreen Exit on Double Click
         if (g_isFullScreen) {
             SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
@@ -4886,7 +4887,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         if (IsCompareModeActive()) {
-            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             ComparePane pane = HitTestComparePane(hwnd, pt);
             D2D1_RECT_F vp = GetCompareViewport(hwnd, pane);
             float vpW = vp.right - vp.left;
@@ -5014,6 +5014,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
         }
         return 0;
+    }
 
     case WM_MBUTTONDOWN: {
         // Record start position/time for click vs drag detection

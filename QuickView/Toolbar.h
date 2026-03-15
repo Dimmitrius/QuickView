@@ -86,6 +86,7 @@ private:
     float m_uiScale = 1.0f;
     float m_iconFontScale = 0.0f;
     float m_iconFontScaleSmall = 0.0f;
+    float m_uiFontScale = 0.0f;
 
     bool m_targetVisible = false;
     bool m_isPinned = false;
@@ -113,6 +114,7 @@ private:
     
     ComPtr<IDWriteTextFormat> m_textFormatIcon;
     ComPtr<IDWriteTextFormat> m_textFormatIconSmall;
+    ComPtr<IDWriteTextFormat> m_textFormatUI;
     ComPtr<IDWriteFactory> m_dwriteFactory; // Need factory to create format
     
     void CreateResources(ID2D1RenderTarget* pRT);

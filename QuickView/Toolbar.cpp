@@ -3,8 +3,6 @@
 #include "AppStrings.h"
 #include "EditState.h"
 
-
-
 extern AppConfig g_config;
 
 // Icon Codes (Segoe Fluent Icons)
@@ -86,6 +84,7 @@ void Toolbar::SetUIScale(float scale) {
   m_uiScale = scale;
   m_textFormatIcon.Reset();
   m_textFormatIconSmall.Reset();
+  m_textFormatUI.Reset();
 }
 
 void Toolbar::CreateResources(ID2D1RenderTarget *pRT) {
@@ -111,9 +110,10 @@ void Toolbar::CreateResources(ID2D1RenderTarget *pRT) {
 
   if (!m_dwriteFactory)
     return;
-  if (m_textFormatIcon && m_textFormatIconSmall &&
+  if (m_textFormatIcon && m_textFormatIconSmall && m_textFormatUI &&
       fabsf(m_iconFontScale - m_uiScale) < 0.001f &&
-      fabsf(m_iconFontScaleSmall - m_uiScale) < 0.001f)
+      fabsf(m_iconFontScaleSmall - m_uiScale) < 0.001f &&
+      fabsf(m_uiFontScale - m_uiScale) < 0.001f)
     return;
 
   const wchar_t *fontCandidates[] = {L"Segoe Fluent Icons",
@@ -155,6 +155,17 @@ void Toolbar::CreateResources(ID2D1RenderTarget *pRT) {
         DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     m_iconFontScaleSmall = m_uiScale;
   }
+
+  m_textFormatUI.Reset();
+  m_dwriteFactory->CreateTextFormat(
+      L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+      DWRITE_FONT_STRETCH_NORMAL, 11.5f * m_uiScale, L"en-us",
+      &m_textFormatUI);
+  if (m_textFormatUI) {
+    m_textFormatUI->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    m_textFormatUI->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    m_uiFontScale = m_uiScale;
+  }
 }
 
 void Toolbar::Init(ID2D1RenderTarget *pRT) { CreateResources(pRT); }
@@ -169,10 +180,6 @@ void Toolbar::UpdateLayout(float winW, float winH) {
   const float padX = PADDING_X * m_uiScale;
   const float padY = PADDING_Y * m_uiScale;
   const float bottomMargin = BOTTOM_MARGIN * m_uiScale;
-
-  // [Fix] Always update layout to ensure Button State (e.g. Pin Toggle) is
-  // synced. Optimization removed: static float s_lastW... inhibited state
-  // updates.
 
   auto isCompareButton = [](ToolbarButtonID id) {
     switch (id) {
@@ -228,7 +235,8 @@ void Toolbar::UpdateLayout(float winW, float winH) {
   if (visibleCount > 1)
     totalW += (visibleCount - 1) * gap;
   if (m_compareMode && hasCompareZoom) {
-    totalW += (72.0f * m_uiScale) + gap;
+    const float zoomGap = 2.0f * m_uiScale;
+    totalW += (56.0f * m_uiScale) + (zoomGap * 2.0f) - gap;
   }
   m_minRequiredWidth = totalW + (PADDING_X * 2 * m_uiScale);
   m_windowTooNarrow = (winW < m_minRequiredWidth);
@@ -245,8 +253,10 @@ void Toolbar::UpdateLayout(float winW, float winH) {
   // Layout Buttons
   float cx = startX + padX;
   float cy = startY + padY;
-  const float stepW = 72.0f * m_uiScale;
-  const float stepH = buttonSize;
+  const float stepW = 56.0f * m_uiScale;
+  const float stepH = buttonSize * 0.78f;
+  const float stepY = cy + (buttonSize - stepH) * 0.5f;
+  const float zoomGap = 2.0f * m_uiScale;
   m_compareStepRect = D2D1::RectF(0, 0, 0, 0);
   m_compareStepUpRect = D2D1::RectF(0, 0, 0, 0);
   m_compareStepDownRect = D2D1::RectF(0, 0, 0, 0);
@@ -254,7 +264,6 @@ void Toolbar::UpdateLayout(float winW, float winH) {
 
   for (auto &btn : m_buttons) {
     bool visible = isVisibleButton(btn);
-
     // Sync Pin State
     if (btn.id == ToolbarButtonID::Pin) {
       btn.isToggled = m_isPinned;
@@ -267,7 +276,9 @@ void Toolbar::UpdateLayout(float winW, float winH) {
 
       if (m_compareMode && btn.id == ToolbarButtonID::CompareZoomIn &&
           !stepInserted) {
-        m_compareStepRect = D2D1::RectF(cx, cy, cx + stepW, cy + stepH);
+        cx -= gap; // Backtrack to remove standard gap
+        cx += zoomGap; // Padding before capsule
+        m_compareStepRect = D2D1::RectF(cx, stepY, cx + stepW, stepY + stepH);
         const float stepBtnW = 14.0f * m_uiScale;
         m_compareStepUpRect = D2D1::RectF(m_compareStepRect.right - stepBtnW,
                                           m_compareStepRect.top,
@@ -278,7 +289,7 @@ void Toolbar::UpdateLayout(float winW, float winH) {
             m_compareStepRect.right - stepBtnW,
             m_compareStepRect.top + (stepH * 0.5f),
             m_compareStepRect.right, m_compareStepRect.bottom);
-        cx += stepW + gap;
+        cx += stepW + zoomGap; // Capsule width + padding after
         stepInserted = true;
       }
     } else {
@@ -345,16 +356,10 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
   if (m_opacity <= 0.0f)
     return;
 
-  // [Phase 3] Don't render if window is too narrow
   if (m_windowTooNarrow)
     return;
 
-  CreateResources(pRT); // Ensure resources
-
-  // Set global opacity
-  // Cannot set on RenderTarget easily without Layer.
-  // Use Layer or set Brush opacity.
-  // Layer is cleaner for semi-transparent group.
+  CreateResources(pRT);
 
   ComPtr<ID2D1Layer> layer;
   if (SUCCEEDED(pRT->CreateLayer(&layer))) {
@@ -364,23 +369,19 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
 
     pRT->PushLayer(params, layer.Get());
 
-    // Background
-    m_brushBg->SetOpacity(g_config.ToolbarAlpha); // Base opacity from config
+    m_brushBg->SetOpacity(g_config.ToolbarAlpha);
     pRT->FillRoundedRectangle(m_bgRect, m_brushBg.Get());
 
-    // Buttons
     for (const auto &btn : m_buttons) {
       if (btn.rect.right == 0)
-        continue; // Hidden
+        continue;
 
-      // Hover effect with rounded corners
       if (btn.isHovered) {
         D2D1_ROUNDED_RECT hoverRect =
             D2D1::RoundedRect(btn.rect, 6.0f * m_uiScale, 6.0f * m_uiScale);
         pRT->FillRoundedRectangle(hoverRect, m_brushHover.Get());
       }
 
-      // Icon Brush
       ID2D1SolidColorBrush *pBrush = m_brushIcon.Get();
       if (btn.isToggled)
         pBrush = m_brushIconActive.Get();
@@ -391,30 +392,21 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
       if (btn.id == ToolbarButtonID::Pin && btn.isToggled)
         pBrush = m_brushIconActive.Get();
 
-      // Specific Icon Logic
       wchar_t icon = btn.iconChar;
       IDWriteTextFormat *iconFormat =
           (btn.id == ToolbarButtonID::CompareExit && m_textFormatIconSmall)
               ? m_textFormatIconSmall.Get()
               : m_textFormatIcon.Get();
 
-      // Rotate Mirroring check
       if (btn.id == ToolbarButtonID::RotateL) {
-        // Save current transform (includes drawOffset from CompositionEngine)
         D2D1::Matrix3x2F originalTransform;
         pRT->GetTransform(&originalTransform);
-
-        // Apply flip around button center
         float cx = (btn.rect.left + btn.rect.right) / 2;
         float cy = (btn.rect.top + btn.rect.bottom) / 2;
-        // Scale * Original (Apply scale in logic space, then transform to
-        // surface space)
         pRT->SetTransform(
             D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, D2D1::Point2F(cx, cy)) *
             originalTransform);
         pRT->DrawText(&icon, 1, iconFormat, btn.rect, pBrush);
-
-        // Restore original transform
         pRT->SetTransform(originalTransform);
         continue;
       }
@@ -422,13 +414,11 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
       pRT->DrawText(&icon, 1, iconFormat, btn.rect, pBrush);
     }
 
-    // Compare Zoom Step Control
     if (m_compareMode && m_compareStepRect.right > m_compareStepRect.left) {
       D2D1_ROUNDED_RECT stepRect = D2D1::RoundedRect(
           m_compareStepRect, 6.0f * m_uiScale, 6.0f * m_uiScale);
       pRT->FillRoundedRectangle(stepRect, m_brushHover.Get());
 
-      // Right-side up/down buttons hover
       if (m_compareStepUpHover) {
         D2D1_ROUNDED_RECT upRect = D2D1::RoundedRect(
             m_compareStepUpRect, 4.0f * m_uiScale, 4.0f * m_uiScale);
@@ -439,26 +429,22 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
         pRT->FillRoundedRectangle(downRect, m_brushIconActive.Get());
       }
 
-      // Divider line
       const float stepBtnW = 14.0f * m_uiScale;
       D2D1_RECT_F divider = D2D1::RectF(
-          m_compareStepRect.right - stepBtnW, m_compareStepRect.top,
-          m_compareStepRect.right - stepBtnW + 1.0f, m_compareStepRect.bottom);
+          m_compareStepRect.right - stepBtnW, m_compareStepRect.top + 2.0f * m_uiScale,
+          m_compareStepRect.right - stepBtnW + 1.0f, m_compareStepRect.bottom - 2.0f * m_uiScale);
       pRT->FillRectangle(divider, m_brushIconDisabled.Get());
 
-      // Value text
       wchar_t buf[16]{};
       swprintf_s(buf, L"%.1f%%", m_compareZoomStepPercent);
       D2D1_RECT_F textRect = D2D1::RectF(
-          m_compareStepRect.left + 4.0f * m_uiScale, m_compareStepRect.top,
+          m_compareStepRect.left + 2.0f * m_uiScale, m_compareStepRect.top,
           m_compareStepRect.right - stepBtnW, m_compareStepRect.bottom);
-      IDWriteTextFormat *stepFormat =
-          m_textFormatIconSmall ? m_textFormatIconSmall.Get()
-                                : m_textFormatIcon.Get();
-      pRT->DrawTextW(buf, (UINT32)wcslen(buf), stepFormat, textRect,
-                     m_brushIcon.Get());
+      IDWriteTextFormat *stepFormat = m_textFormatUI ? m_textFormatUI.Get() : m_textFormatIconSmall.Get();
+      
+      // Use standard DrawText which handles standard fonts correctly
+      pRT->DrawText(buf, (UINT32)wcslen(buf), stepFormat, textRect, m_brushIcon.Get());
 
-      // Up/Down chevrons
       ComPtr<ID2D1Factory> factory;
       pRT->GetFactory(&factory);
       if (factory) {
@@ -471,30 +457,25 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
           ComPtr<ID2D1GeometrySink> sink;
           path->Open(&sink);
           if (up) {
-            sink->BeginFigure(D2D1::Point2F(cx - size, cy + size),
-                              D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->BeginFigure(D2D1::Point2F(cx - size, cy + size), D2D1_FIGURE_BEGIN_HOLLOW);
             sink->AddLine(D2D1::Point2F(cx, cy - size));
             sink->AddLine(D2D1::Point2F(cx + size, cy + size));
           } else {
-            sink->BeginFigure(D2D1::Point2F(cx - size, cy - size),
-                              D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->BeginFigure(D2D1::Point2F(cx - size, cy - size), D2D1_FIGURE_BEGIN_HOLLOW);
             sink->AddLine(D2D1::Point2F(cx, cy + size));
             sink->AddLine(D2D1::Point2F(cx + size, cy - size));
           }
           sink->EndFigure(D2D1_FIGURE_END_OPEN);
           sink->Close();
-          pRT->DrawGeometry(path.Get(), m_brushIcon.Get(),
-                            1.5f * m_uiScale);
+          pRT->DrawGeometry(path.Get(), m_brushIcon.Get(), 1.5f * m_uiScale);
         };
         drawChevron(m_compareStepUpRect, true);
         drawChevron(m_compareStepDownRect, false);
       }
     }
-
     pRT->PopLayer();
   }
 
-  // Tooltip for hovered button (rendered OUTSIDE layer for full opacity)
   for (const auto &btn : m_buttons) {
     const wchar_t *tipText = GetTooltipText(btn);
     if (btn.isHovered && tipText && tipText[0] != 0) {
@@ -510,48 +491,32 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
             12.0f * m_uiScale, L"en-us", &tooltipFormat);
         if (tooltipFormat) {
           tooltipFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-          tooltipFormat->SetParagraphAlignment(
-              DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+          tooltipFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
           tooltipScale = m_uiScale;
         }
       }
 
       if (tooltipFormat) {
         size_t tipLen = wcslen(tipText);
-
-        // Measure actual text width using DirectWrite for proper Unicode
-        // support
         ComPtr<IDWriteTextLayout> textLayout;
-        float tipWidth =
-            tipLen * 10.0f * m_uiScale + 16.0f * m_uiScale; // Fallback
+        float tipWidth = tipLen * 10.0f * m_uiScale + 16.0f * m_uiScale;
         if (m_dwriteFactory) {
-          m_dwriteFactory->CreateTextLayout(
-              tipText, (UINT32)tipLen, tooltipFormat.Get(), 500.0f * m_uiScale,
-              40.0f * m_uiScale, &textLayout);
+          m_dwriteFactory->CreateTextLayout(tipText, (UINT32)tipLen, tooltipFormat.Get(), 500.0f * m_uiScale, 40.0f * m_uiScale, &textLayout);
           if (textLayout) {
             DWRITE_TEXT_METRICS metrics;
             textLayout->GetMetrics(&metrics);
-            tipWidth = metrics.width + 16.0f * m_uiScale; // Add padding
+            tipWidth = metrics.width + 16.0f * m_uiScale;
           }
         }
-
         float tipHeight = 22.0f * m_uiScale;
         float tipX = (btn.rect.left + btn.rect.right) / 2 - tipWidth / 2;
         float tipY = m_bgRect.rect.top - tipHeight - 8.0f * m_uiScale;
-        if (tipX < 5.0f * m_uiScale)
-          tipX = 5.0f * m_uiScale;
-
-        D2D1_RECT_F tipRect =
-            D2D1::RectF(tipX, tipY, tipX + tipWidth, tipY + tipHeight);
-
+        if (tipX < 5.0f * m_uiScale) tipX = 5.0f * m_uiScale;
+        D2D1_RECT_F tipRect = D2D1::RectF(tipX, tipY, tipX + tipWidth, tipY + tipHeight);
         ComPtr<ID2D1SolidColorBrush> tipBg;
-        pRT->CreateSolidColorBrush(D2D1::ColorF(0.15f, 0.15f, 0.15f, 0.95f),
-                                   &tipBg);
-        pRT->FillRoundedRectangle(
-            D2D1::RoundedRect(tipRect, 4.0f * m_uiScale, 4.0f * m_uiScale),
-            tipBg.Get());
-        pRT->DrawText(tipText, (UINT32)tipLen, tooltipFormat.Get(), tipRect,
-                      m_brushIcon.Get());
+        pRT->CreateSolidColorBrush(D2D1::ColorF(0.15f, 0.15f, 0.15f, 0.95f), &tipBg);
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(tipRect, 4.0f * m_uiScale, 4.0f * m_uiScale), tipBg.Get());
+        pRT->DrawText(tipText, (UINT32)tipLen, tooltipFormat.Get(), tipRect, m_brushIcon.Get());
       }
       break;
     }
@@ -559,181 +524,89 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
 }
 
 bool Toolbar::OnMouseMove(float x, float y) {
-  if (m_windowTooNarrow)
-    return false;
-  // Check if near bottom
-  // We don't have window height here unless passed or stored.
-  // UpdateLayout stores rect.
-  // Trigger zone is usually managed by MainWindow, calling SetVisible.
-  // But button hover needs x/y.
-
+  if (m_windowTooNarrow) return false;
   bool changed = false;
-  bool stepHover = false;
-  bool stepUpHover = false;
-  bool stepDownHover = false;
+  bool stepHover = false, stepUpHover = false, stepDownHover = false;
   for (auto &btn : m_buttons) {
     bool wasHovered = btn.isHovered;
-    btn.isHovered = false;
-    if (btn.rect.right > 0) { // Visible
-      if (x >= btn.rect.left && x < btn.rect.right && y >= btn.rect.top &&
-          y < btn.rect.bottom) {
-        btn.isHovered = true;
-      }
-    }
-    if (btn.isHovered != wasHovered)
-      changed = true;
+    btn.isHovered = (btn.rect.right > 0 && x >= btn.rect.left && x < btn.rect.right && y >= btn.rect.top && y < btn.rect.bottom);
+    if (btn.isHovered != wasHovered) changed = true;
   }
-
   if (m_compareMode && m_compareStepRect.right > m_compareStepRect.left) {
-    if (x >= m_compareStepRect.left && x < m_compareStepRect.right &&
-        y >= m_compareStepRect.top && y < m_compareStepRect.bottom) {
+    if (x >= m_compareStepRect.left && x < m_compareStepRect.right && y >= m_compareStepRect.top && y < m_compareStepRect.bottom) {
       stepHover = true;
-      if (x >= m_compareStepUpRect.left && x < m_compareStepUpRect.right &&
-          y >= m_compareStepUpRect.top && y < m_compareStepUpRect.bottom) {
-        stepUpHover = true;
-      } else if (x >= m_compareStepDownRect.left &&
-                 x < m_compareStepDownRect.right &&
-                 y >= m_compareStepDownRect.top &&
-                 y < m_compareStepDownRect.bottom) {
-        stepDownHover = true;
-      }
+      if (x >= m_compareStepUpRect.left && x < m_compareStepUpRect.right && y >= m_compareStepUpRect.top && y < m_compareStepUpRect.bottom) stepUpHover = true;
+      else if (x >= m_compareStepDownRect.left && x < m_compareStepDownRect.right && y >= m_compareStepDownRect.top && y < m_compareStepDownRect.bottom) stepDownHover = true;
     }
   }
-  if (!m_compareMode) {
-    stepHover = false;
-    stepUpHover = false;
-    stepDownHover = false;
-  }
-  if (stepHover != m_compareStepHover || stepUpHover != m_compareStepUpHover ||
-      stepDownHover != m_compareStepDownHover) {
+  if (!m_compareMode) { stepHover = stepUpHover = stepDownHover = false; }
+  if (stepHover != m_compareStepHover || stepUpHover != m_compareStepUpHover || stepDownHover != m_compareStepDownHover) {
     changed = true;
-    m_compareStepHover = stepHover;
-    m_compareStepUpHover = stepUpHover;
-    m_compareStepDownHover = stepDownHover;
+    m_compareStepHover = stepHover; m_compareStepUpHover = stepUpHover; m_compareStepDownHover = stepDownHover;
   }
   return changed;
 }
 
 bool Toolbar::OnClick(float x, float y, ToolbarButtonID &outId) {
-  if (m_windowTooNarrow)
-    return false;
-  if (!IsVisible())
-    return false;
-
-  // Check background hit
+  if (m_windowTooNarrow || !IsVisible()) return false;
   if (HitTest(x, y)) {
     if (m_compareMode && m_compareStepRect.right > m_compareStepRect.left) {
-      if (x >= m_compareStepUpRect.left && x < m_compareStepUpRect.right &&
-          y >= m_compareStepUpRect.top && y < m_compareStepUpRect.bottom) {
-        m_compareZoomStepPercent =
-            (std::min)(5.0f, m_compareZoomStepPercent + 0.1f);
-        outId = ToolbarButtonID::None;
-        return true;
+      if (x >= m_compareStepUpRect.left && x < m_compareStepUpRect.right && y >= m_compareStepUpRect.top && y < m_compareStepUpRect.bottom) {
+        m_compareZoomStepPercent = (std::min)(5.0f, m_compareZoomStepPercent + 0.1f);
+        outId = ToolbarButtonID::None; return true;
       }
-      if (x >= m_compareStepDownRect.left &&
-          x < m_compareStepDownRect.right &&
-          y >= m_compareStepDownRect.top &&
-          y < m_compareStepDownRect.bottom) {
-        m_compareZoomStepPercent =
-            (std::max)(0.1f, m_compareZoomStepPercent - 0.1f);
-        outId = ToolbarButtonID::None;
-        return true;
+      if (x >= m_compareStepDownRect.left && x < m_compareStepDownRect.right && y >= m_compareStepDownRect.top && y < m_compareStepDownRect.bottom) {
+        m_compareZoomStepPercent = (std::max)(0.1f, m_compareZoomStepPercent - 0.1f);
+        outId = ToolbarButtonID::None; return true;
       }
     }
-
-    // Check buttons
     for (auto &btn : m_buttons) {
-      if (btn.rect.right > 0) {
-        if (x >= btn.rect.left && x < btn.rect.right && y >= btn.rect.top &&
-            y < btn.rect.bottom) {
-          outId = btn.id;
-          return true;
-        }
+      if (btn.rect.right > 0 && x >= btn.rect.left && x < btn.rect.right && y >= btn.rect.top && y < btn.rect.bottom) {
+        outId = btn.id; return true;
       }
     }
-    return true; // Consumed click on toolbar background
+    return true;
   }
   return false;
 }
 
 bool Toolbar::HitTest(float x, float y) {
-  if (m_windowTooNarrow)
-    return false;
-  if (!IsVisible())
-    return false;
-  return (x >= m_bgRect.rect.left && x <= m_bgRect.rect.right &&
-          y >= m_bgRect.rect.top && y <= m_bgRect.rect.bottom);
+  return (IsVisible() && !m_windowTooNarrow && x >= m_bgRect.rect.left && x <= m_bgRect.rect.right && y >= m_bgRect.rect.top && y <= m_bgRect.rect.bottom);
 }
 
 void Toolbar::SetVisible(bool visible) { m_targetVisible = visible; }
 
 bool Toolbar::UpdateAnimation() {
-  float speed = 0.34f; // [v10.0] Faster animation (~3 frames)
+  float speed = 0.34f;
   if (m_targetVisible) {
-    if (m_opacity < 1.0f) {
-      m_opacity += speed;
-      if (m_opacity > 1.0f)
-        m_opacity = 1.0f;
-      return true;
-    }
+    if (m_opacity < 1.0f) { m_opacity += speed; if (m_opacity > 1.0f) m_opacity = 1.0f; return true; }
   } else {
-    if (m_opacity > 0.0f) {
-      m_opacity -= speed;
-      if (m_opacity < 0.0f)
-        m_opacity = 0.0f;
-      return true;
-    }
+    if (m_opacity > 0.0f) { m_opacity -= speed; if (m_opacity < 0.0f) m_opacity = 0.0f; return true; }
   }
   return false;
 }
 
 void Toolbar::SetLockState(bool locked) {
-  for (auto &btn : m_buttons) {
-    if (btn.id == ToolbarButtonID::LockSize) {
-      btn.isToggled = locked;
-      btn.iconChar = locked ? ICON_LOCK[0] : ICON_UNLOCK[0];
-    }
-  }
+  for (auto &btn : m_buttons) { if (btn.id == ToolbarButtonID::LockSize) { btn.isToggled = locked; btn.iconChar = locked ? ICON_LOCK[0] : ICON_UNLOCK[0]; } }
 }
 
 void Toolbar::SetExifState(bool open) {
-  for (auto &btn : m_buttons) {
-    if (btn.id == ToolbarButtonID::Exif) {
-      btn.isToggled = open;
-    }
-  }
+  for (auto &btn : m_buttons) { if (btn.id == ToolbarButtonID::Exif) { btn.isToggled = open; } }
 }
 
 void Toolbar::SetRawState(bool isRaw, bool isFullDecode) {
-  for (auto &btn : m_buttons) {
-    if (btn.id == ToolbarButtonID::RawToggle) {
-      btn.isEnabled = isRaw;
-      if (isRaw) {
-        btn.isToggled = isFullDecode;
-        // Icon stays the same (E722), only color changes via isToggled
-        // Tooltip handled by GetTooltipText
-      }
-    }
-  }
+  for (auto &btn : m_buttons) { if (btn.id == ToolbarButtonID::RawToggle) { btn.isEnabled = isRaw; if (isRaw) { btn.isToggled = isFullDecode; } } }
 }
 
 void Toolbar::SetExtensionWarning(bool hasMismatch) {
-  for (auto &btn : m_buttons) {
-    if (btn.id == ToolbarButtonID::FixExtension) {
-      btn.isWarning = hasMismatch; // Only visible if warning?
-      // UpdateLayout should handle visibility based on isWarning flag logic I
-      // wrote above.
-    }
-  }
+  for (auto &btn : m_buttons) { if (btn.id == ToolbarButtonID::FixExtension) { btn.isWarning = hasMismatch; } }
 }
 
 void Toolbar::SetCompareMode(bool enabled) { m_compareMode = enabled; }
 
 void Toolbar::SetCompareSyncStates(bool syncZoom, bool syncPan) {
   for (auto &btn : m_buttons) {
-    if (btn.id == ToolbarButtonID::CompareSyncZoom)
-      btn.isToggled = syncZoom;
-    if (btn.id == ToolbarButtonID::CompareSyncPan)
-      btn.isToggled = syncPan;
+    if (btn.id == ToolbarButtonID::CompareSyncZoom) btn.isToggled = syncZoom;
+    if (btn.id == ToolbarButtonID::CompareSyncPan) btn.isToggled = syncPan;
   }
 }
