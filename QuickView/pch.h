@@ -21,6 +21,7 @@ using Microsoft::WRL::ComPtr;
 #include <memory>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <stdexcept>
 
 // Pragmas for linking

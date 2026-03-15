@@ -361,6 +361,7 @@ struct CompareState {
     ComparePane selectedPane = ComparePane::Right;
     bool dirty = false;
     bool autoExpandedWindow = false;
+    bool pendingSnap = false;
 };
 static CompareState g_compare;
 
@@ -1209,6 +1210,69 @@ static bool RenderCompareComposite(HWND hwnd) {
     return true;
 }
 
+static void SnapWindowToCompareImages(HWND hwnd) {
+    if (!IsCompareModeActive() || !g_compare.left.valid || !g_imageResource) return;
+
+    D2D1_SIZE_F szLeft = GetOrientedSize(g_compare.left.resource, g_compare.left.view.ExifOrientation);
+    D2D1_SIZE_F szRight = GetOrientedSize(g_imageResource, g_viewState.ExifOrientation);
+
+    if (szLeft.width <= 0 || szRight.width <= 0) return;
+
+    float targetImgW, targetImgH;
+    if (g_compare.mode == ViewMode::CompareSideBySide) {
+        // Match heights to the larger one to avoid vertical bars
+        float commonH = std::max(szLeft.height, szRight.height);
+        targetImgW = szLeft.width * (commonH / szLeft.height) + szRight.width * (commonH / szRight.height);
+        targetImgH = commonH;
+    } else {
+        // Overlap / Wipe mode
+        targetImgW = std::max(szLeft.width, szRight.width);
+        targetImgH = std::max(szLeft.height, szRight.height);
+    }
+
+    // Get monitor work area
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(hMon, &mi)) return;
+    int maxW = mi.rcWork.right - mi.rcWork.left;
+    int maxH = mi.rcWork.bottom - mi.rcWork.top;
+
+    // Convert client to window size
+    RECT rc = { 0, 0, (int)targetImgW, (int)targetImgH };
+    AdjustWindowRectEx(&rc, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
+    
+    int winW = rc.right - rc.left;
+    int winH = rc.bottom - rc.top;
+
+    // Cap to screen work area with some margin
+    if (winW > (maxW - 40) || winH > (maxH - 40)) {
+        float scale = std::min((float)(maxW - 40) / winW, (float)(maxH - 40) / winH);
+        winW = (int)(winW * scale);
+        winH = (int)(winH * scale);
+    }
+
+    // Minimum size for UI safety
+    winW = std::max(winW, 600);
+    winH = std::max(winH, 450);
+
+    // Center window
+    int x = mi.rcWork.left + (maxW - winW) / 2;
+    int y = mi.rcWork.top + (maxH - winH) / 2;
+
+    SetWindowPos(hwnd, nullptr, x, y, winW, winH, SWP_NOZORDER | SWP_NOACTIVATE);
+    
+    // Reset views to match the new size (Fit mode)
+    g_viewState.Reset();
+    g_compare.left.view.Zoom = 1.0f;
+    g_compare.left.view.PanX = 0;
+    g_compare.left.view.PanY = 0;
+    g_viewState.CompareActive = true;
+    if (g_config.AutoRotate) {
+         g_compare.left.view.ExifOrientation = g_compare.left.metadata.ExifOrientation;
+         g_viewState.ExifOrientation = g_currentMetadata.ExifOrientation;
+    }
+}
+
 static void EnterCompareMode(HWND hwnd) {
     if (IsCompareModeActive() || !g_imageResource) return;
     if (g_currentMetadata.Width > 8192 || g_currentMetadata.Height > 8192) {
@@ -1250,23 +1314,8 @@ static void EnterCompareMode(HWND hwnd) {
     GetClientRect(hwnd, &rc);
     g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
 
-    // Optional expansion: widen once to improve side-by-side usability.
-    if (!g_compare.autoExpandedWindow && !g_isFullScreen && !IsZoomed(hwnd)) {
-        RECT win{};
-        GetWindowRect(hwnd, &win);
-        HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi{ sizeof(mi) };
-        if (GetMonitorInfoW(mon, &mi)) {
-            int curW = win.right - win.left;
-            int curH = win.bottom - win.top;
-            int maxW = mi.rcWork.right - mi.rcWork.left;
-            int targetW = (std::min)((int)(curW * 1.7f), maxW);
-            int cx = (win.left + win.right) / 2;
-            int cy = (win.top + win.bottom) / 2;
-            SetWindowPos(hwnd, nullptr, cx - targetW / 2, cy - curH / 2, targetW, curH, SWP_NOZORDER | SWP_NOACTIVATE);
-            g_compare.autoExpandedWindow = true;
-        }
-    }
+    g_compare.pendingSnap = true;
+
 
     // Auto-load next image into right pane if possible.
     if (g_navigator.Count() > 1) {
@@ -4528,8 +4577,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // Restore Trigger: If we *were* maximized and now are *not*, RESET zoom to fit.
                if (!isMaximized && s_wasMaximized) {
                     // Reset to default view state (centered, fit)
+                    bool wasCompare = IsCompareModeActive();
                     g_viewState.Reset();
+                    if (wasCompare) {
+                        g_compare.left.view.Zoom = 1.0f;
+                        g_compare.left.view.PanX = 0.0f;
+                        g_compare.left.view.PanY = 0.0f;
+                        g_viewState.CompareActive = true;
+                    }
                     RestoreCurrentExifOrientation();
+                    if (wasCompare && g_config.AutoRotate && g_compare.left.valid) {
+                         g_compare.left.view.ExifOrientation = g_compare.left.metadata.ExifOrientation;
+                    }
                     RequestRepaint(PaintLayer::All);
                }
             s_wasMaximized = isMaximized;
@@ -5607,6 +5666,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         g_compare.draggingDivider = false;
                         ReleaseCapture();
                         g_viewState.CompareActive = true;
+                        
+                        // SNAP window to images on mode change (Side-by-Side <-> Wipe)
+                        SnapWindowToCompareImages(hwnd);
+                        
                         g_viewState.CompareSplitRatio = GetCompareSplitRatio();
                         MarkCompareDirty();
                         RequestRepaint(PaintLayer::Image | PaintLayer::Static);
@@ -7314,6 +7377,10 @@ void ProcessEngineEvents(HWND hwnd) {
 
                 if (IsCompareModeActive()) {
                     MarkCompareDirty();
+                    if (g_compare.pendingSnap && !isPreview) {
+                        SnapWindowToCompareImages(hwnd);
+                        g_compare.pendingSnap = false;
+                    }
                 } else {
                     // Update DComp Visual (Base Preview for Titan, or full image for standard)
                     RenderImageToDComp(hwnd, g_imageResource, hasTransparency, false);
