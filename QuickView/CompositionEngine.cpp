@@ -706,7 +706,7 @@ HRESULT CompositionEngine::EndPendingUpdate() {
     return S_OK;
 }
 
-HRESULT CompositionEngine::PlayPingPongCrossFade(float durationMs, bool isTransparent) {
+HRESULT CompositionEngine::PlayPingPongCrossFade(float durationMs) {
     
     int pendingIndex = (m_activeLayerIndex + 1) % 2;
     // Image A is ALWAYS Top. Image B is ALWAYS Bottom.

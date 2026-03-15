@@ -440,7 +440,7 @@ static void RefreshWindowDpi(HWND hwnd, UINT dpiHint = 0) {
 }
 
 // [DComp] Render bitmap to DComp Pending Surface and trigger cross-fade
-static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent, bool isFastUpgrade = false); // fwd decl
+static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade = false); // fwd decl
 static bool FileExists(LPCWSTR path); // fwd decl
 
 // RenderDebugHUD moved to UIRenderer
@@ -1350,12 +1350,7 @@ static void ExitCompareMode(HWND hwnd) {
     g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
 
     if (g_imageResource) {
-        bool hasTransparency = (g_currentMetadata.Format == L"SVG") ||
-                               (g_currentMetadata.Format == L"PNG") ||
-                               (g_currentMetadata.Format == L"WEBP") ||
-                               (g_currentMetadata.Format == L"GIF") ||
-                               (g_currentMetadata.Format.find(L"Alpha") != std::wstring::npos);
-        RenderImageToDComp(hwnd, g_imageResource, hasTransparency, false);
+        RenderImageToDComp(hwnd, g_imageResource, false);
         SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
         g_compEngine->Commit();
     }
@@ -1633,13 +1628,7 @@ static bool ShouldUpgradeBitmapSurface(const D2D1_SIZE_U& desired) {
     return (desired.width > curW + 4.0f || desired.height > curH + 4.0f);
 }
 
-static bool IsTransparentImage() {
-    if (g_imageResource.isSvg) return true;
-    const std::wstring& fmt = g_currentMetadata.Format;
-    if (fmt == L"PNG" || fmt == L"WEBP" || fmt == L"GIF" || fmt == L"SVG") return true;
-    if (fmt.find(L"Alpha") != std::wstring::npos) return true;
-    return false;
-}
+
 
 static void TryUpgradeBitmapSurface(HWND hwnd) {
     if (!g_imageResource || g_imageResource.isSvg) return;
@@ -1653,13 +1642,13 @@ static void TryUpgradeBitmapSurface(HWND hwnd) {
     D2D1_SIZE_U desired = ComputeDesiredBitmapSurfaceSize((UINT)rc.right, (UINT)rc.bottom, g_imageResource);
     if (!ShouldUpgradeBitmapSurface(desired)) return;
 
-    RenderImageToDComp(hwnd, g_imageResource, IsTransparentImage(), true);
+    RenderImageToDComp(hwnd, g_imageResource, true);
 }
 
 // [DComp] Render content (Bitmap or SVG) to DComp Pending Surface
 // For SVG: Uses Direct2D Native path with real-time transform (Lossless Zoom)
 // For Bitmap: Uses existing logic
-static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent, bool isFastUpgrade) {
+static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade) {
     if (!g_compEngine || !g_compEngine->IsInitialized()) return false;
     
     RECT rc; GetClientRect(hwnd, &rc);
@@ -1754,7 +1743,7 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
     ID2D1DeviceContext* ctx = g_compEngine->BeginPendingUpdate(surfW, surfH, isTitan, fullWidth, fullHeight);
     if (!ctx) return false;
     
-    ctx->Clear(isTransparent ? D2D1::ColorF(0, 0.0f) : D2D1::ColorF(0.1f, 0.1f, 0.1f));
+    ctx->Clear(D2D1::ColorF(0, 0, 0, 0)); // Transparent to avoid baking background color
 
     if (res.isSvg && res.svgDoc) {
         // === SVG Direct2D Native Path ===
@@ -1908,7 +1897,7 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isTransparent
     // Use 150ms fade to eliminate transparent flicker.
     // For fast upgrades (same image, new surface size), swap instantly to avoid scale-jump artifacts.
     float fadeMs = isFastUpgrade ? 0.0f : 150.0f;
-    g_compEngine->PlayPingPongCrossFade(fadeMs, isTransparent);
+    g_compEngine->PlayPingPongCrossFade(fadeMs);
     if (g_compEngine->IsInitialized()) {
         SyncDCompState(hwnd, (float)winW, (float)winH);
     }
@@ -7495,15 +7484,6 @@ void ProcessEngineEvents(HWND hwnd) {
                 }
                 SetWindowTextW(hwnd, titleBuf);
                 
-                // [Fix] Expand transparency detection to include all transparent formats
-                bool hasTransparency = (evt.metadata.Format == L"SVG") ||
-                                       (evt.rawFrame && evt.rawFrame->IsSvg()) ||
-                                       (evt.metadata.Format == L"PNG") || 
-                                       (evt.metadata.Format == L"WEBP") ||
-                                       (evt.metadata.Format == L"GIF") ||
-                                       (evt.metadata.Format.find(L"Alpha") != std::wstring::npos) ||
-                                       (evt.rawFrame && evt.rawFrame->format == QuickView::PixelFormat::BGRA8888);
-
                 if (IsCompareModeActive() && (g_currentMetadata.Width > 8192 || g_currentMetadata.Height > 8192)) {
                     ExitCompareMode(hwnd);
                     g_osd.Show(hwnd, L"Compare mode exited: Titan image is not supported yet.", true);
@@ -7518,7 +7498,7 @@ void ProcessEngineEvents(HWND hwnd) {
                     }
                 } else {
                     // Update DComp Visual (Base Preview for Titan, or full image for standard)
-                    RenderImageToDComp(hwnd, g_imageResource, hasTransparency, false);
+                    RenderImageToDComp(hwnd, g_imageResource, false);
                     
                     // [Optimization] GPU-Assistant Surface Rotation Complete
                     // The Surface is now physically rotated. Neutralize global Exif.
@@ -7894,7 +7874,7 @@ static bool ApplyPhase1PlaceholderFrame(
     swprintf_s(titleBuf, L"Loading... %s - %s", name, g_szWindowTitle);
     SetWindowTextW(hwnd, titleBuf);
 
-    RenderImageToDComp(hwnd, g_imageResource, true, false);
+    RenderImageToDComp(hwnd, g_imageResource, false);
     if (g_compEngine && g_compEngine->IsInitialized()) {
         RECT rc; GetClientRect(hwnd, &rc);
         SyncDCompState(hwnd, static_cast<float>(rc.right), static_cast<float>(rc.bottom));
