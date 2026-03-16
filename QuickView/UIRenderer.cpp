@@ -1418,6 +1418,13 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
         rows.push_back({ L"\U0001F4BB", L"Soft", metadata.Software, L"", metadata.Software, TruncateMode::EndEllipsis, false });
     }
 
+    // Extraction: Subsampling / Chroma
+    if (metadata.FormatDetails.find(L"4:") != std::wstring::npos) {
+        size_t pos = metadata.FormatDetails.find(L"4:");
+        std::wstring chroma = metadata.FormatDetails.substr(pos, 5);
+        rows.push_back({ L"\U0001F3A8", L"Chroma", chroma, L"", L"", TruncateMode::None, false });
+    }
+
     // Advanced Metrics at the very bottom (only for HUD/Geek mode)
     if (showAdvanced) {
         if (metadata.HasSharpness) {
@@ -1427,6 +1434,13 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
         if (metadata.HasEntropy) {
             wchar_t buf[32]; swprintf_s(buf, L"%.2f", metadata.Entropy);
             rows.push_back({ L"\U0001F4CA", L"Entropy", buf, L"", L"", TruncateMode::None, false });
+        }
+        
+        // BPP (Bits Per Pixel)
+        if (metadata.Width > 0 && metadata.Height > 0 && metadata.FileSize > 0) {
+            double bpp = (double)(metadata.FileSize * 8) / ((double)metadata.Width * metadata.Height);
+            wchar_t bppBuf[32]; swprintf_s(bppBuf, L"%.2f bpp", bpp);
+            rows.push_back({ L"\U0001F4C8", L"BPP", bppBuf, L"", L"", TruncateMode::None, false });
         }
     }
 
@@ -1911,6 +1925,19 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     auto leftRows = BuildGridRows(leftMeta, L"Left", true);
     auto rightRows = BuildGridRows(rightMeta, L"Right", true);
 
+    // --- Smart Logic (Quality Assessment) ---
+    auto GetQualityTag = [](const CImageLoader::ImageMetadata& meta) -> std::wstring {
+        if (!meta.HasSharpness || !meta.HasEntropy) return L"";
+        if (meta.Entropy > 7.0 && meta.Sharpness > 400.0) return L"🏆 Photo (Perfect)";
+        if (meta.Sharpness > 1000.0 && meta.Entropy > 7.5) return L"⚡ Noisy / Raw";
+        if (meta.Sharpness < 150.0 && meta.Entropy < 6.8) return L"💨 Soft / Blurry";
+        // Fake High Res Detection
+        if (meta.Width > 3000 && meta.Sharpness < 100.0) return L"⚠️ Fake High-Res";
+        return L"";
+    };
+    std::wstring leftTag = GetQualityTag(leftMeta);
+    std::wstring rightTag = GetQualityTag(rightMeta);
+
     EnsureTextFormats();
     if (!m_panelFormat || !m_debugFormat) return;
 
@@ -1957,9 +1984,18 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     float y = panelY + padding;
     
-    // Header
+    // Header with Quality Tags
     D2D1_RECT_F headerRect = D2D1::RectF(panelX, y, panelX + panelW, y + headerH);
-    dc->DrawText(L"TELEMETRY COMPARISON ENGINE v2.0", 31, m_debugFormat.Get(), headerRect, brushBorder.Get());
+    std::wstring headerText = L"TELEMETRY COMPARISON ENGINE v2.5";
+    dc->DrawText(headerText.c_str(), (UINT32)headerText.length(), m_debugFormat.Get(), headerRect, brushBorder.Get());
+    
+    // Draw Quality Tags
+    m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    if (!leftTag.empty()) dc->DrawText(leftTag.c_str(), (UINT32)leftTag.length(), m_debugFormat.Get(), D2D1::RectF(panelX + padding, y, panelX + 300*s, y + headerH), brushGood.Get());
+    m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+    if (!rightTag.empty()) dc->DrawText(rightTag.c_str(), (UINT32)rightTag.length(), m_debugFormat.Get(), D2D1::RectF(panelX + panelW - 300*s, y, panelX + panelW - padding, y + headerH), brushGood.Get());
+    m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+
     y += headerH;
 
     // Grid Column Starts
@@ -1967,56 +2003,122 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     float labelX = leftX + valW + 10.0f * s;
     float rightX = labelX + labelW + 10.0f * s;
 
-    for (const auto& label : labels) {
-        // Find corresponding rows
-        const InfoRow* lRow = nullptr;
-        const InfoRow* rRow = nullptr;
-        for (const auto& r : leftRows) if (r.label == label) { lRow = &r; break; }
-        for (const auto& r : rightRows) if (r.label == label) { rRow = &r; break; }
+    struct Group {
+        std::wstring name;
+        std::vector<std::wstring> labels;
+    };
+    std::vector<Group> hudGroups = {
+        { L"PHYSICAL ATTRIBUTES", { L"File", L"Size", L"Disk", L"Date" } },
+        { L"SCIENTIFIC QUALITY", { L"Sharpness", L"Entropy", L"BPP" } },
+        { L"OPTICS & ENCODING", { L"Camera", L"Exp", L"Lens", L"Focal", L"Color", L"Chroma", L"Flash", L"W.Bal", L"Meter", L"Prog", L"Soft" } }
+    };
 
-        D2D1_RECT_F rowRect = D2D1::RectF(panelX + 4, y, panelX + panelW - 4, y + rowH);
-        if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rowRect)) {
-            ComPtr<ID2D1SolidColorBrush> brushHover;
-            dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.05f), &brushHover);
-            dc->FillRectangle(rowRect, brushHover.Get());
-            
-            // Set hover state for tooltip
-            m_hoverRowIndex = -2; // Special flag for Comparison HUD
-            m_hoverInfoRow = lRow ? *lRow : (rRow ? *rRow : InfoRow{});
+    for (const auto& group : hudGroups) {
+        bool groupHasData = false;
+        for (const auto& l : group.labels) {
+            if (std::find(labels.begin(), labels.end(), l) != labels.end()) { groupHasData = true; break; }
         }
+        if (!groupHasData) continue;
 
-        // Draw Label + Icon
-        std::wstring labelFull = (lRow ? lRow->icon : (rRow ? rRow->icon : L"")) + L" " + label;
-        dc->DrawText(labelFull.c_str(), (UINT32)labelFull.length(), m_debugFormat.Get(), 
-                    D2D1::RectF(labelX, y, labelX + labelW, y + rowH), brushLabel.Get());
+        // Draw Group Header
+        D2D1_RECT_F groupRect = D2D1::RectF(panelX + padding, y + 4*s, panelX + panelW - padding, y + rowH);
+        dc->DrawText(group.name.c_str(), (UINT32)group.name.length(), m_debugFormat.Get(), groupRect, brushLabel.Get());
+        dc->DrawLine(D2D1::Point2F(panelX + padding, y + rowH - 2*s), D2D1::Point2F(panelX + panelW - padding, y + rowH - 2*s), brushLabel.Get(), 0.5f * s);
+        y += rowH;
 
-        // Draw Values
-        auto DrawValue = [&](const InfoRow* row, float x, float w, bool isLeft) {
-            if (!row) return;
-            std::wstring val = row->valueMain;
-            if (row->displayText != val && !row->displayText.empty()) val = row->displayText;
+        for (const auto& label : group.labels) {
+            if (std::find(labels.begin(), labels.end(), label) == labels.end()) continue;
             
-            D2D1_RECT_F rect = D2D1::RectF(x, y, x + w, y + rowH);
-            
-            // Difference detection
-            bool diff = false;
-            if (lRow && rRow) {
-                diff = (lRow->valueMain != rRow->valueMain);
+            // Find corresponding rows
+            const InfoRow* lRow = nullptr;
+            const InfoRow* rRow = nullptr;
+            for (const auto& r : leftRows) if (r.label == label) { lRow = &r; break; }
+            for (const auto& r : rightRows) if (r.label == label) { rRow = &r; break; }
+
+            D2D1_RECT_F rowRect = D2D1::RectF(panelX + 4, y, panelX + panelW - 4, y + rowH);
+            if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rowRect)) {
+                ComPtr<ID2D1SolidColorBrush> brushHover;
+                dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.05f), &brushHover);
+                dc->FillRectangle(rowRect, brushHover.Get());
+                
+                // Set hover state for tooltip
+                m_hoverRowIndex = -2; // Special flag for Comparison HUD
+                m_hoverInfoRow = lRow ? *lRow : (rRow ? *rRow : InfoRow{});
             }
 
-            ID2D1SolidColorBrush* brush = brushText.Get();
-            if (diff) brush = brushGood.Get(); // Highlight differences
+            // Draw Label + Icon
+            std::wstring labelFull = (lRow ? lRow->icon : (rRow ? rRow->icon : L"")) + L" " + label;
+            dc->DrawText(labelFull.c_str(), (UINT32)labelFull.length(), m_debugFormat.Get(), 
+                        D2D1::RectF(labelX, y, labelX + labelW, y + rowH), brushLabel.Get());
 
-            // Right-align left values, left-align right values
-            m_debugFormat->SetTextAlignment(isLeft ? DWRITE_TEXT_ALIGNMENT_TRAILING : DWRITE_TEXT_ALIGNMENT_LEADING);
-            dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), rect, brush);
-        };
+            // Draw Values
+            auto DrawValue = [&](const InfoRow* row, float x, float w, bool isLeft) {
+                if (!row) return;
+                std::wstring val = row->valueMain;
+                if (row->displayText != val && !row->displayText.empty()) val = row->displayText;
+                
+                D2D1_RECT_F rect = D2D1::RectF(x, y, x + w, y + rowH);
+                
+                // Difference detection
+                bool diff = false;
+                if (lRow && rRow) {
+                    diff = (lRow->valueMain != rRow->valueMain);
+                }
 
-        DrawValue(lRow, leftX, valW, true);
-        DrawValue(rRow, rightX, valW, false);
+                ID2D1SolidColorBrush* brush = brushText.Get();
+                std::wstring winnerMark = L"";
+                
+                if (diff) {
+                    brush = brushGood.Get(); // Highlight differences
+                    
+                    // Winning logic (Arrows - Modified for Bidirectional)
+                    auto IsBetter = [&](const std::wstring& lbl, const std::wstring& val1, const std::wstring& val2) -> bool {
+                        try {
+                            float v1 = std::stof(val1); float v2 = std::stof(val2);
+                            if (lbl == L"Sharpness" || lbl == L"Entropy" || lbl == L"BPP") return v1 > v2;
+                            if (lbl == L"Disk") return v1 < v2; 
+                        } catch (...) {}
+                        return false;
+                    };
+                    
+                    if (lRow && rRow) {
+                        bool leftBetter = IsBetter(label, lRow->valueMain, rRow->valueMain);
+                        bool rightBetter = IsBetter(label, rRow->valueMain, lRow->valueMain);
+                        if (isLeft) {
+                            if (leftBetter) winnerMark = L" ↑";
+                            else if (rightBetter) winnerMark = L" ↓";
+                        } else {
+                            if (rightBetter) winnerMark = L" ↑";
+                            else if (leftBetter) winnerMark = L" ↓";
+                        }
+                    }
+                } // [Fix] Missing brace for if(diff)
+                
+                std::wstring finalVal = val;
+                
+                // Add Volume Diff for Disk row
+                if (label == L"Disk" && leftMeta.FileSize > 0 && rightMeta.FileSize > 0) {
+                    double diffPct = ((double)rightMeta.FileSize - (double)leftMeta.FileSize) / (double)leftMeta.FileSize * 100.0;
+                    wchar_t diffBuf[32]; 
+                    if (!isLeft) { // Show on the right side
+                        swprintf_s(diffBuf, L" (%+.1f%%)", diffPct);
+                        finalVal += diffBuf;
+                    }
+                }
+                
+                finalVal += winnerMark;
 
-        y += rowH;
-    }
+                // Right-align left values, left-align right values
+                m_debugFormat->SetTextAlignment(isLeft ? DWRITE_TEXT_ALIGNMENT_TRAILING : DWRITE_TEXT_ALIGNMENT_LEADING);
+                dc->DrawText(finalVal.c_str(), (UINT32)finalVal.length(), m_debugFormat.Get(), rect, brush);
+            };
+
+            DrawValue(lRow, leftX, valW, true);
+            DrawValue(rRow, rightX, valW, false);
+
+            y += rowH;
+        } // [Fix] Missing brace for inner loop
+    } // [Fix] Missing brace for outer loop
     
     // Reset alignment
     m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
