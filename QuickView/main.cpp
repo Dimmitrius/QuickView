@@ -5593,6 +5593,7 @@ SKIP_EDGE_NAV:;
                           g_runtime.ShowInfoPanel = false;
                           g_toolbar.SetExifState(false);
                       }
+
                       RequestRepaint(PaintLayer::All);
                       return 0;
 
@@ -5603,6 +5604,11 @@ SKIP_EDGE_NAV:;
                      } else {
                          g_runtime.CompareHudMode = 0;
                      }
+                     if (g_runtime.ShowCompareInfo) {
+                         if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) UpdateHistogramAsync(hwnd, g_imagePath);
+                         if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty())
+                             UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
+                     }
                      RequestRepaint(PaintLayer::All);
                      return 0;
 
@@ -5612,6 +5618,11 @@ SKIP_EDGE_NAV:;
                          g_runtime.CompareHudMode = 1;
                      } else {
                          g_runtime.CompareHudMode = 2;
+                     }
+                     if (g_runtime.ShowCompareInfo) {
+                         if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) UpdateHistogramAsync(hwnd, g_imagePath);
+                         if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty())
+                             UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
                      }
                      RequestRepaint(PaintLayer::All);
                      return 0;
@@ -6411,6 +6422,11 @@ SKIP_EDGE_NAV:;
                     g_runtime.ShowCompareInfo = false; // Hide
                 }
                 g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
+                if (g_runtime.ShowCompareInfo) {
+                    if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) UpdateHistogramAsync(hwnd, g_imagePath);
+                    if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty())
+                        UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
+                }
                 RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
             } else {
                 if (!g_runtime.ShowInfoPanel) {

@@ -2033,6 +2033,16 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
                 bool win = m.HasEntropy && other.HasEntropy && (m.Entropy > other.Entropy);
                 v.push_back({ L"", sz, win });
             }
+            // BPP
+            if (m.Width > 0 && m.Height > 0 && m.FileSize > 0) {
+                double bppValue = (double)(m.FileSize * 8) / ((double)m.Width * m.Height);
+                wchar_t sz[64]; swprintf_s(sz, L"%.2fbpp", bppValue);
+                v.push_back({ L"", sz, false });
+            }
+            // Date
+            if (!m.Date.empty()) {
+                v.push_back({ L"", m.Date, false });
+            }
             return v;
         };
 
@@ -2181,7 +2191,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     if (hudMode == 0) {
         // Lite Mode
         hudGroups = {
-            { L"LITE MODE", { L"File", L"Size", L"Disk", L"Sharp", L"Ent" } }
+            { L"LITE MODE", { L"File", L"Size", L"Disk", L"Sharp", L"Ent", L"BPP", L"Date" } }
         };
     } else {
         hudGroups = {
