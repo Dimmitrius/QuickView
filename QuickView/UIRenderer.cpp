@@ -1340,7 +1340,7 @@ static std::wstring FormatBytesWithCommas(UINT64 bytes) {
 UIRenderer::TooltipInfo UIRenderer::GetTooltipInfo(const std::wstring& label) {
     if (label == L"Sharp") return { L"Edge definition (Laplacian Variance)", L"Crisp edges, high detail", L"Soft focus or motion blur", L"> 500 is very sharp" };
     if (label == L"Ent") return { L"Information density (Shannon Entropy)", L"Complex textures or high noise", L"Flat areas or low detail", L"7.0-8.0 is high detail" };
-    if (label == L"BPP") return { L"Bits Per Pixel (Compression Efficiency)", L"Lower efficiency (more data preserved)", L"Higher efficiency (higher compression)", L"N/A" };
+    if (label == L"BPP") return { L"Bits Per Pixel (Compression Efficiency)", L"Lower efficiency (more data preserved)", L"Higher efficiency (higher compression)", L"24.0 (Raw RGB), ~2.0-3.0 (High JPEG), ~0.5-1.5 (WebP/AVIF)" };
     if (label == L"File") return { L"Internal Filename", L"Source path of comparison image", L"N/A", L"N/A" };
     return { L"", L"", L"", L"" };
 }
