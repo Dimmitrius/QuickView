@@ -135,6 +135,7 @@ private:
     void RenderGalleryLayer(ID2D1DeviceContext* dc);
     
     // ===== Info Panel Drawing (Migrated from main.cpp) =====
+    D2D1_SIZE_F GetRequiredInfoPanelSize() const; // Calculate required dimensions
     void BuildInfoGrid();
     void DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY, float width);
     void DrawGridTooltip(ID2D1DeviceContext* dc);
