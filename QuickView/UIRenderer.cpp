@@ -320,9 +320,23 @@ void UIRenderer::SetOSD(const std::wstring& text, float opacity, D2D1_COLOR_F co
     m_osdOpacity = opacity;
     m_osdColor = color;
     m_osdPos = pos;
-    MarkOSDDirty(); 
+    // Reset compare fields
+    m_osdTextLeft = L"";
+    m_osdTextRight = L"";
+    m_isCompareOSD = false;
+    MarkOSDDirty();
 }
 
+void UIRenderer::SetCompareOSD(const std::wstring& left, const std::wstring& right, float opacity, D2D1_COLOR_F color) {
+    m_osdTextLeft = left;
+    m_osdTextRight = right;
+    m_osdOpacity = opacity;
+    m_osdColor = color;
+    m_osdPos = OSDPosition::Bottom;
+    m_isCompareOSD = true;
+    m_osdText = L"COMPARE"; // dummy
+    MarkOSDDirty();
+}
 RECT UIRenderer::CalculateOSDDirtyRect() {
     // OSD Position
     const float s = m_uiScale;
@@ -645,9 +659,44 @@ void UIRenderer::RenderGalleryLayer(ID2D1DeviceContext* dc) {
 // ============================================================================
 
 void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
-    if (m_osdText.empty() || m_osdOpacity <= 0.01f) return;
+    if (m_osdOpacity <= 0.01f) return;
     const float s = m_uiScale;
     
+    // Background: semi-transparent black
+    ComPtr<ID2D1SolidColorBrush> bgBrush, textBrush;
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f * m_osdOpacity), &bgBrush);
+    D2D1_COLOR_F textColor = m_osdColor;
+    textColor.a *= m_osdOpacity;
+    dc->CreateSolidColorBrush(textColor, &textBrush);
+
+    if (m_isCompareOSD) {
+        // --- DUAL OSD FOR COMPARE MODE ---
+        int pane = 0; float splitRatio = 0.5f; bool isWipe = false;
+        GetCompareIndicatorState(pane, splitRatio, isWipe);
+        float splitX = m_width * splitRatio;
+
+        auto drawSingleOSD = [&](const std::wstring& text, float centerX, float centerY) {
+            if (text.empty()) return;
+            ComPtr<IDWriteTextLayout> layout;
+            m_dwriteFactory->CreateTextLayout(text.c_str(), (UINT32)text.length(), m_osdFormat.Get(), 1000.0f*s, 100.0f*s, &layout);
+            if (!layout) return;
+
+            DWRITE_TEXT_METRICS tm; layout->GetMetrics(&tm);
+            float padH = 20.0f * s, padV = 10.0f * s;
+            float tw = tm.width + padH * 2, th = tm.height + padV * 2;
+            D2D1_RECT_F r = D2D1::RectF(centerX - tw/2, centerY - th/2, centerX + tw/2, centerY + th/2);
+            dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6*s, 6*s), bgBrush.Get());
+            dc->DrawTextLayout(D2D1::Point2F(r.left + padH, r.top + padV), layout.Get(), textBrush.Get());
+        };
+
+        float centerY = m_height - 100.0f * s;
+        drawSingleOSD(m_osdTextLeft, splitX * 0.5f, centerY);
+        drawSingleOSD(m_osdTextRight, splitX + (m_width - splitX) * 0.5f, centerY);
+        return;
+    }
+
+    if (m_osdText.empty()) return;
+
     // Match original style: bottom position, padding 30/15
     float paddingH = 30.0f * s;
     float paddingV = 15.0f * s;
@@ -689,23 +738,12 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
     }
 
     D2D1_RECT_F bgRect = D2D1::RectF(x, y, x + toastW, y + toastH);
-    
-    // Background: semi-transparent black
-    ComPtr<ID2D1SolidColorBrush> bgBrush;
-    dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f * m_osdOpacity), &bgBrush);
     dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
-    
-    // Text: use custom color if set, otherwise white
-    ComPtr<ID2D1SolidColorBrush> textBrush;
-    D2D1_COLOR_F textColor = m_osdColor;
-    textColor.a *= m_osdOpacity;
-    dc->CreateSolidColorBrush(textColor, &textBrush);
     
     if (textLayout && textBrush) {
         D2D1_POINT_2F textOrigin = D2D1::Point2F(x + paddingH, y + paddingV);
         dc->DrawTextLayout(textOrigin, textLayout.Get(), textBrush.Get());
     }
-
 }
 
 void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
@@ -1947,73 +1985,95 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     const float s = m_uiScale;
 
-    // --- LITE MODE (Single Line) ---
+    // --- LITE MODE (Single Line, Center Aligned) ---
     if (g_runtime.CompareHudMode == 0) {
-        // We only extract what we need for the string
-        auto buildLiteString = [&](const CImageLoader::ImageMetadata& meta, bool isLeft) -> std::wstring {
-            std::wstring str = meta.SourcePath.substr(meta.SourcePath.find_last_of(L"\\/") + 1);
-            if (meta.Width > 0) {
-                wchar_t sz[64]; swprintf_s(sz, L"   %u x %u", meta.Width, meta.Height);
-                str += sz;
-            }
-            if (meta.FileSize > 0) {
-                wchar_t sz[64]; swprintf_s(sz, L"   %.2f MB", meta.FileSize / (1024.0 * 1024.0));
-                str += sz;
-            }
-            if (meta.HasSharpness) {
-                wchar_t sz[64]; swprintf_s(sz, L"   Sharp: %.1f", meta.Sharpness);
-                str += sz;
-            }
-            if (meta.HasEntropy) {
-                wchar_t sz[64]; swprintf_s(sz, L"   Ent: %.2f", meta.Entropy);
-                str += sz;
-            }
-            return str;
+        int pane = 0; float splitRatio = 0.5f; bool isWipe = false;
+        GetCompareIndicatorState(pane, splitRatio, isWipe);
+        float splitX = m_width * splitRatio;
+
+        struct LiteMetric {
+            std::wstring label;
+            std::wstring val;
+            bool isWinner = false;
         };
 
-        std::wstring leftStr = buildLiteString(leftMeta, true);
-        std::wstring rightStr = buildLiteString(rightMeta, false);
+        auto buildMetrics = [&](const CImageLoader::ImageMetadata& m, const CImageLoader::ImageMetadata& other) {
+            std::vector<LiteMetric> v;
+            // File (No highlight)
+            std::wstring fname = m.SourcePath.substr(m.SourcePath.find_last_of(L"\\/") + 1);
+            v.push_back({ L"", MakeMiddleEllipsis(150.0f * s, fname, m_panelFormat.Get()), false });
 
-        // Calculate single line layout
-        float leftW = MeasureTextWidth(leftStr, m_panelFormat.Get());
-        float rightW = MeasureTextWidth(rightStr, m_panelFormat.Get());
+            // Size
+            if (m.Width > 0) {
+                wchar_t sz[64]; swprintf_s(sz, L"%ux%u", m.Width, m.Height);
+                bool win = (m.Width * m.Height) > (other.Width * other.Height);
+                v.push_back({ L"", sz, win });
+            }
+            // Disk
+            if (m.FileSize > 0) {
+                wchar_t sz[64]; swprintf_s(sz, L"%.2fMB", m.FileSize / (1024.0 * 1024.0));
+                bool win = m.FileSize > other.FileSize;
+                v.push_back({ L"", sz, win });
+            }
+            // Sharp
+            if (m.HasSharpness) {
+                wchar_t sz[64]; swprintf_s(sz, L"S:%.0f", m.Sharpness);
+                bool win = m.HasSharpness && other.HasSharpness && (m.Sharpness > other.Sharpness);
+                v.push_back({ L"", sz, win });
+            }
+            // Ent
+            if (m.HasEntropy) {
+                wchar_t sz[64]; swprintf_s(sz, L"E:%.2f", m.Entropy);
+                bool win = m.HasEntropy && other.HasEntropy && (m.Entropy > other.Entropy);
+                v.push_back({ L"", sz, win });
+            }
+            return v;
+        };
 
-        // Draw Shadow Text (No Background)
-        ComPtr<ID2D1SolidColorBrush> brushShadow, brushText;
+        auto leftMetrics = buildMetrics(leftMeta, rightMeta);
+        auto rightMetrics = buildMetrics(rightMeta, leftMeta);
+
+        ComPtr<ID2D1SolidColorBrush> brushShadow, brushText, brushWin;
         dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.8f), &brushShadow);
         dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &brushText);
+        dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.9f, 0.4f), &brushWin);
 
-        float padding = 16.0f * s;
-        float y = padding; // Top aligned for Lite mode
+        float y = 16.0f * s;
+        float gap = 12.0f * s;
+        float centerGap = 20.0f * s;
 
-        // Left Text
-        D2D1_RECT_F lRect = D2D1::RectF(padding, y, padding + leftW, y + 32.0f * s);
-        D2D1_RECT_F lShadowRect = D2D1::RectF(lRect.left + 1.0f * s, lRect.top + 1.0f * s, lRect.right + 1.0f * s, lRect.bottom + 1.0f * s);
-        m_panelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-        dc->DrawText(leftStr.c_str(), (UINT32)leftStr.length(), m_panelFormat.Get(), lShadowRect, brushShadow.Get());
-        dc->DrawText(leftStr.c_str(), (UINT32)leftStr.length(), m_panelFormat.Get(), lRect, brushText.Get());
+        auto DrawMetrics = [&](const std::vector<LiteMetric>& metrics, float startX, bool alignRight) {
+            float currentX = startX;
+            if (alignRight) {
+                // Calculate total width first
+                float totalW = 0;
+                for (const auto& m : metrics) totalW += MeasureTextWidth(m.val, m_panelFormat.Get()) + gap;
+                currentX = startX - totalW + gap;
+            }
 
-        // Right Text
-        D2D1_RECT_F rRect = D2D1::RectF(m_width - padding - rightW, y, m_width - padding, y + 32.0f * s);
-        D2D1_RECT_F rShadowRect = D2D1::RectF(rRect.left + 1.0f * s, rRect.top + 1.0f * s, rRect.right + 1.0f * s, rRect.bottom + 1.0f * s);
-        m_panelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-        dc->DrawText(rightStr.c_str(), (UINT32)rightStr.length(), m_panelFormat.Get(), rShadowRect, brushShadow.Get());
-        dc->DrawText(rightStr.c_str(), (UINT32)rightStr.length(), m_panelFormat.Get(), rRect, brushText.Get());
-        m_panelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING); // reset
+            for (const auto& m : metrics) {
+                float tw = MeasureTextWidth(m.val, m_panelFormat.Get());
+                D2D1_RECT_F r = D2D1::RectF(currentX, y, currentX + tw, y + 24.0f * s);
+                D2D1_RECT_F sr = D2D1::RectF(r.left + 1*s, r.top + 1*s, r.right + 1*s, r.bottom + 1*s);
+                ID2D1SolidColorBrush* b = m.isWinner ? brushWin.Get() : brushText.Get();
+                
+                dc->DrawText(m.val.c_str(), (UINT32)m.val.length(), m_panelFormat.Get(), sr, brushShadow.Get());
+                dc->DrawText(m.val.c_str(), (UINT32)m.val.length(), m_panelFormat.Get(), r, b);
+                currentX += tw + gap;
+            }
+        };
 
-        // Draw Expand Icon (Bottom Center for Lite mode to transition to Normal)
+        DrawMetrics(leftMetrics, splitX - centerGap, true);
+        DrawMetrics(rightMetrics, splitX + centerGap, false);
+
+        // Draw Expand Icon (Bottom Center)
         float iconSize = 24.0f * s;
         m_hudToggleExpandRect = D2D1::RectF((m_width - iconSize) * 0.5f, m_height - 40.0f * s, (m_width + iconSize) * 0.5f, m_height - 16.0f * s);
-        
-        // Shadow for icon
         D2D1_RECT_F iconShadowRect = D2D1::RectF(m_hudToggleExpandRect.left + 1.0f * s, m_hudToggleExpandRect.top + 1.0f * s, m_hudToggleExpandRect.right + 1.0f * s, m_hudToggleExpandRect.bottom + 1.0f * s);
-        dc->DrawText(L"\uE740", 1, m_iconFormat.Get(), iconShadowRect, brushShadow.Get()); // ChevronDown
+        dc->DrawText(L"\uE740", 1, m_iconFormat.Get(), iconShadowRect, brushShadow.Get());
         dc->DrawText(L"\uE740", 1, m_iconFormat.Get(), m_hudToggleExpandRect, brushText.Get());
 
-        // Nullify other hit rects
-        m_lastHUDRect = {};
-        m_hudToggleLiteRect = {};
-        
+        m_lastHUDRect = {}; m_hudToggleLiteRect = {};
         return;
     }
 

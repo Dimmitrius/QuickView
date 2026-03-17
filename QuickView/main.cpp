@@ -8876,7 +8876,11 @@ void OnPaint(HWND hwnd) {
                     else if (g_osd.IsWarning) osdColor = D2D1::ColorF(D2D1::ColorF::Yellow);
                     else osdColor = D2D1::ColorF(D2D1::ColorF::White);
                 }
-                g_uiRenderer->SetOSD(g_osd.Message, opacity, osdColor, g_osd.Position);
+                if (g_osd.IsCompareOSD) {
+                    g_uiRenderer->SetCompareOSD(g_osd.MessageLeft, g_osd.MessageRight, opacity, osdColor);
+                } else {
+                    g_uiRenderer->SetOSD(g_osd.Message, opacity, osdColor, g_osd.Position);
+                }
             } else {
                 g_uiRenderer->SetOSD(L"", 0);
             }

@@ -108,6 +108,7 @@ public:
     
     // ===== UI 状态更新 =====
     void SetOSD(const std::wstring& text, float opacity, D2D1_COLOR_F color = D2D1::ColorF(D2D1::ColorF::White), OSDPosition pos = OSDPosition::Bottom);
+    void SetCompareOSD(const std::wstring& left, const std::wstring& right, float opacity, D2D1_COLOR_F color = D2D1::ColorF(D2D1::ColorF::White));
     void SetDebugHUDVisible(bool visible) { m_showDebugHUD = visible; MarkDynamicDirty(); }
     void SetTileGridVisible(bool visible) { m_showTileGrid = visible; MarkDynamicDirty(); }
     
@@ -205,6 +206,9 @@ private:
     
     // OSD 状态
     std::wstring m_osdText;
+    std::wstring m_osdTextLeft;  // For compare mode
+    std::wstring m_osdTextRight; // For compare mode
+    bool m_isCompareOSD = false;
     float m_osdOpacity = 0.0f;
     D2D1_COLOR_F m_osdColor = D2D1::ColorF(D2D1::ColorF::White);
     OSDPosition m_osdPos = OSDPosition::Bottom;
