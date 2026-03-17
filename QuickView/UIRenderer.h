@@ -5,6 +5,9 @@
 #include <dwrite.h>
 #include <array>
 #include "EditState.h"
+#include <memory_resource>
+#include <map>
+#include <unordered_map>
 #include "ImageEngine.h" // For CacheTopology
 #include "OSDState.h"
 
@@ -160,10 +163,11 @@ private:
     void EnsureTextFormats();
     
 public:
-    // Text Truncation Helpers
+    // ===== Text Measurement Helpers =====
+    float MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format = nullptr);
+    float MeasureTextHeight(const std::wstring& text, IDWriteTextFormat* format = nullptr, float maxWidth = 2000.0f);
     std::wstring MakeMiddleEllipsis(float maxWidth, const std::wstring& text, IDWriteTextFormat* format = nullptr);
     std::wstring MakeEndEllipsis(float maxWidth, const std::wstring& text, IDWriteTextFormat* format = nullptr);
-    float MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format = nullptr);
 
 private:
     // Dirty Rects 计算

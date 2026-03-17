@@ -67,6 +67,7 @@ public:
     void SetCompareMode(bool enabled);
     bool IsCompareMode() const { return m_compareMode; }
     void SetCompareSyncStates(bool syncZoom, bool syncPan);
+    void SetCompareInfoState(bool active);
     float GetCompareZoomStepPercent() const { return m_compareZoomStepPercent; }
     
     // [Phase 3] Get minimum required width for toolbar

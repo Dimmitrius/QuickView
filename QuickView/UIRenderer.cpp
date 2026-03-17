@@ -102,9 +102,8 @@ void UIRenderer::UpdateHoverState(POINT mousePos, int hoverRowIndex) {
 HitTestResult UIRenderer::HitTest(float x, float y) {
     HitTestResult result;
     
-    // Update mouse position for tooltip
-    m_lastMousePos.x = (LONG)x;
-    m_lastMousePos.y = (LONG)y;
+    // Every hit test should start by resetting the hover state
+    m_hoverRowIndex = -1;
     
     // Only hit test if info panel OR HUD is visible
     bool hudVisible = IsCompareModeActive() && g_runtime.ShowCompareInfo;
@@ -112,9 +111,11 @@ HitTestResult UIRenderer::HitTest(float x, float y) {
 
     // HUD Hit Test (if visible)
     if (hudVisible) {
+        m_lastMousePos = { (long)x, (long)y }; // [Fix] Update mouse pos for HUD internal hit test
         if (PointInRect(x, y, m_lastHUDRect)) {
-            result.type = UIHitResult::InfoRow; // Use InfoRow as a general indicator for HUD area
-            result.rowIndex = -2; // Special flag we use for HUD
+            result.type = UIHitResult::InfoRow; 
+            result.rowIndex = -2; 
+            m_hoverRowIndex = -2; // Set hover state here for prompt tooltip
             return result;
         }
     }
@@ -219,6 +220,23 @@ float UIRenderer::MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* 
     DWRITE_TEXT_METRICS metrics;
     layout->GetMetrics(&metrics);
     return metrics.width;
+}
+
+float UIRenderer::MeasureTextHeight(const std::wstring& text, IDWriteTextFormat* format, float maxWidth) {
+    IDWriteTextFormat* useFormat = format ? format : m_panelFormat.Get();
+    if (text.empty() || !useFormat || !m_dwriteFactory) return 0.0f;
+    
+    ComPtr<IDWriteTextLayout> layout;
+    m_dwriteFactory->CreateTextLayout(
+        text.c_str(), (UINT32)text.length(),
+        useFormat, maxWidth, 1000.0f, &layout
+    );
+    
+    if (!layout) return 0.0f;
+    
+    DWRITE_TEXT_METRICS metrics;
+    layout->GetMetrics(&metrics);
+    return metrics.height;
 }
 
 std::wstring UIRenderer::MakeMiddleEllipsis(float maxWidth, const std::wstring& text, IDWriteTextFormat* format) {
@@ -359,7 +377,7 @@ void UIRenderer::EnsureTextFormats() {
         m_dwriteFactory->CreateTextFormat(
             L"Consolas", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            12.0f, L"en-us", &m_debugFormat
+            12.0f * s, L"en-us", &m_debugFormat
         );
     }
     
@@ -1316,21 +1334,11 @@ static std::wstring FormatBytesWithCommas(UINT64 bytes) {
 }
 
 UIRenderer::TooltipInfo UIRenderer::GetTooltipInfo(const std::wstring& label) {
-    if (label == L"File") return { L"File Name", L"Large files take more disk space", L"Small files are easier to transfer", L"N/A" };
-    if (label == L"Size") return { L"Image Dimensions & Zoom", L"Higher resolution means more detail", L"Lower resolution saves memory", L"> 20MP is High-Res" };
-    if (label == L"Disk") return { L"File Size on Disk", L"Large files may load slower", L"Highly compressed or small content", L"1-20MB typical for JPEG" };
-    if (label == L"Date") return { L"Capture Date/Time", L"Recent capture", L"Legacy content", L"N/A" };
-    if (label == L"Camera") return { L"Camera Make & Model", L"High-end gear usually has better SNR", L"Compact or mobile sensors", L"N/A" };
-    if (label == L"Exp") return { L"ISO, Aperture, Shutter", L"High ISO = More Noise; Fast Shutter = Freeze Motion", L"Low ISO = Clean; Slow Shutter = Motion Blur", L"ISO 100-800 is clean" };
-    if (label == L"Lens") return { L"Lens Information", L"Wide aperture (f/1.4) = Shallow DOF", L"Narrow aperture (f/11) = Deep DOF", L"f/2.8-f/8 is sweet spot" };
-    if (label == L"Focal") return { L"Focal Length", L"Telephoto (long)", L"Wide angle (short)", L"50mm is 'Normal'" };
-    if (label == L"Color") return { L"Color Space & ICC Profile", L"Wide Gamut (P3/Adobe) = Richer colors", L"Standard Gamut (sRGB)", L"sRGB is web standard" };
-    if (label == L"W.Bal") return { L"White Balance Setting", L"Manual offset", L"Auto calculation", L"5500K is Daylight" };
-    if (label == L"Meter") return { L"Metering Mode", L"Weighted area", L"Pinpoint accuracy", L"Matrix is general purpose" };
-    if (label == L"Prog") return { L"Exposure Program", L"Manual control", L"Full automation", L"N/A" };
-    if (label == L"Sharpness") return { L"Edge definition (Laplacian Variance)", L"Crisp edges, high detail", L"Soft focus or motion blur", L"> 500 is very sharp" };
-    if (label == L"Entropy") return { L"Information density (Shannon Entropy)", L"Complex textures or high noise", L"Flat areas or low detail", L"7.0-8.0 is high detail" };
-    return { L"Metadata Property", L"-", L"-", L"N/A" };
+    if (label == L"Sharp") return { L"Edge definition (Laplacian Variance)", L"Crisp edges, high detail", L"Soft focus or motion blur", L"> 500 is very sharp" };
+    if (label == L"Ent") return { L"Information density (Shannon Entropy)", L"Complex textures or high noise", L"Flat areas or low detail", L"7.0-8.0 is high detail" };
+    if (label == L"BPP") return { L"Bits Per Pixel (Compression Efficiency)", L"Lower efficiency (more data preserved)", L"Higher efficiency (higher compression)", L"N/A" };
+    if (label == L"File") return { L"Internal Filename", L"Source path of comparison image", L"N/A", L"N/A" };
+    return { L"", L"", L"", L"" };
 }
 
 std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata& metadata, const std::wstring& imagePath, bool showAdvanced) {
@@ -1429,11 +1437,11 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
     if (showAdvanced) {
         if (metadata.HasSharpness) {
             wchar_t buf[32]; swprintf_s(buf, L"%.0f", metadata.Sharpness);
-            rows.push_back({ L"\U0001F3AF", L"Sharpness", buf, L"", L"", TruncateMode::None, false });
+            rows.push_back({ L"\U0001F3AF", L"Sharp", buf, L"", L"", TruncateMode::None, false });
         }
         if (metadata.HasEntropy) {
             wchar_t buf[32]; swprintf_s(buf, L"%.2f", metadata.Entropy);
-            rows.push_back({ L"\U0001F4CA", L"Entropy", buf, L"", L"", TruncateMode::None, false });
+            rows.push_back({ L"\U0001F4CA", L"Ent", buf, L"", L"", TruncateMode::None, false });
         }
         
         // BPP (Bits Per Pixel)
@@ -1707,9 +1715,9 @@ void UIRenderer::DrawGridTooltip(ID2D1DeviceContext* dc) {
     float y = (float)m_lastMousePos.y + 20.0f * s;
     
     float textWidth = MeasureTextWidth(row.fullText);
+    float boxWidth = std::min(textWidth + 12.0f * s, 400.0f * s);
     float padding = 6.0f * s;
-    float boxWidth = textWidth + padding * 2;
-    float boxHeight = 20.0f * s;
+    float boxHeight = MeasureTextHeight(row.fullText, m_panelFormat.Get(), boxWidth - padding * 2) + padding * 2;
     
     if (x + boxWidth > m_width - 10.0f * s) x = m_width - boxWidth - 10.0f * s;
     if (y + boxHeight > m_height - 10.0f * s) y = m_height - boxHeight - 10.0f * s;
@@ -1942,20 +1950,24 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     if (!m_panelFormat || !m_debugFormat) return;
 
     const float s = m_uiScale;
-    const float panelW = std::min(720.0f * s, m_width - 40.0f * s);
+    const float panelW = std::min(400.0f * s, m_width - 20.0f * s);
     const float panelX = (m_width - panelW) * 0.5f;
-    float panelY = 80.0f * s;
-    if (panelY < 20.0f * s) panelY = 20.0f * s;
+    float panelY = 0.0f; 
 
-    // Geeky Layout: [ Left Value (40%) | Label (20%) | Right Value (40%) ]
-    const float labelW = 120.0f * s;
-    const float valW = (panelW - labelW - 40.0f * s) * 0.5f;
+    // Geeky Layout: [ Left Value | Label | Right Value ]
+    const float labelW = 80.0f * s;
+    const float labelX = panelX + (panelW - labelW) * 0.5f;
+    const float valGap = 6.0f * s; // Space between val and label
+    const float valW = (panelW - labelW - 24.0f * s) * 0.5f - valGap; 
+    
+    const float leftX = labelX - valGap - valW;
+    const float rightX = labelX + labelW + valGap;
+
     const float rowH = 22.0f * s;
-    const float padding = 16.0f * s;
-    const float headerH = 32.0f * s;
+    const float padding = 8.0f * s; // [HUD Adjust] Reduced top/bottom padding
+    const float headerH = (leftTag.empty() && rightTag.empty()) ? 0 : 24.0f * s;
 
-    // Calculate total height based on rows
-    // We want to show ALL rows that exist in either side for testing
+    // --- Dynamic Height Calculation ---
     std::vector<std::wstring> labels;
     auto addLabels = [&](const std::vector<InfoRow>& r) {
         for (const auto& row : r) {
@@ -1966,28 +1978,46 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     addLabels(leftRows);
     addLabels(rightRows);
 
-    const float panelH = padding * 2 + headerH + labels.size() * rowH + 10.0f * s;
+    struct Group {
+        std::wstring name;
+        std::vector<std::wstring> labels;
+    };
+    std::vector<Group> hudGroups = {
+        { L"PHYSICAL ATTRIBUTES", { L"File", L"Size", L"Disk", L"Date" } },
+        { L"SCIENTIFIC QUALITY", { L"Sharp", L"Ent", L"BPP" } },
+        { L"OPTICS & ENCODING", { L"Camera", L"Exp", L"Lens", L"Focal", L"Color", L"Chroma", L"Flash", L"W.Bal", L"Meter", L"Prog", L"Soft" } }
+    };
+
+    int activeGroups = 0;
+    int activeRows = 0;
+    for (const auto& group : hudGroups) {
+        bool hasData = false;
+        for (const auto& l : group.labels) {
+            if (std::find(labels.begin(), labels.end(), l) != labels.end()) { hasData = true; activeRows++; }
+        }
+        if (hasData) activeGroups++;
+    }
+
+    const float panelH = padding * 2 + headerH + (activeGroups * rowH) + (activeRows * rowH) + 4.0f * s;
     D2D1_RECT_F panelRect = D2D1::RectF(panelX, panelY, panelX + panelW, panelY + panelH);
     m_lastHUDRect = panelRect; // Store for hit test
 
     // Deep geeky background
-    ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText, brushLabel, brushGood, brushBad;
-    dc->CreateSolidColorBrush(D2D1::ColorF(0.02f, 0.02f, 0.03f, 0.95f), &brushBg);
+    ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText, brushLabel, brushGood, brushBad, brushWinner;
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.005f, 0.005f, 0.008f, g_config.InfoPanelAlpha), &brushBg); // [HUD Adjust] Apply User Alpha
     dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.6f), &brushBorder);
     dc->CreateSolidColorBrush(D2D1::ColorF(0.9f, 0.9f, 0.95f), &brushText);
     dc->CreateSolidColorBrush(D2D1::ColorF(0.5f, 0.55f, 0.6f), &brushLabel);
     dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.9f, 0.4f), &brushGood);
     dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.3f, 0.2f), &brushBad);
+    dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.2f, 0.1f), &brushWinner); // Red winner arrow
 
-    dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 4.0f * s, 4.0f * s), brushBg.Get());
-    dc->DrawRoundedRectangle(D2D1::RoundedRect(panelRect, 4.0f * s, 4.0f * s), brushBorder.Get(), 1.0f * s);
+    // Top-roll: No top corners rounded
+    D2D1_RECT_F clipRect = D2D1::RectF(panelX, panelY - 10 * s, panelX + panelW, panelY + panelH);
+    dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), brushBg.Get());
+    // [HUD Adjust] Removed blue border
 
     float y = panelY + padding;
-    
-    // Header with Quality Tags
-    D2D1_RECT_F headerRect = D2D1::RectF(panelX, y, panelX + panelW, y + headerH);
-    std::wstring headerText = L"TELEMETRY COMPARISON ENGINE v2.5";
-    dc->DrawText(headerText.c_str(), (UINT32)headerText.length(), m_debugFormat.Get(), headerRect, brushBorder.Get());
     
     // Draw Quality Tags
     m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -1998,20 +2028,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     y += headerH;
 
-    // Grid Column Starts
-    float leftX = panelX + padding;
-    float labelX = leftX + valW + 10.0f * s;
-    float rightX = labelX + labelW + 10.0f * s;
-
-    struct Group {
-        std::wstring name;
-        std::vector<std::wstring> labels;
-    };
-    std::vector<Group> hudGroups = {
-        { L"PHYSICAL ATTRIBUTES", { L"File", L"Size", L"Disk", L"Date" } },
-        { L"SCIENTIFIC QUALITY", { L"Sharpness", L"Entropy", L"BPP" } },
-        { L"OPTICS & ENCODING", { L"Camera", L"Exp", L"Lens", L"Focal", L"Color", L"Chroma", L"Flash", L"W.Bal", L"Meter", L"Prog", L"Soft" } }
-    };
+    // Groups were defined in height calculation above
 
     for (const auto& group : hudGroups) {
         bool groupHasData = false;
@@ -2041,58 +2058,86 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
                 dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.05f), &brushHover);
                 dc->FillRectangle(rowRect, brushHover.Get());
                 
-                // Set hover state for tooltip
-                m_hoverRowIndex = -2; // Special flag for Comparison HUD
+                // Track hover row consistently with HitTest
+                m_hoverRowIndex = -2; 
                 m_hoverInfoRow = lRow ? *lRow : (rRow ? *rRow : InfoRow{});
+                
+                // If this is the File row, ensure tooltip shows full filename
+                if (label == L"File") {
+                    std::wstring fullPath = lRow ? leftMeta.SourcePath : (rRow ? rightMeta.SourcePath : L"");
+                    size_t lastSlash = fullPath.find_last_of(L"\\/");
+                    m_hoverInfoRow.fullText = (lastSlash != std::wstring::npos) ? fullPath.substr(lastSlash + 1) : fullPath;
+                }
             }
 
-            // Draw Label + Icon
-            std::wstring labelFull = (lRow ? lRow->icon : (rRow ? rRow->icon : L"")) + L" " + label;
-            dc->DrawText(labelFull.c_str(), (UINT32)labelFull.length(), m_debugFormat.Get(), 
-                        D2D1::RectF(labelX, y, labelX + labelW, y + rowH), brushLabel.Get());
+            // Draw Label + Icon (Icon vertically aligned by pre-padding)
+            std::wstring icon = lRow ? lRow->icon : (rRow ? rRow->icon : L"");
+            m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            
+            // Draw Icon separately for better vertical control if needed, 
+            // but for now, we just ensure the label slot is clean
+            float iconSize = 18.0f * s;
+            D2D1_RECT_F iconRect = D2D1::RectF(labelX, y, labelX + iconSize, y + rowH);
+            D2D1_RECT_F nameRect = D2D1::RectF(labelX + iconSize - 4.0f*s, y, labelX + labelW, y + rowH);
+            
+            dc->DrawText(icon.c_str(), (UINT32)icon.length(), m_debugFormat.Get(), iconRect, brushLabel.Get());
+            dc->DrawText(label.c_str(), (UINT32)label.length(), m_debugFormat.Get(), nameRect, brushLabel.Get());
+            
+            m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 
             // Draw Values
             auto DrawValue = [&](const InfoRow* row, float x, float w, bool isLeft) {
                 if (!row) return;
+                
                 std::wstring val = row->valueMain;
-                if (row->displayText != val && !row->displayText.empty()) val = row->displayText;
+                std::wstring originalVal = val;
+                if (label == L"File") {
+                    std::wstring fullPath = isLeft ? leftMeta.SourcePath : rightMeta.SourcePath;
+                    size_t lastSlash = fullPath.find_last_of(L"\\/");
+                    originalVal = (lastSlash != std::wstring::npos) ? fullPath.substr(lastSlash + 1) : fullPath;
+                    val = MakeMiddleEllipsis(w, originalVal, m_debugFormat.Get());
+                } else {
+                    if (row->displayText != val && !row->displayText.empty()) val = row->displayText;
+                    originalVal = val;
+                    val = MakeMiddleEllipsis(w, originalVal, m_debugFormat.Get());
+                }
                 
                 D2D1_RECT_F rect = D2D1::RectF(x, y, x + w, y + rowH);
                 
-                // Difference detection
+                // Truncation detection for Tooltip
+                if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rect)) {
+                    if (val != originalVal) {
+                        m_hoverInfoRow.fullText = originalVal;
+                    }
+                }
+
                 bool diff = false;
                 if (lRow && rRow) {
                     diff = (lRow->valueMain != rRow->valueMain);
                 }
 
                 ID2D1SolidColorBrush* brush = brushText.Get();
+                ID2D1SolidColorBrush* winBrush = brushWinner.Get(); // Red
                 std::wstring winnerMark = L"";
                 
-                if (diff) {
-                    brush = brushGood.Get(); // Highlight differences
+                if (diff && label != L"File") { // [Fix] No green highlight for File row
+                    brush = brushGood.Get(); 
                     
-                    // Winning logic (Arrows - Modified for Bidirectional)
+                    // Winning logic (Higher/Quality is better)
                     auto IsBetter = [&](const std::wstring& lbl, const std::wstring& val1, const std::wstring& val2) -> bool {
                         try {
+                            // Extract numeric parts
                             float v1 = std::stof(val1); float v2 = std::stof(val2);
-                            if (lbl == L"Sharpness" || lbl == L"Entropy" || lbl == L"BPP") return v1 > v2;
-                            if (lbl == L"Disk") return v1 < v2; 
+                            if (lbl == L"Sharp" || lbl == L"Ent" || lbl == L"BPP" || lbl == L"Disk" || lbl == L"Size") return v1 > v2;
                         } catch (...) {}
                         return false;
                     };
                     
                     if (lRow && rRow) {
-                        bool leftBetter = IsBetter(label, lRow->valueMain, rRow->valueMain);
-                        bool rightBetter = IsBetter(label, rRow->valueMain, lRow->valueMain);
-                        if (isLeft) {
-                            if (leftBetter) winnerMark = L" ↑";
-                            else if (rightBetter) winnerMark = L" ↓";
-                        } else {
-                            if (rightBetter) winnerMark = L" ↑";
-                            else if (leftBetter) winnerMark = L" ↓";
-                        }
+                        if (isLeft && IsBetter(label, lRow->valueMain, rRow->valueMain)) winnerMark = L" ↑";
+                        if (!isLeft && IsBetter(label, rRow->valueMain, lRow->valueMain)) winnerMark = L" ↑";
                     }
-                } // [Fix] Missing brace for if(diff)
+                }
                 
                 std::wstring finalVal = val;
                 
@@ -2106,20 +2151,40 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
                     }
                 }
                 
-                finalVal += winnerMark;
-
-                // Right-align left values, left-align right values
+                // Draw logic with separate arrow color
                 m_debugFormat->SetTextAlignment(isLeft ? DWRITE_TEXT_ALIGNMENT_TRAILING : DWRITE_TEXT_ALIGNMENT_LEADING);
-                dc->DrawText(finalVal.c_str(), (UINT32)finalVal.length(), m_debugFormat.Get(), rect, brush);
+                
+                if (!winnerMark.empty()) {
+                    float valWidth = MeasureTextWidth(val, m_debugFormat.Get());
+                    float arrowWidth = MeasureTextWidth(winnerMark, m_debugFormat.Get());
+                    
+                    if (isLeft) {
+                        D2D1_RECT_F valRect = rect; valRect.right -= arrowWidth;
+                        D2D1_RECT_F arrowRect = rect; arrowRect.left = rect.right - arrowWidth;
+                        dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), valRect, brush);
+                        dc->DrawText(winnerMark.c_str(), (UINT32)winnerMark.length(), m_debugFormat.Get(), arrowRect, winBrush);
+                    } else {
+                        dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), rect, brush);
+                        D2D1_RECT_F arrowRect = rect; arrowRect.left += valWidth;
+                        dc->DrawText(winnerMark.c_str(), (UINT32)winnerMark.length(), m_debugFormat.Get(), arrowRect, winBrush);
+                    }
+                } else {
+                    dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), rect, brush);
+                }
             };
 
             DrawValue(lRow, leftX, valW, true);
             DrawValue(rRow, rightX, valW, false);
 
             y += rowH;
-        } // [Fix] Missing brace for inner loop
-    } // [Fix] Missing brace for outer loop
+        }
+    }
     
     // Reset alignment
     m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    
+    // Reset hover if outside HUD
+    if (!PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, m_lastHUDRect)) {
+        if (m_hoverRowIndex == -2) m_hoverRowIndex = -1;
+    }
 }

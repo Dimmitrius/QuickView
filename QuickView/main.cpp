@@ -374,7 +374,7 @@ static void MarkCompareDirty();
 static void EnterCompareMode(HWND hwnd);
 static void ExitCompareMode(HWND hwnd);
 static void CaptureCurrentImageAsCompareLeft();
-static bool LoadImageIntoCompareLeftSlot(const std::wstring& path);
+static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path);
 static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient);
 static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval);
 static float GetCompareSplitRatio();
@@ -652,7 +652,9 @@ bool GetCompareIndicatorState(int& outPane, float& outSplitRatio, bool& outIsWip
 bool GetCompareInfoSnapshot(CImageLoader::ImageMetadata& left, CImageLoader::ImageMetadata& right) {
     if (!IsCompareModeActive() || !g_compare.left.valid || !g_imageResource) return false;
     left = g_compare.left.metadata;
+    left.SourcePath = g_compare.left.path;
     right = g_currentMetadata;
+    right.SourcePath = g_imagePath;
     return true;
 }
 
@@ -1039,7 +1041,7 @@ static void DrawResourceIntoViewport(ID2D1DeviceContext* ctx,
     ctx->SetTransform(oldTransform);
 }
 
-static bool LoadImageIntoCompareLeftSlot(const std::wstring& path) {
+static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
     if (path.empty() || !g_imageLoader || !g_renderEngine) return false;
 
     ComPtr<IWICBitmap> wicBitmap;
@@ -1075,6 +1077,12 @@ static bool LoadImageIntoCompareLeftSlot(const std::wstring& path) {
         g_compare.left.metadata.ExifOrientation = 1;
     }
     g_compare.left.view.ExifOrientation = g_config.AutoRotate ? g_compare.left.metadata.ExifOrientation : 1;
+
+    // [v10.0] Trigger Histogram calculation if HUD is showing
+    if (g_runtime.ShowCompareInfo && g_compare.left.metadata.HistL.empty()) {
+        UpdateCompareLeftHistogramAsync(hwnd, path);
+    }
+
     return true;
 }
 
@@ -1304,12 +1312,20 @@ static void EnterCompareMode(HWND hwnd) {
     MarkCompareDirty();
 
     g_viewState.CompareActive = true;
+    
+    // [v10.0] Trigger Metrics for Left Image (A) if HUD is active
+    // [Fix] Must call AFTER CompareActive=true so IsCompareModeActive() check passes
+    if (g_runtime.ShowCompareInfo && g_compare.left.metadata.HistL.empty()) {
+        UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
+    }
+
     g_viewState.CompareSplitRatio = GetCompareSplitRatio();
     g_viewState.EdgeHoverLeft = 0;
     g_viewState.EdgeHoverRight = 0;
 
     g_toolbar.SetCompareMode(true);
     g_toolbar.SetCompareSyncStates(g_compare.syncZoom, g_compare.syncPan);
+    g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
     RECT rc{};
     GetClientRect(hwnd, &rc);
     g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
@@ -4775,6 +4791,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         g_viewState.EdgeHoverLeft = 0;
                         g_viewState.EdgeHoverRight = 0;
                         g_viewState.EdgeHoverState = 0;
+                        // For HUD, reset hover if it changed recently
                         RequestRepaint(PaintLayer::Static);
                         goto SKIP_EDGE_NAV;
                     }
@@ -5539,8 +5556,9 @@ SKIP_EDGE_NAV:;
             return 0;
         }
         
-        if (g_runtime.ShowInfoPanel && g_uiRenderer) {
-             // Use UIRenderer::HitTest for all Info Panel interactions
+        bool hudVisible = IsCompareModeActive() && g_runtime.ShowCompareInfo;
+        if ((g_runtime.ShowInfoPanel || hudVisible) && g_uiRenderer) {
+             // Use UIRenderer::HitTest for all Info UI interactions (Panel + HUD)
              auto hit = g_uiRenderer->HitTest((float)pt.x, (float)pt.y);
              
              switch (hit.type) {
@@ -5559,10 +5577,12 @@ SKIP_EDGE_NAV:;
                      return 0;
                      
                  case UIHitResult::InfoRow:
-                     if (CopyToClipboard(hwnd, hit.payload)) {
-                         g_osd.Show(hwnd, AppStrings::OSD_Copied, false);
+                     if (hit.rowIndex != -2) { // Normal Info Panel row
+                         if (CopyToClipboard(hwnd, hit.payload)) {
+                             g_osd.Show(hwnd, AppStrings::OSD_Copied, false);
+                         }
                      }
-                     RequestRepaint(PaintLayer::All);
+                     RequestRepaint(PaintLayer::All); // Repaint for click feedback or HUD area block
                      return 0;
                      
                  case UIHitResult::GPSCoord:
@@ -5847,6 +5867,7 @@ SKIP_EDGE_NAV:;
                 case ToolbarButtonID::CompareInfo:
                     if (IsCompareModeActive() && g_compare.left.valid && g_imageResource) {
                         g_runtime.ShowCompareInfo = !g_runtime.ShowCompareInfo;
+                        g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
                         if (g_runtime.ShowCompareInfo) {
                             if (g_currentMetadata.HistL.empty()) {
                                 UpdateHistogramAsync(hwnd, g_imagePath);
@@ -6125,7 +6146,7 @@ SKIP_EDGE_NAV:;
             if (IsCompareModeActive()) {
                 ComparePane pane = HitTestComparePane(hwnd, dropPt);
                 if (pane == ComparePane::Left) {
-                    if (LoadImageIntoCompareLeftSlot(path)) {
+                    if (LoadImageIntoCompareLeftSlot(hwnd, path)) {
                         g_compare.activePane = ComparePane::Left;
                         MarkCompareDirty();
                         RequestRepaint(PaintLayer::Image | PaintLayer::Static);
@@ -6338,24 +6359,40 @@ SKIP_EDGE_NAV:;
             }
             RequestRepaint(PaintLayer::Static);
             break;
-        case 'I': // I: Toggle full info panel
-            if (!g_runtime.ShowInfoPanel) {
-                g_runtime.ShowInfoPanel = true;
-                g_runtime.InfoPanelExpanded = true;
-                if (g_currentMetadata.HistR.empty() && !g_imagePath.empty()) {
-                    UpdateHistogramAsync(hwnd, g_imagePath);
+        case 'I': // I: Toggle HUD (Compare) or Panel (Normal)
+            if (IsCompareModeActive()) {
+                // Toggle Compare HUD
+                g_runtime.ShowCompareInfo = !g_runtime.ShowCompareInfo;
+                g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
+                if (g_runtime.ShowCompareInfo) {
+                    if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) {
+                        UpdateHistogramAsync(hwnd, g_imagePath);
+                    }
+                    if (g_compare.left.metadata.HistL.empty() && !g_compare.left.path.empty()) {
+                        UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
+                    }
                 }
-                g_toolbar.SetExifState(true);
-            } else if (!g_runtime.InfoPanelExpanded) {
-                g_runtime.InfoPanelExpanded = true;
-                if (g_currentMetadata.HistR.empty() && !g_imagePath.empty()) {
-                    UpdateHistogramAsync(hwnd, g_imagePath);
-                }
+                RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
             } else {
-                g_runtime.ShowInfoPanel = false;
-                g_toolbar.SetExifState(false);
+                // Normal Mode: Toggle Info Panel
+                if (!g_runtime.ShowInfoPanel) {
+                    g_runtime.ShowInfoPanel = true;
+                    g_runtime.InfoPanelExpanded = true;
+                    if (g_currentMetadata.HistR.empty() && !g_imagePath.empty()) {
+                        UpdateHistogramAsync(hwnd, g_imagePath);
+                    }
+                    g_toolbar.SetExifState(true);
+                } else if (!g_runtime.InfoPanelExpanded) {
+                    g_runtime.InfoPanelExpanded = true;
+                    if (g_currentMetadata.HistR.empty() && !g_imagePath.empty()) {
+                        UpdateHistogramAsync(hwnd, g_imagePath);
+                    }
+                } else {
+                    g_runtime.ShowInfoPanel = false;
+                    g_toolbar.SetExifState(false);
+                }
+                RequestRepaint(PaintLayer::Static);
             }
-            RequestRepaint(PaintLayer::Static);
             break;
         
         case VK_F12: // F12: Toggle Performance HUD
@@ -6528,7 +6565,7 @@ SKIP_EDGE_NAV:;
             ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
                     if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left) {
-                        if (LoadImageIntoCompareLeftSlot(szFile)) {
+                        if (LoadImageIntoCompareLeftSlot(hwnd, szFile)) {
                             g_compare.activePane = ComparePane::Left;
                             MarkCompareDirty();
                             RequestRepaint(PaintLayer::Image | PaintLayer::Static);
@@ -6717,7 +6754,7 @@ SKIP_EDGE_NAV:;
                 if (!newName.empty() && newName != currentName) {
                     std::wstring newPath = currentFolder + newName;
                     if (MoveFileW(g_compare.left.path.c_str(), newPath.c_str())) {
-                        if (LoadImageIntoCompareLeftSlot(newPath)) {
+                        if (LoadImageIntoCompareLeftSlot(hwnd, newPath)) {
                             g_osd.Show(hwnd, L"Renamed (Left)", false);
                             MarkCompareDirty();
                             RequestRepaint(PaintLayer::Image | PaintLayer::Static);
@@ -7018,7 +7055,7 @@ SKIP_EDGE_NAV:;
              
              if (!contextPath.empty()) {
                  if (contextLeft) {
-                     if (LoadImageIntoCompareLeftSlot(contextPath)) {
+                     if (LoadImageIntoCompareLeftSlot(hwnd, contextPath)) {
                          g_compare.activePane = ComparePane::Left;
                          MarkCompareDirty();
                          RequestRepaint(PaintLayer::Image | PaintLayer::Static);
@@ -7112,7 +7149,7 @@ SKIP_EDGE_NAV:;
                     if (result == DialogResult::Yes) {
                         if (contextLeft) {
                             if (MoveFileW(contextPath.c_str(), newPath.c_str())) {
-                                if (LoadImageIntoCompareLeftSlot(newPath)) {
+                                if (LoadImageIntoCompareLeftSlot(hwnd, newPath)) {
                                     g_osd.Show(hwnd, L"Extension Fixed (Left)", false);
                                     MarkCompareDirty();
                                     RequestRepaint(PaintLayer::Image | PaintLayer::Static);
@@ -7586,7 +7623,14 @@ void ProcessEngineEvents(HWND hwnd) {
                 if (GetCursorPos(&pt) && ScreenToClient(hwnd, &pt)) {
                     PostMessage(hwnd, WM_SETCURSOR, (WPARAM)hwnd, MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
                 }
-                
+
+                // [HUD & Info Panel] Trigger metrics calculation if visible
+                if (!isPreview && (g_runtime.ShowCompareInfo || (g_runtime.ShowInfoPanel && g_runtime.InfoPanelExpanded))) {
+                    if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) {
+                        UpdateHistogramAsync(hwnd, g_imagePath);
+                    }
+                }
+
                 needsRepaint = true;
                 
                 wchar_t debugBuf[256];
@@ -8385,7 +8429,7 @@ void Navigate(HWND hwnd, int direction) {
             : tempNav.Previous(g_config.LoopNavigation);
 
         if (!path.empty()) {
-            if (LoadImageIntoCompareLeftSlot(path)) {
+            if (LoadImageIntoCompareLeftSlot(hwnd, path)) {
                 g_compare.activePane = ComparePane::Left;
                 g_compare.contextPane = ComparePane::Left;
                 MarkCompareDirty();

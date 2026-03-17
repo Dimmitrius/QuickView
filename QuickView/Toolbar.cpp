@@ -610,3 +610,11 @@ void Toolbar::SetCompareSyncStates(bool syncZoom, bool syncPan) {
     if (btn.id == ToolbarButtonID::CompareSyncPan) btn.isToggled = syncPan;
   }
 }
+
+void Toolbar::SetCompareInfoState(bool active) {
+  for (auto &btn : m_buttons) {
+    if (btn.id == ToolbarButtonID::CompareInfo) {
+      btn.isToggled = active;
+    }
+  }
+}
