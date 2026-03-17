@@ -56,7 +56,9 @@ enum class UIHitResult {
     PanelClose,     // Close Info Panel
     GPSCoord,       // Click to copy GPS coordinates
     GPSLink,        // Click to open in Maps
-    InfoRow         // Click to copy row content
+    InfoRow,        // Click to copy row content
+    HudToggleLite,  // Click to toggle HUD Lite mode
+    HudToggleExpand // Click to toggle HUD Expand mode
 };
 
 // Window Controls Hit Test Result
@@ -192,6 +194,8 @@ private:
     D2D1_RECT_F m_gpsCoordRect = {};
     D2D1_RECT_F m_gpsLinkRect = {};
     D2D1_RECT_F m_lastHUDRect = {}; // Track HUD area for hit testing
+    D2D1_RECT_F m_hudToggleLiteRect = {}; // Track HUD lite mode icon area
+    D2D1_RECT_F m_hudToggleExpandRect = {}; // Track HUD expand mode icon area
     
     // Grid Layout Constants
     static constexpr float GRID_ICON_WIDTH = 16.0f;

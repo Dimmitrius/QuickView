@@ -1079,7 +1079,7 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
     g_compare.left.view.ExifOrientation = g_config.AutoRotate ? g_compare.left.metadata.ExifOrientation : 1;
 
     // [v10.0] Trigger Histogram calculation if HUD is showing
-    if (g_runtime.ShowCompareInfo && g_compare.left.metadata.HistL.empty()) {
+    if (g_runtime.ShowCompareInfo && (g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded)) {
         UpdateCompareLeftHistogramAsync(hwnd, path);
     }
 
@@ -1315,7 +1315,7 @@ static void EnterCompareMode(HWND hwnd) {
     
     // [v10.0] Trigger Metrics for Left Image (A) if HUD is active
     // [Fix] Must call AFTER CompareActive=true so IsCompareModeActive() check passes
-    if (g_runtime.ShowCompareInfo && g_compare.left.metadata.HistL.empty()) {
+    if (g_runtime.ShowCompareInfo && (g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded)) {
         UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
     }
 
@@ -5575,9 +5575,28 @@ SKIP_EDGE_NAV:;
                      g_toolbar.SetExifState(false);
                      RequestRepaint(PaintLayer::All);
                      return 0;
-                     
-                 case UIHitResult::InfoRow:
-                     if (hit.rowIndex != -2) { // Normal Info Panel row
+
+                 case UIHitResult::HudToggleLite:
+                     // Toggle between Lite (0) and Normal (1)
+                     if (g_runtime.CompareHudMode == 0) {
+                         g_runtime.CompareHudMode = 1;
+                     } else {
+                         g_runtime.CompareHudMode = 0;
+                     }
+                     RequestRepaint(PaintLayer::All);
+                     return 0;
+
+                 case UIHitResult::HudToggleExpand:
+                     // Toggle between Normal (1)/Lite(0) and Full (2)
+                     if (g_runtime.CompareHudMode == 2) {
+                         g_runtime.CompareHudMode = 1;
+                     } else {
+                         g_runtime.CompareHudMode = 2;
+                     }
+                     RequestRepaint(PaintLayer::All);
+                     return 0;
+
+                 case UIHitResult::InfoRow:                     if (hit.rowIndex != -2) { // Normal Info Panel row
                          if (CopyToClipboard(hwnd, hit.payload)) {
                              g_osd.Show(hwnd, AppStrings::OSD_Copied, false);
                          }
@@ -5872,7 +5891,7 @@ SKIP_EDGE_NAV:;
                             if (g_currentMetadata.HistL.empty()) {
                                 UpdateHistogramAsync(hwnd, g_imagePath);
                             }
-                            if (g_compare.left.metadata.HistL.empty()) {
+                            if (g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) {
                                 UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
                             }
                         }
@@ -6297,13 +6316,20 @@ SKIP_EDGE_NAV:;
                 SendMessage(hwnd, WM_COMMAND, IDM_PRINT, 0);
             }
             break; // Ctrl+P: Print
-        case 'C': // Ctrl+C: Copy image, Ctrl+Alt+C: Copy path
+        case 'C': // C: Toggle Compare Mode, Ctrl+C: Copy image, Ctrl+Alt+C: Copy path
             if (ctrl && alt) {
                 if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
                 SendMessage(hwnd, WM_COMMAND, IDM_COPY_PATH, 0);
             } else if (ctrl) {
                 if (IsCompareModeActive()) g_compare.contextPane = g_compare.activePane;
                 SendMessage(hwnd, WM_COMMAND, IDM_COPY_IMAGE, 0);
+            } else {
+                if (IsCompareModeActive()) {
+                    ExitCompareMode(hwnd);
+                } else {
+                    EnterCompareMode(hwnd);
+                }
+                RequestRepaint(PaintLayer::All);
             }
             break;
         
@@ -6347,17 +6373,27 @@ SKIP_EDGE_NAV:;
             }
             break;
         case VK_TAB: // Tab: Toggle compact info panel
-            if (!g_runtime.ShowInfoPanel) {
-                g_runtime.ShowInfoPanel = true;
-                g_runtime.InfoPanelExpanded = false;
-                g_toolbar.SetExifState(true);
-            } else if (g_runtime.InfoPanelExpanded) {
-                g_runtime.InfoPanelExpanded = false;
+            if (IsCompareModeActive()) {
+                if (g_runtime.CompareHudMode == 0) {
+                    g_runtime.CompareHudMode = 1;
+                } else {
+                    g_runtime.CompareHudMode = 0;
+                    g_runtime.ShowCompareInfo = true; // Ensure it is visible if toggling via hotkey
+                }
+                RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
             } else {
-                g_runtime.ShowInfoPanel = false;
-                g_toolbar.SetExifState(false);
+                if (!g_runtime.ShowInfoPanel) {
+                    g_runtime.ShowInfoPanel = true;
+                    g_runtime.InfoPanelExpanded = false;
+                    g_toolbar.SetExifState(true);
+                } else if (g_runtime.InfoPanelExpanded) {
+                    g_runtime.InfoPanelExpanded = false;
+                } else {
+                    g_runtime.ShowInfoPanel = false;
+                    g_toolbar.SetExifState(false);
+                }
+                RequestRepaint(PaintLayer::Static);
             }
-            RequestRepaint(PaintLayer::Static);
             break;
         case 'I': // I: Toggle HUD (Compare) or Panel (Normal)
             if (IsCompareModeActive()) {
@@ -6368,8 +6404,24 @@ SKIP_EDGE_NAV:;
                     if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) {
                         UpdateHistogramAsync(hwnd, g_imagePath);
                     }
-                    if (g_compare.left.metadata.HistL.empty() && !g_compare.left.path.empty()) {
+                    if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty()) {
                         UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
+                    }
+                    // Elastic HUD: Expand window if it's too small for the HUD
+                    RECT rcClient;
+                    if (GetClientRect(hwnd, &rcClient)) {
+                        int w = rcClient.right - rcClient.left;
+                        int h = rcClient.bottom - rcClient.top;
+                        
+                        // Target HUD Size + margins
+                        int minW = (int)(450.0f * g_uiScale);
+                        int minH = (int)(300.0f * g_uiScale);
+                        
+                        if (w < minW || h < minH) {
+                            int targetW = std::max(w, minW);
+                            int targetH = std::max(h, minH);
+                            SetWindowPos(hwnd, nullptr, 0, 0, targetW, targetH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+                        }
                     }
                 }
                 RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
@@ -6529,7 +6581,7 @@ SKIP_EDGE_NAV:;
              isRaw = IsRawFile(targetPath);
         }
         
-        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode);
+        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode, IsCompareModeActive());
         return 0;
     }
     
@@ -6976,6 +7028,16 @@ SKIP_EDGE_NAV:;
                          0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             g_osd.Show(hwnd, g_config.AlwaysOnTop ? AppStrings::OSD_AlwaysOnTopOn : AppStrings::OSD_AlwaysOnTopOff, false);
             RequestRepaint(PaintLayer::Static | PaintLayer::Dynamic);
+            break;
+        }
+
+        case IDM_COMPARE_MODE: {
+            if (IsCompareModeActive()) {
+                ExitCompareMode(hwnd);
+            } else {
+                EnterCompareMode(hwnd);
+            }
+            RequestRepaint(PaintLayer::All);
             break;
         }
 
@@ -8378,18 +8440,50 @@ FireAndForget UpdateHistogramAsync(HWND hwnd, std::wstring path) {
 FireAndForget UpdateCompareLeftHistogramAsync(HWND hwnd, std::wstring path) {
     if (path.empty() || !IsCompareModeActive()) co_return;
     if (path != g_compare.left.path) co_return;
-    
+
     co_await ResumeBackground{};
-    
+
+    // [v10.0 Fix] Also fetch missing EXIF / File Stats for the left pane
+    CImageLoader::ImageMetadata fullMeta;
+    bool hasFullMeta = SUCCEEDED(g_imageLoader->ReadMetadata(path.c_str(), &fullMeta, true));
+
     ComPtr<IWICBitmap> tempBitmap;
     std::wstring loaderName; // dummy
-    if (SUCCEEDED(g_imageLoader->LoadToMemory(path.c_str(), &tempBitmap, &loaderName))) {
-        CImageLoader::ImageMetadata histMeta;
+    bool loadedBitmap = SUCCEEDED(g_imageLoader->LoadToMemory(path.c_str(), &tempBitmap, &loaderName));
+
+    CImageLoader::ImageMetadata histMeta;
+    bool hasHist = false;
+    if (loadedBitmap && tempBitmap) {
         g_imageLoader->ComputeHistogram(tempBitmap.Get(), &histMeta);
-        
-        co_await ResumeMainThread(hwnd);
-        
-        if (IsCompareModeActive() && path == g_compare.left.path) {
+        hasHist = true;
+    }
+
+    co_await ResumeMainThread(hwnd);
+
+    if (IsCompareModeActive() && path == g_compare.left.path) {
+        if (hasFullMeta) {
+            // Merge missing file stats and EXIF data
+            if (g_compare.left.metadata.FileSize == 0) g_compare.left.metadata.FileSize = fullMeta.FileSize;
+            if (g_compare.left.metadata.Date.empty()) g_compare.left.metadata.Date = fullMeta.Date;
+            if (g_compare.left.metadata.Make.empty()) g_compare.left.metadata.Make = fullMeta.Make;
+            if (g_compare.left.metadata.Model.empty()) g_compare.left.metadata.Model = fullMeta.Model;
+            if (g_compare.left.metadata.Lens.empty()) g_compare.left.metadata.Lens = fullMeta.Lens;
+            if (g_compare.left.metadata.ISO.empty()) g_compare.left.metadata.ISO = fullMeta.ISO;
+            if (g_compare.left.metadata.Aperture.empty()) g_compare.left.metadata.Aperture = fullMeta.Aperture;
+            if (g_compare.left.metadata.Shutter.empty()) g_compare.left.metadata.Shutter = fullMeta.Shutter;
+            if (g_compare.left.metadata.Focal.empty()) g_compare.left.metadata.Focal = fullMeta.Focal;
+            if (g_compare.left.metadata.ExposureBias.empty()) g_compare.left.metadata.ExposureBias = fullMeta.ExposureBias;
+            if (g_compare.left.metadata.Flash.empty()) g_compare.left.metadata.Flash = fullMeta.Flash;
+            if (g_compare.left.metadata.WhiteBalance.empty()) g_compare.left.metadata.WhiteBalance = fullMeta.WhiteBalance;
+            if (g_compare.left.metadata.MeteringMode.empty()) g_compare.left.metadata.MeteringMode = fullMeta.MeteringMode;
+            if (g_compare.left.metadata.ExposureProgram.empty()) g_compare.left.metadata.ExposureProgram = fullMeta.ExposureProgram;
+            if (g_compare.left.metadata.Software.empty()) g_compare.left.metadata.Software = fullMeta.Software;
+            if (g_compare.left.metadata.ColorSpace.empty()) g_compare.left.metadata.ColorSpace = fullMeta.ColorSpace;
+            if (g_compare.left.metadata.FormatDetails.empty()) g_compare.left.metadata.FormatDetails = fullMeta.FormatDetails;
+            g_compare.left.metadata.IsFullMetadataLoaded = true;
+        }
+
+        if (hasHist) {
             g_compare.left.metadata.HistR = histMeta.HistR;
             g_compare.left.metadata.HistG = histMeta.HistG;
             g_compare.left.metadata.HistB = histMeta.HistB;
@@ -8398,11 +8492,13 @@ FireAndForget UpdateCompareLeftHistogramAsync(HWND hwnd, std::wstring path) {
             g_compare.left.metadata.Entropy = histMeta.Entropy;
             g_compare.left.metadata.HasSharpness = histMeta.HasSharpness;
             g_compare.left.metadata.HasEntropy = histMeta.HasEntropy;
+        }
+
+        if (hasFullMeta || hasHist) {
             RequestRepaint(PaintLayer::All);
         }
     }
 }
-
 FireAndForget LoadImageAsync(HWND hwnd, std::wstring path, bool showOSD, QuickView::BrowseDirection dir) {
     if (path.empty()) co_return;
     

@@ -112,6 +112,17 @@ HitTestResult UIRenderer::HitTest(float x, float y) {
     // HUD Hit Test (if visible)
     if (hudVisible) {
         m_lastMousePos = { (long)x, (long)y }; // [Fix] Update mouse pos for HUD internal hit test
+        
+        // HUD Toggle Buttons
+        if (PointInRect(x, y, m_hudToggleLiteRect)) {
+            result.type = UIHitResult::HudToggleLite;
+            return result;
+        }
+        if (PointInRect(x, y, m_hudToggleExpandRect)) {
+            result.type = UIHitResult::HudToggleExpand;
+            return result;
+        }
+        
         if (PointInRect(x, y, m_lastHUDRect)) {
             result.type = UIHitResult::InfoRow; 
             result.rowIndex = -2; 
@@ -2010,23 +2021,54 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         std::wstring name;
         std::vector<std::wstring> labels;
     };
-    std::vector<Group> hudGroups = {
-        { L"PHYSICAL ATTRIBUTES", { L"File", L"Size", L"Disk", L"Date" } },
-        { L"SCIENTIFIC QUALITY", { L"Sharp", L"Ent", L"BPP" } },
-        { L"OPTICS & ENCODING", { L"Camera", L"Exp", L"Lens", L"Focal", L"Color", L"Chroma", L"Flash", L"W.Bal", L"Meter", L"Prog", L"Soft" } }
-    };
+    std::vector<Group> hudGroups;
+    
+    int hudMode = g_runtime.CompareHudMode; // 0=Lite, 1=Normal, 2=Full
+
+    if (hudMode == 0) {
+        // Lite Mode
+        hudGroups = {
+            { L"LITE MODE", { L"File", L"Size", L"Disk", L"Sharp", L"Ent" } }
+        };
+    } else {
+        hudGroups = {
+            { L"PHYSICAL ATTRIBUTES", { L"File", L"Size", L"Disk", L"Date" } },
+            { L"SCIENTIFIC QUALITY", { L"Sharp", L"Ent", L"BPP" } }
+        };
+        if (hudMode == 2) {
+            // Full mode includes Optics & Encoding
+            hudGroups.push_back({ L"OPTICS & ENCODING", { L"Camera", L"Exp", L"Lens", L"Focal", L"Color", L"Chroma", L"Flash", L"W.Bal", L"Meter", L"Prog", L"Soft" } });
+        }
+    }
 
     int activeGroups = 0;
     int activeRows = 0;
     for (const auto& group : hudGroups) {
         bool hasData = false;
         for (const auto& l : group.labels) {
-            if (std::find(labels.begin(), labels.end(), l) != labels.end()) { hasData = true; activeRows++; }
+            if (std::find(labels.begin(), labels.end(), l) != labels.end()) { 
+                
+                // In Lite(0) and Normal(1) mode, hide identical metrics (except File)
+                if (hudMode < 2 && l != L"File") {
+                    const InfoRow* lRow = nullptr;
+                    const InfoRow* rRow = nullptr;
+                    for (const auto& r : leftRows) if (r.label == l) { lRow = &r; break; }
+                    for (const auto& r : rightRows) if (r.label == l) { rRow = &r; break; }
+                    if (lRow && rRow && lRow->valueMain == rRow->valueMain) {
+                        continue; // Skip identical data
+                    }
+                }
+                
+                hasData = true; 
+                activeRows++; 
+            }
         }
         if (hasData) activeGroups++;
     }
 
-    const float panelH = padding * 2 + headerH + (activeGroups * rowH) + (activeRows * rowH) + 4.0f * s;
+    // Add extra space at bottom for toggle icons
+    const float bottomBarH = 20.0f * s;
+    const float panelH = padding * 2 + headerH + (activeGroups * rowH) + (activeRows * rowH) + bottomBarH + 4.0f * s;
     D2D1_RECT_F panelRect = D2D1::RectF(panelX, panelY, panelX + panelW, panelY + panelH);
     m_lastHUDRect = panelRect; // Store for hit test
 
@@ -2063,20 +2105,31 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     y += headerH;
 
-    // Groups were defined in height calculation above
-
     for (const auto& group : hudGroups) {
+        // Group visibility check taking identical hiding into account
         bool groupHasData = false;
         for (const auto& l : group.labels) {
-            if (std::find(labels.begin(), labels.end(), l) != labels.end()) { groupHasData = true; break; }
+            if (std::find(labels.begin(), labels.end(), l) != labels.end()) {
+                if (hudMode < 2 && l != L"File") {
+                    const InfoRow* lRow = nullptr;
+                    const InfoRow* rRow = nullptr;
+                    for (const auto& r : leftRows) if (r.label == l) { lRow = &r; break; }
+                    for (const auto& r : rightRows) if (r.label == l) { rRow = &r; break; }
+                    if (lRow && rRow && lRow->valueMain == rRow->valueMain) continue;
+                }
+                groupHasData = true; 
+                break; 
+            }
         }
         if (!groupHasData) continue;
 
         // Draw Group Header
-        D2D1_RECT_F groupRect = D2D1::RectF(panelX + padding, y + 4*s, panelX + panelW - padding, y + rowH);
-        dc->DrawText(group.name.c_str(), (UINT32)group.name.length(), m_debugFormat.Get(), groupRect, brushLabel.Get());
-        dc->DrawLine(D2D1::Point2F(panelX + padding, y + rowH - 2*s), D2D1::Point2F(panelX + panelW - padding, y + rowH - 2*s), brushLabel.Get(), 0.5f * s);
-        y += rowH;
+        if (hudMode != 0) { // Don't draw group header in Lite mode to save space
+            D2D1_RECT_F groupRect = D2D1::RectF(panelX + padding, y + 4*s, panelX + panelW - padding, y + rowH);
+            dc->DrawText(group.name.c_str(), (UINT32)group.name.length(), m_debugFormat.Get(), groupRect, brushLabel.Get());
+            dc->DrawLine(D2D1::Point2F(panelX + padding, y + rowH - 2*s), D2D1::Point2F(panelX + panelW - padding, y + rowH - 2*s), brushLabel.Get(), 0.5f * s);
+            y += rowH;
+        }
 
         for (const auto& label : group.labels) {
             if (std::find(labels.begin(), labels.end(), label) == labels.end()) continue;
@@ -2086,6 +2139,11 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
             const InfoRow* rRow = nullptr;
             for (const auto& r : leftRows) if (r.label == label) { lRow = &r; break; }
             for (const auto& r : rightRows) if (r.label == label) { rRow = &r; break; }
+
+            // In Lite(0) and Normal(1) mode, hide identical metrics (except File)
+            if (hudMode < 2 && label != L"File") {
+                if (lRow && rRow && lRow->valueMain == rRow->valueMain) continue;
+            }
 
             D2D1_RECT_F rowRect = D2D1::RectF(panelX + 4, y, panelX + panelW - 4, y + rowH);
             if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rowRect)) {
@@ -2231,6 +2289,25 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     // Reset alignment
     m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
     
+    // Draw Toggle Icons (Bottom Right)
+    float iconAreaY = panelRect.bottom - bottomBarH;
+    float iconSize = 16.0f * s;
+    float liteIconX = panelRect.right - padding - iconSize * 2 - 8.0f * s;
+    float expandIconX = panelRect.right - padding - iconSize;
+
+    m_hudToggleLiteRect = D2D1::RectF(liteIconX - 4*s, iconAreaY, liteIconX + iconSize + 4*s, iconAreaY + bottomBarH);
+    m_hudToggleExpandRect = D2D1::RectF(expandIconX - 4*s, iconAreaY, expandIconX + iconSize + 4*s, iconAreaY + bottomBarH);
+
+    // Lite Mode Icon (e.g. Line list or Collapse)
+    const wchar_t* liteIcon = (hudMode == 0) ? L"\uE738" : L"\uE8A0"; // \uE738 (List) or \uE8A0 (Remove)
+    ID2D1SolidColorBrush* liteBrush = (hudMode == 0) ? brushGood.Get() : brushLabel.Get();
+    dc->DrawText(liteIcon, 1, m_iconFormat.Get(), m_hudToggleLiteRect, liteBrush);
+
+    // Expand Mode Icon
+    const wchar_t* expandIcon = (hudMode == 2) ? L"\uE73F" : L"\uE740"; // \uE73F (ChevronUp) or \uE740 (ChevronDown)
+    ID2D1SolidColorBrush* expandBrush = (hudMode == 2) ? brushGood.Get() : brushLabel.Get();
+    dc->DrawText(expandIcon, 1, m_iconFormat.Get(), m_hudToggleExpandRect, expandBrush);
+
     // Reset hover if outside HUD
     if (!PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, m_lastHUDRect)) {
         if (m_hoverRowIndex == -2) m_hoverRowIndex = -1;
