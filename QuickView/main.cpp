@@ -378,6 +378,8 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path);
 static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient);
 static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval);
 static float GetCompareSplitRatio();
+void AdjustWindowToImage(HWND hwnd);
+
 
 static D2D1_SIZE_F GetLogicalImageSize();
 static bool g_isAutoLocked = false;
