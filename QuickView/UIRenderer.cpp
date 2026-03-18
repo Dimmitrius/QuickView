@@ -1650,18 +1650,19 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
 
     if (leftHist.empty() && rightHist.empty()) return;
 
-    // Find max value across both
-    uint32_t maxVal = 1;
+    // Find independent max values to normalize shapes
+    uint32_t maxLeft = 1;
+    uint32_t maxRight = 1;
     for (int i = 0; i < 256; i++) {
-        if (!leftHist.empty() && leftHist[i] > maxVal) maxVal = leftHist[i];
-        if (!rightHist.empty() && rightHist[i] > maxVal) maxVal = rightHist[i];
+        if (!leftHist.empty() && leftHist[i] > maxLeft) maxLeft = leftHist[i];
+        if (!rightHist.empty() && rightHist[i] > maxRight) maxRight = rightHist[i];
     }
 
-    float stepX = (rect.right - rect.left) / 256.0f;
+    float stepX = (rect.right - rect.left) / 255.0f; // 256 bins means 255 intervals
     float bottom = rect.bottom - 12.0f * m_uiScale; // Leave space for legend
     float height = bottom - rect.top;
 
-    auto drawLine = [&](const std::vector<uint32_t>& hist, D2D1::ColorF color, float strokeWidth) {
+    auto drawLine = [&](const std::vector<uint32_t>& hist, uint32_t maxH, D2D1::ColorF color, float strokeWidth) {
         if (hist.empty()) return;
 
         ComPtr<ID2D1PathGeometry> path;
@@ -1669,9 +1670,9 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
         ComPtr<ID2D1GeometrySink> sink;
         path->Open(&sink);
 
-        sink->BeginFigure(D2D1::Point2F(rect.left, bottom - ((float)hist[0] / maxVal) * height), D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->BeginFigure(D2D1::Point2F(rect.left, bottom - ((float)hist[0] / maxH) * height), D2D1_FIGURE_BEGIN_HOLLOW);
         for (int i = 1; i < 256; i++) {
-            float val = (float)hist[i] / maxVal;
+            float val = (float)hist[i] / maxH;
             float y = bottom - val * height;
             sink->AddLine(D2D1::Point2F(rect.left + i * stepX, y));
         }
@@ -1685,11 +1686,11 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
 
     // Left (Blue-ish)
     D2D1::ColorF leftColor(0.2f, 0.6f, 1.0f, 0.8f);
-    drawLine(leftHist, leftColor, 1.5f * m_uiScale);
+    drawLine(leftHist, maxLeft, leftColor, 1.5f * m_uiScale);
 
     // Right (Orange-ish)
     D2D1::ColorF rightColor(1.0f, 0.6f, 0.2f, 0.8f);
-    drawLine(rightHist, rightColor, 1.5f * m_uiScale);
+    drawLine(rightHist, maxRight, rightColor, 1.5f * m_uiScale);
 
     // Draw Background Grid / Baseline
     ComPtr<ID2D1SolidColorBrush> gridBrush;
