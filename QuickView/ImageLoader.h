@@ -9,6 +9,13 @@
 #include "TileMemoryManager.h" // [Titan]
 #include "TileTypes.h"         // [Titan] RegionRect
 
+namespace QuickView {
+    namespace Codec {
+        struct DecodeContext;
+        struct DecodeResult;
+    }
+}
+
 /// <summary>
 /// Image Loader
 /// Uses WIC to load image files
@@ -23,9 +30,6 @@ public:
     /// </summary>
     HRESULT Initialize(IWICImagingFactory* wicFactory);
 
-
-
-    
     // [v4.0] Infrastructure: Atomic Cancellation Predicate
     using CancelPredicate = std::function<bool()>;
     
@@ -53,10 +57,11 @@ public:
         std::wstring Format;        // e.g. "JPEG", "RAW (ARW)"
         std::wstring FormatDetails; // e.g. "4:2:0", "10-bit", "Lossy"
         std::wstring ColorSpace;    // e.g. "sRGB", "Display P3", "Adobe RGB"
+        std::wstring SourcePath;    // New: Original file path
         
         // [v5.3] EXIF Orientation (1-8, 1=Normal)
         int ExifOrientation = 1;
-        
+
         // Decoder Info
         std::wstring LoaderName;    // e.g. "TurboJPEG", "libavif"
         DWORD LoadTimeMs = 0;       // Load time in milliseconds
@@ -82,6 +87,12 @@ public:
         std::vector<uint32_t> HistG;
         std::vector<uint32_t> HistB;
         std::vector<uint32_t> HistL; // Luminance
+        
+        // Compare Metrics
+        double Sharpness = 0.0; // Laplacian variance
+        double Entropy = 0.0;   // Shannon entropy
+        bool HasSharpness = false;
+        bool HasEntropy = false;
         
         bool IsEmpty() const { return Make.empty() && Model.empty() && ISO.empty() && Date.empty(); }
 
@@ -194,7 +205,7 @@ public:
     /// <summary>
     /// Load WIC bitmap from file and force decode to memory
     /// </summary>
-    HRESULT LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std::wstring* pLoaderName = nullptr, bool forceFullDecode = false, CancelPredicate checkCancel = nullptr);
+    HRESULT LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std::wstring* pLoaderName = nullptr, bool forceFullDecode = false, CancelPredicate checkCancel = nullptr, int targetWidth = 0, int targetHeight = 0);
 
     /// <summary>
     /// NEW: Load image directly into PMR-backed buffer (Zero-Copy for Heavy Lane)
@@ -238,6 +249,8 @@ public:
     // [Direct D2D] Zero-Copy Loading API
     // ============================================================================
     
+    HRESULT LoadImageUnified(LPCWSTR filePath, const QuickView::Codec::DecodeContext& ctx, QuickView::Codec::DecodeResult& result);
+
     /// <summary>
     /// Load image directly to RawImageFrame (Zero-Copy path for Direct D2D).
     /// This is the primary loading API for the new rendering pipeline.
@@ -273,8 +286,6 @@ public:
     // [Titan Engine] Region Decoding API
     // ============================================================================
     
-    // struct RegionRect { int x, y, w, h; }; // Removed, use QuickView::RegionRect
-
     /// <summary>
     /// Load a specific region of the image.
     /// Used by Titan Engine for tile-based decoding.
@@ -315,14 +326,6 @@ public:
                               const uint8_t* mappedData = nullptr, size_t mappedSize = 0);
 
     HRESULT LoadJPEG(LPCWSTR filePath, IWICBitmap** ppBitmap);  // libjpeg-turbo
-
-
-    /// <summary>
-    /// NEW: Load Thumbnail (Raw Data)
-    /// Optimizes for speed using TurboJPEG scaling where possible.
-    /// Returns raw BGRA buffer.
-    /// </summary>
-
 
 
     // --- NEW: Fast Image Info (Header-Only Parsing) ---
@@ -380,6 +383,9 @@ public:
     static void ReleaseJxlRunner();
 
 private:
+    // Windows Shell Thumbnail Extractor
+    HRESULT LoadShellThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData);
+
     ComPtr<IWICImagingFactory> m_wicFactory;
     
     // [JXL Global Runner] Static singleton
@@ -390,15 +396,6 @@ private:
     HRESULT LoadThumbJPEG(LPCWSTR filePath, int targetSize, ThumbData* pData); // New TurboJPEG Scaled Loader
     HRESULT LoadThumbJPEGFromMemory(const uint8_t* pBuf, size_t size, int targetSize, ThumbData* pData); // Helper for in-memory buffers
     HRESULT LoadThumbWebPFromMemory(const uint8_t* pBuf, size_t size, int targetSize, ThumbData* pData); // Helper for WebP buffers
-
-    /// <summary>
-    /// Specialized Thumbnail Loaders (Phase 6)
-    /// </summary>
-    // Moved to public
-
-
-
-
 
     // LoadPNG REMOVED - replaced by LoadPngWuffs
     HRESULT LoadWebP(LPCWSTR filePath, IWICBitmap** ppBitmap);  // libwebp

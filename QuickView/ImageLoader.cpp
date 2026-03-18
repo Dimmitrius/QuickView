@@ -2,6 +2,8 @@
 #include <filesystem>
 #include <fstream> 
 #include <memory>
+#include <regex>
+#include <map>
 
 // Helper
 static std::vector<uint8_t> ReadFileToVector(const std::wstring& path) {
@@ -41,6 +43,7 @@ using namespace QuickView;
 #include "SIMDUtils.h"
 #include <thread>
 #include "PreviewExtractor.h"
+#include <shobjidl.h> // [Add] for IShellItemImageFactory
 #include "MappedFile.h" // [Opt]
 #if defined(__has_include)
 #if __has_include(<simd>)
@@ -166,8 +169,9 @@ namespace QuickView {
 
 using namespace QuickView::Codec;
 
-// [v5.0] Forward declaration for LoadToThumbnail
-static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, DecodeResult& result);
+// [v5.0] Forward// Forward declarations
+struct IStream;
+struct IWICBitmap;
 namespace QuickView {
     namespace Codec {
         namespace PsdComposite {
@@ -393,6 +397,8 @@ HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size,
         outFrame->formatDetails = L"8-bit JPEG (MMF)";
         if (chosenFactor.num != chosenFactor.denom) {
             outFrame->formatDetails += L" Scaled";
+            outFrame->srcWidth = width;   // [v10.1] Preserve original resolution
+            outFrame->srcHeight = height;
         }
         
         size_t bufSize = outFrame->GetBufferSize();
@@ -486,6 +492,10 @@ HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size,
     outFrame->stride = QuickView::CalculateAlignedStride(w, 4);
     outFrame->format = PixelFormat::BGRA8888;
     outFrame->formatDetails = L"WIC Cache";
+    if (sourceWithScaler) {
+        outFrame->srcWidth = (int)origW;   // [v10.1] Preserve original resolution
+        outFrame->srcHeight = (int)origH;
+    }
     
     size_t bufSize = outFrame->GetBufferSize();
     if (arena) {
@@ -515,7 +525,7 @@ static std::wstring DetectFormatFromContent(LPCWSTR filePath) {
     
     // Comprehensive LibRaw Extension List (40+ formats) + SVG
     static const wchar_t* rawExts[] = {
-        L".3fr", L".ari", L".arw", L".bay", L".braw", L".cr2", L".cr3", L".cap", L".data", L".dcs", L".dcr", 
+        L".3fr", L".ari", L".arw", L".bay", L".braw", L".cr2", L".cr3", L".crw", L".cap", L".data", L".dcs", L".dcr", 
         L".dng", L".drf", L".eip", L".erf", L".fff", L".gpr", L".iiq", L".k25", L".kdc", L".mdc", L".mef", 
         L".mos", L".mrw", L".nef", L".nrw", L".obm", L".orf", L".pef", L".ptx", L".pxn", L".r3d", L".raf", 
         L".raw", L".rwl", L".rw2", L".rwz", L".sr2", L".srf", L".srw", L".sti", L".x3f",
@@ -606,6 +616,9 @@ HRESULT CImageLoader::LoadFromFile(LPCWSTR filePath, IWICBitmapSource** bitmap) 
 // Implementation is in WuffsImpl.cpp with selective module loading
 #include "WuffsLoader.h"
 
+// [v5.3] Global storage - kept for internal decoder use, exposed via DecodeResult.metadata
+std::wstring g_lastFormatDetails;
+int g_lastExifOrientation = 1;
 
 // Read EXIF Orientation from JPEG file (Tag 0x0112)
 // Read EXIF Orientation from JPEG file (Tag 0x0112)
@@ -1287,6 +1300,7 @@ HRESULT CImageLoader::FullDecodeFromMemory(const uint8_t* data, size_t size,
         OutputDebugStringW(dbg);
         return S_OK;
     }
+
 
     // ---------------------------------------------------------------
     // Fallback: unsupported format for tile decode
@@ -2173,6 +2187,91 @@ static void ApplyOrientationToThumbData(CImageLoader::ThumbData* pData, int orie
 
 
 
+HRESULT CImageLoader::LoadShellThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData) {
+    if (!filePath || !pData || !m_wicFactory) return E_INVALIDARG;
+
+    ComPtr<IShellItemImageFactory> imageFactory;
+    HRESULT hr = SHCreateItemFromParsingName(filePath, nullptr, IID_PPV_ARGS(&imageFactory));
+    if (FAILED(hr) || !imageFactory) return hr;
+
+    SIZE size = { targetSize, targetSize };
+    HBITMAP hBitmap = nullptr;
+    
+    // Step 1: Request from shell cache (exactly target size) and strictly NO Icon fallback (SIIGBF_THUMBNAILONLY)
+    hr = imageFactory->GetImage(size, static_cast<SIIGBF>(SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY), &hBitmap);
+    
+    // Step 2: Fallback to System Large Icon Cache size (256) if the requested size failed
+    if (FAILED(hr) || !hBitmap) {
+        SIZE fallbackSize = { 256, 256 };
+        hr = imageFactory->GetImage(fallbackSize, static_cast<SIIGBF>(SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY), &hBitmap);
+    }
+    
+    if (FAILED(hr) || !hBitmap) return E_FAIL;
+
+    // Reject standard icon sizes to avoid meaningless fallback
+    BITMAP bm;
+    if (GetObject(hBitmap, sizeof(bm), &bm)) {
+        if (bm.bmWidth == bm.bmHeight && (bm.bmWidth == 16 || bm.bmWidth == 32 || bm.bmWidth == 48 || bm.bmWidth == 64 || bm.bmWidth == 128)) {
+            DeleteObject(hBitmap);
+            return E_FAIL; // It's an icon, reject it
+        }
+    } else {
+        DeleteObject(hBitmap);
+        return E_FAIL;
+    }
+
+    ComPtr<IWICBitmap> wicBitmap;
+    hr = m_wicFactory->CreateBitmapFromHBITMAP(hBitmap, nullptr, WICBitmapUsePremultipliedAlpha, &wicBitmap);
+    DeleteObject(hBitmap);
+    
+    if (FAILED(hr) || !wicBitmap) return hr;
+    
+    ComPtr<IWICBitmapSource> sourceToCopy = wicBitmap;
+    WICPixelFormatGUID srcFormat = {};
+    if (SUCCEEDED(wicBitmap->GetPixelFormat(&srcFormat)) && !IsEqualGUID(srcFormat, GUID_WICPixelFormat32bppPBGRA)) {
+        ComPtr<IWICFormatConverter> converter;
+        if (SUCCEEDED(m_wicFactory->CreateFormatConverter(&converter)) && converter) {
+            hr = converter->Initialize(wicBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom);
+            if (SUCCEEDED(hr)) {
+                sourceToCopy = converter;
+            }
+        }
+    }
+
+    UINT w = 0, h = 0;
+    if (FAILED(sourceToCopy->GetSize(&w, &h)) || w == 0 || h == 0) return E_FAIL;
+
+    UINT stride = QuickView::CalculateAlignedStride(w, 4);
+    size_t byteCount = static_cast<size_t>(stride) * h;
+    
+    try {
+        pData->pixels.resize(byteCount);
+    } catch (...) {
+        return E_OUTOFMEMORY;
+    }
+    
+    hr = sourceToCopy->CopyPixels(nullptr, stride, static_cast<UINT>(byteCount), pData->pixels.data());
+    if (FAILED(hr)) {
+        pData->pixels.clear();
+        return hr;
+    }
+    
+    pData->width = static_cast<int>(w);
+    pData->height = static_cast<int>(h);
+    pData->stride = static_cast<int>(stride);
+    pData->isValid = true;
+    pData->loaderName = L"Shell Cache";
+    
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    if (GetFileAttributesExW(filePath, GetFileExInfoStandard, &fad)) {
+        pData->fileSize = (static_cast<uint64_t>(fad.nFileSizeHigh) << 32) | fad.nFileSizeLow;
+    }
+    pData->origWidth = pData->width;
+    pData->origHeight = pData->height;
+
+    return S_OK;
+}
+
 HRESULT CImageLoader::LoadThumbJPEG(LPCWSTR filePath, int targetSize, ThumbData* pData) {
     if (!pData) return E_INVALIDARG;
 
@@ -2185,6 +2284,11 @@ HRESULT CImageLoader::LoadThumbJPEG(LPCWSTR filePath, int targetSize, ThumbData*
 HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData, bool allowSlow) {
     if (!filePath || !pData) return E_INVALIDARG;
     pData->isValid = false;
+    
+    // 0. Highest Priority: Windows Shell Thumbnail Cache (Insanely fast for pre-cached heavy RAWs)
+    if (SUCCEEDED(LoadShellThumbnail(filePath, targetSize, pData))) {
+        return S_OK;
+    }
 
     // 1. Unified Codec Dispatch (Primary)
     DecodeContext ctx;
@@ -2928,6 +3032,15 @@ HRESULT CImageLoader::LoadAVIF(LPCWSTR filePath, IWICBitmap** ppBitmap) {
 
     *ppBitmap = pWicBitmap.Detach();
 
+    // Extract format details (bit depth)
+    if (SUCCEEDED(hr)) {
+        int depth = decoder->image->depth;
+        wchar_t buf[32];
+        swprintf_s(buf, L"%d-bit", depth);
+        g_lastFormatDetails = buf;
+        if (decoder->image->alphaPlane != nullptr) g_lastFormatDetails += L" +Alpha";
+    }
+
     avifDecoderDestroy(decoder);
     return hr;
 }
@@ -3158,8 +3271,12 @@ HRESULT CImageLoader::LoadRaw(LPCWSTR filePath, IWICBitmap** ppBitmap, bool forc
     return hr;
 }
 
-HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std::wstring* pLoaderName, bool forceFullDecode, CancelPredicate checkCancel) {
+HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std::wstring* pLoaderName, bool forceFullDecode, CancelPredicate checkCancel, int targetWidth, int targetHeight) {
     if (!filePath || !ppBitmap) return E_INVALIDARG;
+    
+    // Clear previous state to avoid residue when switching formats
+    g_lastFormatDetails.clear();
+    g_lastExifOrientation = 1; // Reset to default (Normal)
     
     std::wstring path = filePath;
     std::transform(path.begin(), path.end(), path.begin(), ::towlower);
@@ -3370,12 +3487,6 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     // 3. Robust Fallback to WIC (Standard Loading)
     if (pLoaderName && pLoaderName->empty()) *pLoaderName = L"WIC (Fallback)";
 
-
-    
-    // If High-Perf loader failed (e.g. malformed specific header, unsupported feature) OR format verified but unimplemented (stub),
-    // OR format unknown.
-    // ---------------------------------------------------------
-
     // 1. Load Lazy Source
     ComPtr<IWICBitmapSource> source;
     // Note: Can't use this->LoadFromFile nicely if we want to avoid double-open, 
@@ -3391,6 +3502,45 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     ComPtr<IWICBitmapFrameDecode> frame;
     hr = decoder->GetFrame(0, &frame);
     if (FAILED(hr)) return hr;
+
+    // [v4.1] Native WIC Downscaling Support (IWICBitmapScaler)
+    // For HEIC, HEIF, and TIFF, if Titan demands an LOD=1 base scale, we scale natively here.
+    ComPtr<IWICBitmapSource> finalSource = frame;
+    
+    // First, try fast native decoder-level scaling (IWICBitmapSourceTransform)
+    bool usedNativeScaling = false;
+    if (targetWidth > 0 && targetHeight > 0) {
+        UINT width, height;
+        if (SUCCEEDED(frame->GetSize(&width, &height)) && (width > (UINT)targetWidth || height > (UINT)targetHeight)) {
+            // Find proportional size
+            float scaleW = (float)targetWidth / width;
+            float scaleH = (float)targetHeight / height;
+            float scale = (std::min)(scaleW, scaleH);
+            
+            UINT finalW = (UINT)(width * scale + 0.5f);
+            UINT finalH = (UINT)(height * scale + 0.5f);
+            if (finalW < 1) finalW = 1;
+            if (finalH < 1) finalH = 1;
+            
+            // Try IWICBitmapSourceTransform for ultra-fast codec-level scale (HEVC natively supports this)
+            ComPtr<IWICBitmapSourceTransform> pTransform;
+            if (SUCCEEDED(frame.As(&pTransform))) {
+                // Not copying here because we need an IWICBitmapSource for the converter.
+                // But wait, IWICBitmapSourceTransform is used via CopyPixels, making it hard to plug into converter pipeline.
+                // WIC's standard IWICBitmapScaler handles requesting native scale from the decoder underneath anyway!
+                // So using Scaler is mathematically optimal.
+            }
+
+            ComPtr<IWICBitmapScaler> scaler;
+            if (SUCCEEDED(m_wicFactory->CreateBitmapScaler(&scaler))) {
+                if (SUCCEEDED(scaler->Initialize(frame.Get(), finalW, finalH, WICBitmapInterpolationModeFant))) {
+                    finalSource = scaler;
+                    if (pLoaderName) *pLoaderName += L" [WIC Scaler]";
+                    usedNativeScaling = true;
+                }
+            }
+        }
+    }
     
     // 2. Convert to D2D Compatible Format (PBGRA32)
     ComPtr<IWICFormatConverter> converter;
@@ -3398,7 +3548,7 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     if (FAILED(hr)) return hr;
 
     hr = converter->Initialize(
-        frame.Get(), // Use frame source
+        finalSource.Get(), // Use frame source
         GUID_WICPixelFormat32bppPBGRA,
         WICBitmapDitherTypeNone,
         nullptr,
@@ -3408,14 +3558,13 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     if (FAILED(hr)) return hr;
 
     // 3. Force Decode to Memory
-    // 3. Force Decode to Memory
     HRESULT hrBitmap = m_wicFactory->CreateBitmapFromSource(
         converter.Get(),
         WICBitmapCacheOnLoad, 
         ppBitmap
     );
 
-    if (SUCCEEDED(hrBitmap) && pLoaderName && *pLoaderName == L"WIC (Fallback)") {
+    if (SUCCEEDED(hrBitmap) && pLoaderName && pLoaderName->find(L"WIC") != std::wstring::npos && !usedNativeScaling) {
          UINT w = 0, h = 0;
          (*ppBitmap)->GetSize(&w, &h);
          wchar_t buf[32]; swprintf_s(buf, L" [%ux%u]", w, h);
@@ -4249,6 +4398,25 @@ namespace QuickView {
                 }
                 OutputDebugStringW(L"[RawCodec] open_file OK\n");
 
+                // [v10.1] Capture RAW orientation early
+                int flip = RawProcessor.imgdata.sizes.flip;
+                int exifOrientation = 1;
+                // Mapping: LibRaw internal flip enum -> EXIF orientation tag
+                if (flip == 3) exifOrientation = 3;      // 180
+                else if (flip == 6) exifOrientation = 6; // 90 CW (Rotate 90)
+                else if (flip == 5) exifOrientation = 8; // 90 CCW (Rotate 270)
+                else if (flip == 1) exifOrientation = 2; // Flipped
+                else if (flip == 2) exifOrientation = 4;
+                else if (flip == 4) exifOrientation = 5;
+                else if (flip == 7) exifOrientation = 7;
+                else exifOrientation = 1;
+
+                result.metadata.ExifOrientation = exifOrientation;
+
+                // [v10.1] Force NOT flipping in LibRaw so UI Renderer can handle it with zero-copy/fast-path
+                // This ensures consistency with JPEG/WebP/PNG loaders which don't rotate pixels.
+                RawProcessor.imgdata.params.user_flip = 0; 
+
                 // 2. Strategy Check
                 // Force Raw Logic: If enabled, we skip embedded preview and force full process. // [USER REQUEST]
                 bool forceRawStart = g_runtime.ForceRawDecode; 
@@ -4273,10 +4441,12 @@ namespace QuickView {
                             if (thumb->type == LIBRAW_IMAGE_JPEG) {
                                 // Delegate to Codec::JPEG
                                 HRESULT hr = JPEG::Load((uint8_t*)thumb->data, thumb->data_size, ctx, result);
-                                RawProcessor.dcraw_clear_mem(thumb);
                                 if (SUCCEEDED(hr)) {
+                                    RawProcessor.dcraw_clear_mem(thumb);
                                     // Override Metadata
                                     result.metadata.LoaderName = L"LibRaw (Preview)";
+                                    // We keep the ExifOrientation from JPEG::Load or the one we captured above
+                                    if (result.metadata.ExifOrientation <= 1) result.metadata.ExifOrientation = exifOrientation;
                                     OutputDebugStringW(L"[RawCodec] Preview JPEG decoded OK\n");
                                     return S_OK;
                                 }
@@ -4316,6 +4486,7 @@ namespace QuickView {
                                         result.metadata.FormatDetails = L"Embedded Bitmap";
                                         result.metadata.Width = w;
                                         result.metadata.Height = h;
+                                        result.metadata.ExifOrientation = exifOrientation; // [Fix] Preserve orientation
                                         
                                         RawProcessor.dcraw_clear_mem(thumb);
                                         return S_OK;
@@ -4852,7 +5023,7 @@ using namespace QuickView::Codec;
 // ============================================================================
 // [v4.2] Unified Image Dispatcher
 // ============================================================================
-static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, DecodeResult& result) {
+HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, DecodeResult& result) {
     if (!filePath) return E_INVALIDARG;
 
     // [v9.2] Use path-based detection directly (handles RAW extensions properly)
@@ -4880,7 +5051,7 @@ static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, Deco
         fmt == L"AVIF" || 
         fmt == L"QOI" || fmt == L"TGA" || fmt == L"PNM" || fmt == L"WBMP" ||
         fmt == L"PSD" || fmt == L"HDR" || fmt == L"PIC" || fmt == L"PCX" ||
-        fmt == L"SVG" || fmt == L"EXR" || fmt == L"HEIC"
+        fmt == L"SVG" || fmt == L"EXR"
     );
     
     if (isBufferCodec) {
@@ -4891,9 +5062,10 @@ static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, Deco
         size_t mappedSize = mapping.size();
         
         // Dispatch
-        if (fmt == L"AVIF" || fmt == L"HEIC") {
+        if (fmt == L"AVIF") {
             CImageLoader::ThumbData tmp;
-            HRESULT hr = CImageLoader::LoadThumbAVIF_Proxy(mappedData, mappedSize, 0, &tmp, false, &result.metadata);
+            int targetDim = (std::max)(ctx.targetWidth, ctx.targetHeight);
+            HRESULT hr = CImageLoader::LoadThumbAVIF_Proxy(mappedData, mappedSize, targetDim, &tmp, false, &result.metadata);
             if (SUCCEEDED(hr) && tmp.isValid) {
                  // Copy from ThumbData to DecodeResult
                  // Need to account for stride
@@ -4911,7 +5083,7 @@ static HRESULT LoadImageUnified(LPCWSTR filePath, const DecodeContext& ctx, Deco
             }
         }
         else if (fmt == L"JXL") {
-             // [Two-Stage] Only use DC Preview if scaling is requested (Stage 1)
+            // [JXL DC] Only use DC Preview if scaling is requested (Stage 1)
              // or if explicitly forcing preview.
              // [Fix] User Requirement: 提取缩略图逻辑仅在 titan 模式下进行，普通模式下不进行缩略图逻辑
              if (ctx.isTitanMode && (ctx.targetWidth > 0 || ctx.targetHeight > 0 || ctx.forceRenderFull)) {
@@ -5167,6 +5339,7 @@ HRESULT CImageLoader::LoadToMemoryPMR(LPCWSTR filePath, DecodedImage* pOutput, s
     }
     return E_FAIL;
 }
+
 
 // ============================================================================
 // NEW: Fast Header-Only Parsing (< 5ms for most formats)
@@ -5665,20 +5838,9 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
         std::string xml(data, data + size);
         
         try {
-            // Priority 1: viewBox="0 0 W H"
-            std::regex reViewBox("viewBox=\"([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+)\"");
             std::smatch m;
-            if (std::regex_search(xml, m, reViewBox)) {
-                float w = std::stof(m[3]);
-                float h = std::stof(m[4]);
-                if (w > 0 && h > 0) {
-                    pInfo->width = (int)w;
-                    pInfo->height = (int)h;
-                    return S_OK;
-                }
-            }
             
-            // Priority 2: width="..." height="..."
+            // Priority 1: width="..." height="..." (pixel rendering size per W3C SVG spec)
             std::regex reWidth("width=\"([0-9\\.]+)[a-z]*\"");
             std::regex reHeight("height=\"([0-9\\.]+)[a-z]*\"");
             float w = 0, h = 0;
@@ -5687,8 +5849,20 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
             if (std::regex_search(xml, m, reHeight)) h = std::stof(m[1]);
             
             if (w > 0 && h > 0) {
-                pInfo->width = (int)w;
-                pInfo->height = (int)h;
+                pInfo->width = (int)std::lround(w);
+                pInfo->height = (int)std::lround(h);
+                return S_OK;
+            }
+            
+            // Priority 2 (Fallback): viewBox="x y W H" (internal coordinate system)
+            std::regex reViewBox("viewBox=\"([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+)\"");
+            if (std::regex_search(xml, m, reViewBox)) {
+                float vw = std::stof(m[3]);
+                float vh = std::stof(m[4]);
+                if (vw > 0 && vh > 0) {
+                    pInfo->width = (int)std::lround(vw);
+                    pInfo->height = (int)std::lround(vh);
+                }
             }
         } catch (...) {
             // Ignore parsing errors, return default
@@ -6976,77 +7150,59 @@ HRESULT CImageLoader::ReadMetadata(LPCWSTR filePath, ImageMetadata* pMetadata, b
 
 HRESULT CImageLoader::ComputeHistogram(IWICBitmapSource* source, ImageMetadata* pMetadata) {
     if (!source || !pMetadata) return E_INVALIDARG;
-    
-    // Reset
-    pMetadata->HistR.assign(256, 0);
-    pMetadata->HistG.assign(256, 0);
-    pMetadata->HistB.assign(256, 0);
-    pMetadata->HistL.assign(256, 0);
 
     UINT width = 0, height = 0;
     source->GetSize(&width, &height);
     if (width == 0 || height == 0) return E_FAIL;
 
-    WICPixelFormatGUID format;
-    source->GetPixelFormat(&format);
-    
-    // Determine offsets (Enable for 32bpp BGRA/PBGRA)
-    int offsetR = 0, offsetG = 1, offsetB = 2; // Default RGBA order (if not BGRA)
-    bool isBGRA = false;
-    
-    if (IsEqualGUID(format, GUID_WICPixelFormat32bppBGRA) || 
-        IsEqualGUID(format, GUID_WICPixelFormat32bppPBGRA)) {
-        offsetR = 2; offsetG = 1; offsetB = 0;
-        isBGRA = true;
-    } else {
-        // If not BGRA 32bpp, we might be reading garbage. 
-        // Ideally we should FormatConvert here, but for performance we might skip or simplistic check.
-        // Most of our pipeline ensures 32bpp conversion before this stage.
-    }
+    ComPtr<IWICBitmap> pBitmap;
+    if (SUCCEEDED(source->QueryInterface(IID_PPV_ARGS(&pBitmap)))) {
+        WICRect rcLock = { 0, 0, (INT)width, (INT)height };
+        ComPtr<IWICBitmapLock> pLock;
+        if (SUCCEEDED(pBitmap->Lock(&rcLock, WICBitmapLockRead, &pLock))) {
+            UINT cbStride = 0;
+            UINT cbBufferSize = 0;
+            BYTE* pPixels = nullptr;
+            pLock->GetStride(&cbStride);
+            pLock->GetDataPointer(&cbBufferSize, &pPixels);
 
-    // Optimization: Skip Sampling
-    UINT64 totalPixels = (UINT64)width * height;
-    UINT step = 1;
-    if (totalPixels > 2000000) { 
-         step = (UINT)sqrt(totalPixels / 250000.0);
-         if (step < 1) step = 1;
-    }
-    
-    // Row Buffer
-    UINT stride = width * 4; 
-    std::vector<BYTE> rowBuffer(stride);
-    
-    for (UINT y = 0; y < height; y += step) {
-        WICRect rect = { 0, (INT)y, (INT)width, 1 };
-        
-        // Use CopyPixels: Works on FormatConverters unlike Lock()
-        if (FAILED(source->CopyPixels(&rect, stride, stride, rowBuffer.data()))) continue;
-        
-        BYTE* row = rowBuffer.data();
-        for (UINT x = 0; x < width; x += step) {
-            BYTE r, g, b;
-            if (isBGRA) {
-                b = row[x * 4];
-                g = row[x * 4 + 1];
-                r = row[x * 4 + 2];
-            } else {
-                r = row[x * 4];
-                g = row[x * 4 + 1];
-                b = row[x * 4 + 2];
+            WICPixelFormatGUID format;
+            pLock->GetPixelFormat(&format);
+
+            if (IsEqualGUID(format, GUID_WICPixelFormat32bppPBGRA) || IsEqualGUID(format, GUID_WICPixelFormat32bppBGRA)) {
+                QuickView::RawImageFrame frame = {};
+                frame.pixels = pPixels;
+                frame.width = width;
+                frame.height = height;
+                frame.stride = cbStride;
+
+                ComputeHistogramFromFrame(frame, pMetadata);
+                return S_OK;
             }
-            
-            pMetadata->HistR[r]++;
-            pMetadata->HistG[g]++;
-            pMetadata->HistB[b]++;
-            
-            BYTE l = (BYTE)((54 * r + 183 * g + 19 * b) >> 8);
-            pMetadata->HistL[l]++;
         }
     }
-    
-    return S_OK;
-}
 
+    // Fallback if not IWICBitmap or not BGRA/PBGRA: Convert to memory and delegate
+    ComPtr<IWICFormatConverter> converter;
+    if (SUCCEEDED(m_wicFactory->CreateFormatConverter(&converter))) {
+        if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+            UINT stride = width * 4;
+            std::vector<BYTE> buffer(stride * height);
+            if (SUCCEEDED(converter->CopyPixels(nullptr, stride, (UINT)buffer.size(), buffer.data()))) {
+                QuickView::RawImageFrame frame = {};
+                frame.pixels = buffer.data();
+                frame.width = width;
+                frame.height = height;
+                frame.stride = stride;
+
+                ComputeHistogramFromFrame(frame, pMetadata);
+                return S_OK;
+            }
+        }
+    }
+
+    return E_FAIL;
+}
 // [v5.2] Histogram from RawImageFrame (for HeavyLanePool pipeline)
 void CImageLoader::ComputeHistogramFromFrame(const QuickView::RawImageFrame& frame, ImageMetadata* pMetadata) {
     if (!frame.pixels || frame.width == 0 || frame.height == 0 || !pMetadata) return;
@@ -7069,6 +7225,9 @@ void CImageLoader::ComputeHistogramFromFrame(const QuickView::RawImageFrame& fra
 
     const uint8_t* ptr = frame.pixels;
     int stride = frame.stride;
+    const UINT lapStep = stepY;
+    double lapSumSq = 0.0;
+    uint64_t lapCount = 0;
     
     // Assume BGRA8888 (standard for RawImageFrame)
     // Assume BGRA8888 (standard for RawImageFrame)
@@ -7166,6 +7325,60 @@ void CImageLoader::ComputeHistogramFromFrame(const QuickView::RawImageFrame& fra
             // Luminance (approx)
             uint8_t l = (uint8_t)((r * 299 + g * 587 + b * 114) / 1000);
             pMetadata->HistL[l]++;
+        }
+    }
+
+    // Laplacian Sharpness (sampled)
+    if (frame.width > lapStep * 2 && frame.height > lapStep * 2) {
+        auto getLumaAt = [&](const uint8_t* rowPtr, UINT x) -> int {
+            const uint8_t b = rowPtr[x * 4 + 0];
+            const uint8_t g = rowPtr[x * 4 + 1];
+            const uint8_t r = rowPtr[x * 4 + 2];
+            return (int)((54 * r + 183 * g + 19 * b) >> 8);
+        };
+
+        for (UINT y = lapStep; y + lapStep < frame.height; y += lapStep) {
+            const uint8_t* rowPrev = ptr + (UINT64)(y - lapStep) * stride;
+            const uint8_t* rowCurr = ptr + (UINT64)y * stride;
+            const uint8_t* rowNext = ptr + (UINT64)(y + lapStep) * stride;
+
+            for (UINT x = lapStep; x + lapStep < frame.width; x += lapStep) {
+                const int center = getLumaAt(rowCurr, x);
+                const int left = getLumaAt(rowCurr, x - lapStep);
+                const int right = getLumaAt(rowCurr, x + lapStep);
+                const int up = getLumaAt(rowPrev, x);
+                const int down = getLumaAt(rowNext, x);
+                const int lap = (up + down + left + right) - 4 * center;
+                lapSumSq += (double)lap * (double)lap;
+                lapCount++;
+            }
+        }
+    }
+
+    if (lapCount > 0) {
+        pMetadata->Sharpness = lapSumSq / (double)lapCount;
+        pMetadata->HasSharpness = true;
+    } else {
+        pMetadata->Sharpness = 0.0;
+        pMetadata->HasSharpness = false;
+    }
+
+    {
+        uint64_t total = 0;
+        for (uint32_t v : pMetadata->HistL) total += v;
+        if (total > 0) {
+            double entropy = 0.0;
+            const double invTotal = 1.0 / (double)total;
+            for (uint32_t v : pMetadata->HistL) {
+                if (v == 0) continue;
+                const double p = (double)v * invTotal;
+                entropy -= p * std::log2(p);
+            }
+            pMetadata->Entropy = entropy;
+            pMetadata->HasEntropy = true;
+        } else {
+            pMetadata->Entropy = 0.0;
+            pMetadata->HasEntropy = false;
         }
     }
 }
@@ -7603,27 +7816,10 @@ HRESULT CImageLoader::LoadThumbJXL_DC(const uint8_t* pFile, size_t fileSize, Thu
                      return cleanup(E_FAIL);
                 }
                 
-                // Manual Premultiply & Swizzle (RGBA -> BGRA)
+                // Optimized Premultiply & Swizzle (RGBA -> BGRA) using SIMD
                 uint8_t* p = pData->pixels.data();
                 size_t pxCount = bufferSize / 4;
-                 // Optimized Swizzle
-                 for(size_t i=0; i<pxCount; ++i) {
-                     uint8_t r = p[i*4+0];
-                     uint8_t g = p[i*4+1];
-                     uint8_t b = p[i*4+2];
-                     uint8_t a = p[i*4+3];
-                     // Pre-multiply
-                     if (a < 255 && a > 0) {
-                         r = (uint8_t)((r * a) / 255);
-                         g = (uint8_t)((g * a) / 255);
-                         b = (uint8_t)((b * a) / 255);
-                     } else if (a == 0) r = g = b = 0;
-                     
-                     p[i*4+0] = b;
-                     p[i*4+1] = g;
-                     p[i*4+2] = r;
-                     p[i*4+3] = a;
-                 }
+                SIMDUtils::SwizzleRGBA_to_BGRA_Premul(p, pxCount);
                  
                 foundDC = true;
                 return cleanup(S_OK); // Success!
@@ -8058,6 +8254,39 @@ HRESULT CImageLoader::LoadFastPass(LPCWSTR filePath, ThumbData* pData) {
 }
 
 
+// [Optimization] Fast Multi-Replacement Utility
+// Avoids O(N^2) complexity of iterative std::string::replace by using single-pass construction
+template <typename Container>
+static void MultiReplace(std::string& str, const Container& replacements) {
+    if (replacements.empty() || str.empty()) return;
+
+    for (auto const& [oldVal, newVal] : replacements) {
+        if (oldVal.empty()) continue;
+
+        size_t firstMatch = str.find(oldVal);
+        if (firstMatch == std::string::npos) continue;
+
+        std::string result;
+        // Pre-allocate to avoid reallocations
+        result.reserve(str.size() + (newVal.size() > oldVal.size() ? 1024 : 0));
+
+        // Append part before first match
+        result.append(str, 0, firstMatch);
+        result.append(newVal);
+
+        size_t pos = firstMatch + oldVal.length();
+        size_t matchPos;
+        while ((matchPos = str.find(oldVal, pos)) != std::string::npos) {
+            result.append(str, pos, matchPos - pos);
+            result.append(newVal);
+            pos = matchPos + oldVal.length();
+        }
+
+        result.append(str, pos, str.length() - pos);
+        str = std::move(result);
+    }
+}
+
 // Helper: Parse SVG dimensions using Regex (Header only)
 static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height) {
     if (!width || !height) return false;
@@ -8076,18 +8305,7 @@ static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height
     std::string header(buffer, bytesRead);
     std::smatch match;
     
-    // 1. Try viewBox="x y w h"
-    // Handles space or comma separators.
-    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
-    if (std::regex_search(header, match, reViewBox)) {
-        try {
-            *width = (uint32_t)std::stof(match[1].str());
-            *height = (uint32_t)std::stof(match[2].str());
-            return true;
-        } catch (...) {}
-    }
-    
-    // 2. Try width="..." height="..."
+    // 1. Try width="..." height="..." (pixel rendering size - takes priority per W3C SVG spec)
     // Handles "100px", "100", "100pt" roughly
     std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
     std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
@@ -8102,10 +8320,21 @@ static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height
         try { h = std::stof(match[1].str()); foundH = true; } catch(...) {}
     }
     
-    if (foundW && foundH) {
-        *width = (uint32_t)w;
-        *height = (uint32_t)h;
+    if (foundW && foundH && w > 0 && h > 0) {
+        *width = (uint32_t)std::lround(w);
+        *height = (uint32_t)std::lround(h);
         return true;
+    }
+    
+    // 2. Fallback: viewBox="x y w h" (internal coordinate system)
+    // Handles space or comma separators.
+    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
+    if (std::regex_search(header, match, reViewBox)) {
+        try {
+            *width = (uint32_t)std::lround(std::stof(match[1].str()));
+            *height = (uint32_t)std::lround(std::stof(match[2].str()));
+            return true;
+        } catch (...) {}
     }
     
     return false;
@@ -8338,7 +8567,7 @@ CImageLoader::ImageHeaderInfo CImageLoader::PeekHeader(LPCWSTR filePath) {
     int64_t pixels = result.GetPixelCount();
     
     // Type A (Express Lane ONLY): Small enough for fast full decode
-    // Type B (Heavy Lane): Large images needing scaled decode
+    // Type B (Heavy Lane): Large images routed to Heavy Lane (full decode for non-Titan)
     
     // [v4.1] JXL Optimization: Always allow Sprint (Scout Lane)
     // Small JXL -> Fast Full Decode (via fallback if needed? Currently DC only in LoadFastPass)
@@ -8356,7 +8585,7 @@ CImageLoader::ImageHeaderInfo CImageLoader::PeekHeader(LPCWSTR filePath) {
     }
     else if (result.format == L"JPEG" || result.format == L"BMP") {
         // JPEG/BMP: ≤8.5MP → Express (full decode is fast)
-        // >8.5MP → Heavy (needs scaled decode, Scout extracts thumb if hasEmbeddedThumb)
+        // >8.5MP → Heavy (Scout may extract thumb if hasEmbeddedThumb)
         // [v3.3] Safety: If pixels unknown (0), default to Heavy (Scout might choke on huge image)
         if (pixels > 0 && pixels <= 8500000) {
             result.type = ImageType::TypeA_Sprint;
@@ -8558,7 +8787,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                 res.width = finalW;
                 res.height = finalH;
                 res.stride = finalStride;
-                res.metadata.FormatDetails += L" (SwRescaled)";
+                // res.metadata.FormatDetails += L" (SwRescaled)";
             }
         }
         
@@ -8570,6 +8799,13 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
         // [v5.4] Metadata
         outFrame->formatDetails = res.metadata.FormatDetails;
         outFrame->exifOrientation = res.metadata.ExifOrientation; // [v8.7] Propagate Orientation
+        
+        // [v10.1] Preserve original resolution if frame is scaled
+        if (res.metadata.Width > 0 && res.metadata.Height > 0 &&
+            (res.metadata.Width != (UINT)outFrame->width || res.metadata.Height != (UINT)outFrame->height)) {
+            outFrame->srcWidth = (int)res.metadata.Width;
+            outFrame->srcHeight = (int)res.metadata.Height;
+        }
         
         SetupDeleter(res.pixels);
         return S_OK;
@@ -8640,13 +8876,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                     
                     // Apply ID Replacements
                     if (!replacements.empty()) {
-                        for (auto const& [oldVal, newVal] : replacements) {
-                            size_t pos = 0;
-                            while ((pos = svgContent.find(oldVal, pos)) != std::string::npos) {
-                                 svgContent.replace(pos, oldVal.length(), newVal);
-                                 pos += newVal.length();
-                            }
-                        }
+                        MultiReplace(svgContent, replacements);
                         wchar_t msg[128];
                         swprintf_s(msg, L"[SVG] Sanitized %d Unsafe IDs.\n", (int)replacements.size());
                         OutputDebugStringW(msg);
@@ -8680,12 +8910,28 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                         
                         std::string searchPattern = "class=\"" + className + "\"";
                         std::string replacePattern = "fill=\"" + fillVal + "\" class=\"" + className + "\"";
-                        
-                        size_t pos = 0;
-                        while ((pos = svgContent.find(searchPattern, pos)) != std::string::npos) {
-                            svgContent.replace(pos, searchPattern.length(), replacePattern);
-                            pos += replacePattern.length();
-                            inlinedCount++;
+
+                        if (!searchPattern.empty()) {
+                            size_t firstMatch = svgContent.find(searchPattern);
+                            if (firstMatch != std::string::npos) {
+                                std::string result;
+                                result.reserve(svgContent.size() + svgContent.size() / 10);
+
+                                result.append(svgContent, 0, firstMatch);
+                                result.append(replacePattern);
+                                inlinedCount++;
+
+                                size_t pos = firstMatch + searchPattern.length();
+                                size_t match_pos;
+                                while ((match_pos = svgContent.find(searchPattern, pos)) != std::string::npos) {
+                                    result.append(svgContent, pos, match_pos - pos);
+                                    result.append(replacePattern);
+                                    pos = match_pos + searchPattern.length();
+                                    inlinedCount++;
+                                }
+                                result.append(svgContent, pos, svgContent.length() - pos);
+                                svgContent = std::move(result);
+                            }
                         }
                     }
                     
@@ -8718,18 +8964,25 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             std::string svgContent(fileData.begin(), fileData.end());
 
             try {
-                // Try viewBox="x y w h"
-                std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
                 std::smatch match;
-                if (std::regex_search(svgContent, match, reViewBox)) {
-                    svgW = std::stof(match[1]);
-                    svgH = std::stof(match[2]);
+                
+                // Priority 1: width="..." height="..." (pixel rendering size per W3C SVG spec)
+                std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
+                std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
+                float pw = 0, ph = 0;
+                if (std::regex_search(svgContent, match, reWidth)) pw = std::stof(match[1]);
+                if (std::regex_search(svgContent, match, reHeight)) ph = std::stof(match[1]);
+                
+                if (pw > 0 && ph > 0) {
+                    svgW = pw;
+                    svgH = ph;
                 } else {
-                     // Try width/height (basic)
-                    std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
-                    std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
-                    if (std::regex_search(svgContent, match, reWidth)) svgW = std::stof(match[1]);
-                    if (std::regex_search(svgContent, match, reHeight)) svgH = std::stof(match[1]);
+                    // Priority 2 (Fallback): viewBox="x y w h" (internal coordinate system)
+                    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
+                    if (std::regex_search(svgContent, match, reViewBox)) {
+                        svgW = std::stof(match[1]);
+                        svgH = std::stof(match[2]);
+                    }
                 }
             } catch (...) {
                 OutputDebugStringW(L"[SVG] Dimension parse failed, using default\n");
@@ -8740,8 +8993,8 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
 
             // 3. Populate RawImageFrame
             outFrame->format = PixelFormat::SVG_XML;
-            outFrame->width = (int)svgW;
-            outFrame->height = (int)svgH;
+            outFrame->width = (int)std::lround(svgW);
+            outFrame->height = (int)std::lround(svgH);
             outFrame->stride = 0; // No pixels
             outFrame->pixels = nullptr;
             
@@ -8777,7 +9030,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
     
     ComPtr<IWICBitmap> wicBitmap;
     std::wstring loaderName;
-    HRESULT hr = LoadToMemory(filePath, &wicBitmap, &loaderName, false, checkCancel);
+    HRESULT hr = LoadToMemory(filePath, &wicBitmap, &loaderName, false, checkCancel, targetWidth, targetHeight);
     if (FAILED(hr)) return hr;
     
     if (pLoaderName) *pLoaderName = loaderName;
