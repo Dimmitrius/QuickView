@@ -65,6 +65,11 @@ void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix,
     if (renderRaw) rawFlags |= MF_CHECKED;
     AppendMenuW(hViewMenu, rawFlags, IDM_RENDER_RAW, AppStrings::Context_RenderRAW);
     
+    // Toggle Pixel Art Mode
+    extern AppConfig g_config;
+    bool isPixelArtMode = (g_config.ZoomModeIn == 2 && g_config.ZoomModeOut == 2);
+    AppendMenuW(hViewMenu, MF_STRING | (isPixelArtMode ? MF_CHECKED : 0), IDM_PIXEL_ART_MODE, AppStrings::Context_PixelArtMode);
+
     AppendMenuW(hViewMenu, MF_STRING | (isFullscreen ? MF_CHECKED : 0), IDM_FULLSCREEN, AppStrings::Context_Fullscreen);
     
     // [New] Video Wall Mode

@@ -99,6 +99,8 @@ struct AppConfig {
     bool RoundedCorners = true; // [v3.1.2] Toggle rounded corners
 
     // --- Control ---
+    int ZoomModeIn = 0;                 // 0=Auto, 1=Linear, 2=Nearest, 3=High Quality Cubic
+    int ZoomModeOut = 0;                // 0=Auto, 1=Linear, 2=Nearest, 3=High Quality Cubic
     bool InvertWheel = false;
     int WheelActionMode = 0;            // 0=Zoom, 1=Navigate
     bool InvertXButton = false;          // Invert mouse forward/back buttons for navigation

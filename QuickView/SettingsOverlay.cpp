@@ -993,6 +993,10 @@ void SettingsOverlay::BuildMenu() {
     tabVisuals.items.push_back({ AppStrings::Settings_Label_ResizeOnZoom, OptionType::Toggle, &g_config.ResizeWindowOnZoom });
     tabVisuals.items.push_back({ AppStrings::Settings_Label_AutoHideTitle, OptionType::Toggle, &g_config.AutoHideWindowControls });
     
+    // Zoom Mode
+    tabVisuals.items.push_back({ AppStrings::Settings_Label_ZoomModeIn, OptionType::ComboBox, nullptr, nullptr, BindEnum(&g_config.ZoomModeIn), nullptr, 0, 0, {AppStrings::Settings_Option_Auto, AppStrings::Settings_Option_Linear, AppStrings::Settings_Option_Nearest, AppStrings::Settings_Option_HighQualityCubic} });
+    tabVisuals.items.push_back({ AppStrings::Settings_Label_ZoomModeOut, OptionType::ComboBox, nullptr, nullptr, BindEnum(&g_config.ZoomModeOut), nullptr, 0, 0, {AppStrings::Settings_Option_Auto, AppStrings::Settings_Option_Linear, AppStrings::Settings_Option_Nearest, AppStrings::Settings_Option_HighQualityCubic} });
+
     tabVisuals.items.push_back({ AppStrings::Settings_Header_Panel, OptionType::Header });
     
     // [Fix] Lock Toolbar: Update runtime state immediately

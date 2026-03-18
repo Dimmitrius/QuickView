@@ -83,6 +83,7 @@ namespace AppStrings {
     const wchar_t* Context_LiteInfoPanel = nullptr;
     const wchar_t* Context_FullInfoPanel = nullptr;
     const wchar_t* Context_RenderRAW = nullptr;
+    const wchar_t* Context_PixelArtMode = nullptr;
     const wchar_t* Context_Fullscreen = nullptr;
     const wchar_t* Context_SpanDisplays = nullptr;
     const wchar_t* Context_View = nullptr;
@@ -191,6 +192,8 @@ namespace AppStrings {
     const wchar_t* Settings_Label_ZoomSnapDamping = nullptr; // New
     const wchar_t* Settings_Label_MouseAnchorZoom = nullptr;
     const wchar_t* Settings_Label_InvertButtons = nullptr;
+    const wchar_t* Settings_Label_ZoomModeIn = nullptr;
+    const wchar_t* Settings_Label_ZoomModeOut = nullptr;
     const wchar_t* Settings_Label_LeftDrag = nullptr;
     const wchar_t* Settings_Label_MiddleDrag = nullptr;
     const wchar_t* Settings_Label_MiddleClick = nullptr;
@@ -248,6 +251,9 @@ namespace AppStrings {
     const wchar_t* Settings_Option_Arrow = nullptr;
     const wchar_t* Settings_Option_Cursor = nullptr;
     const wchar_t* Settings_Option_Manual = nullptr;
+    const wchar_t* Settings_Option_Linear = nullptr;
+    const wchar_t* Settings_Option_Nearest = nullptr;
+    const wchar_t* Settings_Option_HighQualityCubic = nullptr;
     const wchar_t* Settings_Option_Auto = nullptr;
     const wchar_t* Settings_Option_Eco = nullptr;
     const wchar_t* Settings_Option_Balanced = nullptr;
@@ -441,6 +447,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Lite Info Panel\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"Full Info Panel\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"Render RAW";
+        static constexpr const wchar_t* Context_PixelArtMode = L"Pixel Art Mode";
         static constexpr const wchar_t* Context_Fullscreen = L"Fullscreen\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"View";
@@ -488,7 +495,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Zoom 100% Snap Damping";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"Mouse-Anchored Window Zoom";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Invert Side Buttons";
-        static constexpr const wchar_t* Settings_Label_ZoomMode = L"Zoom Mode";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"Zoom Mode (In)";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"Zoom Mode (Out)";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Left Drag";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Middle Drag";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"Middle Click";
@@ -546,6 +554,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"Arrow";
         static constexpr const wchar_t* Settings_Option_Cursor = L"Cursor";
         static constexpr const wchar_t* Settings_Option_Manual = L"Manual";
+        static constexpr const wchar_t* Settings_Option_Linear = L"Linear";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"Nearest Neighbor";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"HQ Cubic";
         static constexpr const wchar_t* Settings_Option_Auto = L"Auto";
         static constexpr const wchar_t* Settings_Option_Eco = L"Eco";
         static constexpr const wchar_t* Settings_Option_Balanced = L"Balanced";
@@ -695,6 +706,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"缩放 100% 吸附阻尼";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"窗口缩放以鼠标为中线";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"反转侧键";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"放大插值算法";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"缩小插值算法";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"左键拖动";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"中键拖动";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"中键点击";
@@ -744,6 +757,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"箭头";
         static constexpr const wchar_t* Settings_Option_Cursor = L"光标";
         static constexpr const wchar_t* Settings_Option_Manual = L"手动";
+        static constexpr const wchar_t* Settings_Option_Linear = L"线性 (Linear)";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"最近邻 (Nearest)";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"高质量双三次 (HQ Cubic)";
         static constexpr const wchar_t* Settings_Option_Auto = L"自动";
         static constexpr const wchar_t* Settings_Option_Eco = L"节能";
         static constexpr const wchar_t* Settings_Option_Balanced = L"平衡";
@@ -793,6 +809,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"简略信息面板\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"详细信息面板\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"渲染 RAW";
+        static constexpr const wchar_t* Context_PixelArtMode = L"像素画模式";
         static constexpr const wchar_t* Context_Fullscreen = L"全屏\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"跨越显示器 (电视墙模式)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"视图";
@@ -1030,6 +1047,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"簡略資訊面板\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"詳細資訊面板\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"渲染 RAW";
+        static constexpr const wchar_t* Context_PixelArtMode = L"像素畫模式";
         static constexpr const wchar_t* Context_Fullscreen = L"全螢幕\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"跨越顯示器 (電視牆模式)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"檢視";
@@ -1074,6 +1092,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"縮放 100% 吸附阻尼";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"視窗縮放以滑鼠為中線";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"反轉側鍵";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"放大插值演算法";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"縮小插值演算法";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"左鍵拖曳";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"中鍵拖曳";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"中鍵點選";
@@ -1129,6 +1149,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"箭頭";
         static constexpr const wchar_t* Settings_Option_Cursor = L"游標";
         static constexpr const wchar_t* Settings_Option_Manual = L"手動";
+        static constexpr const wchar_t* Settings_Option_Linear = L"線性 (Linear)";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"最近鄰 (Nearest)";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"高品質雙三次 (HQ Cubic)";
         static constexpr const wchar_t* Settings_Option_Auto = L"自動";
         static constexpr const wchar_t* Settings_Option_Eco = L"節能";
         static constexpr const wchar_t* Settings_Option_Balanced = L"平衡";
@@ -1309,6 +1332,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"簡易情報パネル\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"詳細情報パネル\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"RAWをレンダリング";
+        static constexpr const wchar_t* Context_PixelArtMode = L"ピクセルアートモード";
         static constexpr const wchar_t* Context_Fullscreen = L"全画面\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"表示";
@@ -1353,6 +1377,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"100%ズーム吸着ダンピング";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"マウス中心でウィンドウを拡大";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"サイドボタン反転";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"ズームインモード";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"ズームアウトモード";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"左ドラッグ";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"中ドラッグ";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"中クリック";
@@ -1408,6 +1434,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"矢印";
         static constexpr const wchar_t* Settings_Option_Cursor = L"カーソル";
         static constexpr const wchar_t* Settings_Option_Manual = L"手動";
+        static constexpr const wchar_t* Settings_Option_Linear = L"Linear";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"Nearest Neighbor";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"HQ Cubic";
         static constexpr const wchar_t* Settings_Option_Auto = L"自動";
         static constexpr const wchar_t* Settings_Option_Eco = L"エコ";
         static constexpr const wchar_t* Settings_Option_Balanced = L"バランス";
@@ -1588,6 +1617,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Краткая панель информации\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"Полная панель информации\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"Рендеринг RAW";
+        static constexpr const wchar_t* Context_PixelArtMode = L"Режим пиксель-арта";
         static constexpr const wchar_t* Context_Fullscreen = L"Полный экран\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"Вид";
@@ -1632,6 +1662,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Задержка привязки зума (100%)";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"Масштабировать окно от позиции мыши";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Инвертировать боковые кнопки";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"Режим увеличения";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"Режим уменьшения";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Перетаскивание левой кнопкой";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Перетаскивание средней кнопкой";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"Щелчок средней кнопкой";
@@ -1687,6 +1719,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"Стрелка";
         static constexpr const wchar_t* Settings_Option_Cursor = L"Курсор";
         static constexpr const wchar_t* Settings_Option_Manual = L"Вручную";
+        static constexpr const wchar_t* Settings_Option_Linear = L"Линейный";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"Ближайший сосед";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"HQ Кубический";
         static constexpr const wchar_t* Settings_Option_Auto = L"Авто";
         static constexpr const wchar_t* Settings_Option_Eco = L"Эко";
         static constexpr const wchar_t* Settings_Option_Balanced = L"Баланс";
@@ -1867,6 +1902,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Kompaktes Info-Panel\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"Vollständiges Info-Panel\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"RAW rendern";
+        static constexpr const wchar_t* Context_PixelArtMode = L"Pixel-Art-Modus";
         static constexpr const wchar_t* Context_Fullscreen = L"Vollbild\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"Ansicht";
@@ -1911,6 +1947,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Zoom 100% Einrast-Dämpfung";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"Fensterzoom am Mauszeiger ausrichten";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Seitentasten invertieren";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"Vergrößerungsmodus";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"Verkleinerungsmodus";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Links ziehen";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Mitte ziehen";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"Mittelklick";
@@ -1966,6 +2004,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"Pfeil";
         static constexpr const wchar_t* Settings_Option_Cursor = L"Cursor";
         static constexpr const wchar_t* Settings_Option_Manual = L"Manuell";
+        static constexpr const wchar_t* Settings_Option_Linear = L"Linear";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"Nächster Nachbar";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"HQ Kubisch";
         static constexpr const wchar_t* Settings_Option_Auto = L"Auto";
         static constexpr const wchar_t* Settings_Option_Eco = L"Öko";
         static constexpr const wchar_t* Settings_Option_Balanced = L"Ausgewogen";
@@ -2146,6 +2187,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Panel de info compacto\tTab";
         static constexpr const wchar_t* Context_FullInfoPanel = L"Panel de info completo\tI";
         static constexpr const wchar_t* Context_RenderRAW = L"Renderizar RAW";
+        static constexpr const wchar_t* Context_PixelArtMode = L"Modo de Pixel Art";
         static constexpr const wchar_t* Context_Fullscreen = L"Pantalla completa\tF11";
         static constexpr const wchar_t* Context_SpanDisplays = L"Span Displays (Video Wall)\tCtrl+F11";
         static constexpr const wchar_t* Context_View = L"Ver";
@@ -2190,6 +2232,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_ZoomSnapDamping = L"Amortiguación de ajuste 100%";
         static constexpr const wchar_t* Settings_Label_MouseAnchorZoom = L"Zoom de ventana anclado al raton";
         static constexpr const wchar_t* Settings_Label_InvertButtons = L"Invertir botones laterales";
+        static constexpr const wchar_t* Settings_Label_ZoomModeIn = L"Modo de acercar";
+        static constexpr const wchar_t* Settings_Label_ZoomModeOut = L"Modo de alejar";
         static constexpr const wchar_t* Settings_Label_LeftDrag = L"Arrastrar izquierdo";
         static constexpr const wchar_t* Settings_Label_MiddleDrag = L"Arrastrar central";
         static constexpr const wchar_t* Settings_Label_MiddleClick = L"Clic central";
@@ -2245,6 +2289,9 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Option_Arrow = L"Flecha";
         static constexpr const wchar_t* Settings_Option_Cursor = L"Cursor";
         static constexpr const wchar_t* Settings_Option_Manual = L"Manual";
+        static constexpr const wchar_t* Settings_Option_Linear = L"Lineal";
+        static constexpr const wchar_t* Settings_Option_Nearest = L"Vecino más cercano";
+        static constexpr const wchar_t* Settings_Option_HighQualityCubic = L"Cúbico de alta calidad";
         static constexpr const wchar_t* Settings_Option_Auto = L"Automático";
         static constexpr const wchar_t* Settings_Option_Eco = L"Eco";
         static constexpr const wchar_t* Settings_Option_Balanced = L"Equilibrado";
@@ -2385,6 +2432,7 @@ namespace AppStrings {
         Context_LiteInfoPanel = T::Context_LiteInfoPanel;
         Context_FullInfoPanel = T::Context_FullInfoPanel;
         Context_RenderRAW = T::Context_RenderRAW;
+        Context_PixelArtMode = T::Context_PixelArtMode;
         Context_Fullscreen = T::Context_Fullscreen;
         Context_View = T::Context_View;
         Context_WallpaperFill = T::Context_WallpaperFill;
@@ -2489,6 +2537,8 @@ namespace AppStrings {
         Settings_Label_ZoomSnapDamping = T::Settings_Label_ZoomSnapDamping;
         Settings_Label_MouseAnchorZoom = T::Settings_Label_MouseAnchorZoom;
         Settings_Label_InvertButtons = T::Settings_Label_InvertButtons;
+        Settings_Label_ZoomModeIn = T::Settings_Label_ZoomModeIn;
+        Settings_Label_ZoomModeOut = T::Settings_Label_ZoomModeOut;
         Settings_Label_LeftDrag = T::Settings_Label_LeftDrag;
         Settings_Label_MiddleDrag = T::Settings_Label_MiddleDrag;
         Settings_Label_MiddleClick = T::Settings_Label_MiddleClick;
@@ -2537,6 +2587,9 @@ namespace AppStrings {
         Settings_Option_Arrow = T::Settings_Option_Arrow;
         Settings_Option_Cursor = T::Settings_Option_Cursor;
         Settings_Option_Manual = T::Settings_Option_Manual;
+        Settings_Option_Linear = T::Settings_Option_Linear;
+        Settings_Option_Nearest = T::Settings_Option_Nearest;
+        Settings_Option_HighQualityCubic = T::Settings_Option_HighQualityCubic;
         Settings_Option_Auto = T::Settings_Option_Auto;
         Settings_Option_Eco = T::Settings_Option_Eco;
         Settings_Option_Balanced = T::Settings_Option_Balanced;
