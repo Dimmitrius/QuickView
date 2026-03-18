@@ -374,6 +374,7 @@ static void MarkCompareDirty();
 static void EnterCompareMode(HWND hwnd);
 static void ExitCompareMode(HWND hwnd);
 static void CaptureCurrentImageAsCompareLeft();
+void AdjustWindowToImage(HWND hwnd);
 static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path);
 static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient);
 static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval);
@@ -1097,16 +1098,11 @@ static void CaptureCurrentImageAsCompareLeft() {
     g_compare.left.view.Zoom = g_viewState.Zoom;
     g_compare.left.view.PanX = g_viewState.PanX;
     g_compare.left.view.PanY = g_viewState.PanY;
-    g_compare.left.view.ExifOrientation = g_viewState.ExifOrientation;
-    if (g_config.AutoRotate && g_imageLoader) {
-        CImageLoader::ImageMetadata meta;
-        if (SUCCEEDED(g_imageLoader->ReadMetadata(g_imagePath.c_str(), &meta, true)) &&
-            meta.ExifOrientation >= 1 && meta.ExifOrientation <= 8) {
-            g_compare.left.view.ExifOrientation = meta.ExifOrientation;
-        }
-    } else {
-        g_compare.left.view.ExifOrientation = 1;
-    }
+    // The captured g_imageResource has already been GPU-rotated by RenderImageToDComp,
+    // so g_currentMetadata.ExifOrientation has been neutralized to 1.
+    // Use it directly — do NOT re-read from disk, which would give the raw EXIF value
+    // and cause a double-rotation on the already-rotated surface.
+    g_compare.left.view.ExifOrientation = g_currentMetadata.ExifOrientation; // Should be 1
 }
 
 static bool RenderCompareComposite(HWND hwnd) {
@@ -1289,15 +1285,11 @@ static void EnterCompareMode(HWND hwnd) {
     CaptureCurrentImageAsCompareLeft();
     if (!g_compare.left.valid) return;
 
-    if (g_config.AutoRotate && g_imageLoader && !g_imagePath.empty()) {
-        CImageLoader::ImageMetadata rightMeta;
-        if (SUCCEEDED(g_imageLoader->ReadMetadata(g_imagePath.c_str(), &rightMeta, true)) &&
-            rightMeta.ExifOrientation >= 1 && rightMeta.ExifOrientation <= 8) {
-            g_viewState.ExifOrientation = rightMeta.ExifOrientation;
-        }
-    } else {
-        g_viewState.ExifOrientation = 1;
-    }
+    // The right image at this point is the same already-rotated surface as left.
+    // g_currentMetadata.ExifOrientation has been neutralized to 1 after GPU rotation.
+    // Use it directly to avoid double-rotation on the already-rotated surface.
+    // The new right image loaded via LoadImageAsync will set correct orientation via FullReady.
+    g_viewState.ExifOrientation = g_currentMetadata.ExifOrientation;
 
     g_compare.mode = ViewMode::CompareSideBySide;
     g_compare.splitRatio = ClampCompareRatio(g_compare.splitRatio);
@@ -1366,7 +1358,23 @@ static void ExitCompareMode(HWND hwnd) {
     g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
 
     if (g_imageResource) {
+        // Restore EXIF orientation from metadata before rendering.
+        // In compare mode, the right image bitmap is un-rotated and ExifOrientation
+        // holds the raw EXIF value. RenderImageToDComp will physically rotate the surface.
+        RestoreCurrentExifOrientation();
         RenderImageToDComp(hwnd, g_imageResource, false);
+
+        // After GPU rotation, neutralize EXIF orientation (same as FullReady normal path)
+        if (g_viewState.ExifOrientation > 1 && g_config.AutoRotate) {
+            g_currentMetadata.ExifOrientation = 1;
+            g_viewState.ExifOrientation = 1;
+        }
+
+        // Snap window to current image dimensions
+        AdjustWindowToImage(hwnd);
+
+        // Sync DComp state for proper display
+        GetClientRect(hwnd, &rc);
         SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
         g_compEngine->Commit();
     }
