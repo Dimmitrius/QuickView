@@ -381,6 +381,9 @@ static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient);
 static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval);
 static float GetCompareSplitRatio();
 void AdjustWindowToImage(HWND hwnd);
+RECT GetVirtualScreenRect();
+static RECT GetWindowExpansionBounds(HWND hwnd);
+static RECT ExpandWindowRectToTargetWithinBounds(const RECT& currentRect, int targetW, int targetH, const RECT& bounds);
 
 
 static D2D1_SIZE_F GetLogicalImageSize();
@@ -2385,7 +2388,7 @@ static void PerformCompareZoomFit(HWND hwnd) {
     g_osd.ShowCompare(hwnd, leftBuf, rightBuf);
 }
 
-static void PerformZoom100(HWND hwnd) {
+static void PerformZoom100(HWND hwnd, bool allowResizeWindow = true) {
     if (g_imageResource) {
         // [Fix] Use Robust Visual Size (This refers to current Surface Size, potentially downscaled)
         D2D1_SIZE_F effSize = GetVisualImageSize();
@@ -2416,14 +2419,13 @@ static void PerformZoom100(HWND hwnd) {
         float renderScaleTarget = (originalW / imgW);
             
         // Logic to resize window to wrap image at 100% if allowed
-        if (g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_isFullScreen && !g_runtime.LockWindowSize) {
+        if (allowResizeWindow && g_config.ResizeWindowOnZoom && !IsZoomed(hwnd) && !g_isFullScreen && !g_runtime.LockWindowSize) {
                 int targetW = (int)originalW; // Target TRUE pixel width
                 int targetH = (int)originalH;
                 
-                HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
-                 int maxW = (mi.rcWork.right - mi.rcWork.left);
-                 int maxH = (mi.rcWork.bottom - mi.rcWork.top);
+                RECT bounds = GetWindowExpansionBounds(hwnd);
+                 int maxW = (bounds.right - bounds.left);
+                 int maxH = (bounds.bottom - bounds.top);
                  
                  // [Bug #19] Smart 3-State Toggle: If target exceeds screen, clip to screen bounds
                  // This ensures the window still expands on the axis that HAS room, rather than doing nothing.
@@ -2434,19 +2436,10 @@ static void PerformZoom100(HWND hwnd) {
                  if (targetH < 300) targetH = 300;
                  
                  RECT rcWin; GetWindowRect(hwnd, &rcWin);
-                 int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
-                 int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
-                 
-                 // Re-center but clamp to screen edges if necessary
-                 int x = cX - targetW/2;
-                 int y = cY - targetH/2;
-                 
-                 if (x < mi.rcWork.left) x = mi.rcWork.left;
-                 if (y < mi.rcWork.top) y = mi.rcWork.top;
-                 if (x + targetW > mi.rcWork.right) x = mi.rcWork.right - targetW;
-                 if (y + targetH > mi.rcWork.bottom) y = mi.rcWork.bottom - targetH;
-                 
-                 SetWindowPos(hwnd, nullptr, x, y, targetW, targetH, SWP_NOZORDER | SWP_NOACTIVATE);
+                 RECT targetRect = ExpandWindowRectToTargetWithinBounds(rcWin, targetW, targetH, bounds);
+                 SetWindowPos(hwnd, nullptr, targetRect.left, targetRect.top,
+                              targetRect.right - targetRect.left, targetRect.bottom - targetRect.top,
+                              SWP_NOZORDER | SWP_NOACTIVATE);
                  
                  RECT rcNew; GetClientRect(hwnd, &rcNew);
                  float newFitScale = std::min((float)rcNew.right / imgW, (float)rcNew.bottom / imgH);
@@ -2564,8 +2557,19 @@ static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = f
     return newTotalScale;
 }
 
-static void PerformZoomFit(HWND hwnd, float maxScreenPct = 1.0f) {
+static void PerformZoomFit(HWND hwnd, float maxScreenPct = 1.0f, bool allowResizeWindow = true) {
     if (g_imageResource) {
+        if (!allowResizeWindow) {
+            g_viewState.Zoom = 1.0f;
+            g_viewState.PanX = 0;
+            g_viewState.PanY = 0;
+            g_osd.Show(hwnd, AppStrings::OSD_ZoomFit, false, false, D2D1::ColorF(D2D1::ColorF::White));
+            RequestRepaint(PaintLayer::All);
+            g_viewState.IsInteracting = true;
+            SetTimer(hwnd, IDT_INTERACTION, 150, nullptr);
+            return;
+        }
+
         // [Requirement] If maximized or fullscreen, just reset zoom/pan without resizing window
         if (IsZoomed(hwnd) || g_isFullScreen) {
             g_viewState.Zoom = 1.0f;
@@ -3728,14 +3732,9 @@ void AdjustWindowToImage(HWND hwnd) {
     int windowW = static_cast<int>(imgWidth);
     int windowH = static_cast<int>(imgHeight);
     
-    // Get Monitor Work Area
-    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfoW(hMon, &mi);
-    
-    // Max Window Dimensions
-    int maxWinW = (mi.rcWork.right - mi.rcWork.left);
-    int maxWinH = (mi.rcWork.bottom - mi.rcWork.top);
+    const RECT bounds = GetWindowExpansionBounds(hwnd);
+    const int maxWinW = bounds.right - bounds.left;
+    const int maxWinH = bounds.bottom - bounds.top;
     
     // Scale down if Window is too big for screen
     if (windowW > maxWinW || windowH > maxWinH) {
@@ -3772,25 +3771,11 @@ void AdjustWindowToImage(HWND hwnd) {
     
     // Center logic
     RECT rcWindow; GetWindowRect(hwnd, &rcWindow);
-    int currentCenterX = rcWindow.left + (rcWindow.right - rcWindow.left) / 2;
-    int currentCenterY = rcWindow.top + (rcWindow.bottom - rcWindow.top) / 2;
-    
-    int newLeft = currentCenterX - windowW / 2;
-    int newTop = currentCenterY - windowH / 2;
-    
-    // Ensure on screen (Clamping)
-    // [Phase 2] Cross-Monitor Toggle: Only clamp if disabled.
-    if (!g_config.EnableCrossMonitor) {
-         if (newLeft < mi.rcWork.left) newLeft = mi.rcWork.left;
-         if (newTop < mi.rcWork.top) newTop = mi.rcWork.top;
-         
-         // Also clamp right/bottom?
-         // Existing code only clamped top-left, relying on windowW/H resize earlier.
-         // Let's keep existing logic minimal.
-    } else {
-         // Cross-Monitor: Allow negative coordinates / spanning.
-         // No clamping applied.
-    }
+    RECT targetRect = ExpandWindowRectToTargetWithinBounds(rcWindow, windowW, windowH, bounds);
+    int newLeft = targetRect.left;
+    int newTop = targetRect.top;
+    windowW = targetRect.right - targetRect.left;
+    windowH = targetRect.bottom - targetRect.top;
 
 
     // [v9.7] Fix: Use SetWindowPlacement to set dimensions.
@@ -3848,6 +3833,113 @@ RECT GetVirtualScreenRect() {
     };
     EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&vRect);
     return vRect;
+}
+
+static RECT GetWindowExpansionBounds(HWND hwnd) {
+    if (g_config.EnableCrossMonitor) {
+        return GetVirtualScreenRect();
+    }
+
+    RECT bounds = { 0, 0, 0, 0 };
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetMonitorInfoW(hMon, &mi)) {
+        bounds = mi.rcWork;
+    }
+    return bounds;
+}
+
+static RECT ExpandWindowRectToTargetWithinBounds(const RECT& currentRect, int targetW, int targetH, const RECT& bounds) {
+    RECT result = currentRect;
+    const int boundsW = bounds.right - bounds.left;
+    const int boundsH = bounds.bottom - bounds.top;
+    if (boundsW <= 0 || boundsH <= 0) {
+        int centerX = currentRect.left + (currentRect.right - currentRect.left) / 2;
+        int centerY = currentRect.top + (currentRect.bottom - currentRect.top) / 2;
+        result.left = centerX - targetW / 2;
+        result.top = centerY - targetH / 2;
+        result.right = result.left + targetW;
+        result.bottom = result.top + targetH;
+        return result;
+    }
+
+    targetW = (std::min)(targetW, boundsW);
+    targetH = (std::min)(targetH, boundsH);
+
+    auto resizeAxis = [](int currentStart, int currentEnd, int targetSize, int boundStart, int boundEnd, int& outStart, int& outEnd) {
+        const int currentSize = currentEnd - currentStart;
+        const int boundSize = boundEnd - boundStart;
+        targetSize = (std::min)(targetSize, boundSize);
+
+        if (targetSize <= currentSize) {
+            int center = currentStart + currentSize / 2;
+            outStart = center - targetSize / 2;
+            outEnd = outStart + targetSize;
+        } else {
+            const int grow = targetSize - currentSize;
+
+            auto distributeGrowth = [](int desiredNeg, int desiredPos, int availNeg, int availPos, int totalGrow, int& growNeg, int& growPos) {
+                growNeg = (std::min)(desiredNeg, availNeg);
+                growPos = (std::min)(desiredPos, availPos);
+
+                int remaining = totalGrow - growNeg - growPos;
+                int spareNeg = availNeg - growNeg;
+                int sparePos = availPos - growPos;
+
+                if (remaining > 0) {
+                    if (sparePos >= spareNeg) {
+                        int addPos = (std::min)(sparePos, remaining);
+                        growPos += addPos;
+                        remaining -= addPos;
+
+                        int addNeg = (std::min)(spareNeg, remaining);
+                        growNeg += addNeg;
+                    } else {
+                        int addNeg = (std::min)(spareNeg, remaining);
+                        growNeg += addNeg;
+                        remaining -= addNeg;
+
+                        int addPos = (std::min)(sparePos, remaining);
+                        growPos += addPos;
+                    }
+                }
+            };
+
+            const int availNeg = (std::max)(0, currentStart - boundStart);
+            const int availPos = (std::max)(0, boundEnd - currentEnd);
+            const int desiredNeg = grow / 2;
+            const int desiredPos = grow - desiredNeg;
+
+            int growNeg = 0;
+            int growPos = 0;
+            distributeGrowth(desiredNeg, desiredPos, availNeg, availPos, grow, growNeg, growPos);
+
+            outStart = currentStart - growNeg;
+            outEnd = currentEnd + growPos;
+        }
+
+        if (outStart < boundStart) {
+            outEnd += boundStart - outStart;
+            outStart = boundStart;
+        }
+        if (outEnd > boundEnd) {
+            outStart -= outEnd - boundEnd;
+            outEnd = boundEnd;
+        }
+    };
+
+    int left = 0;
+    int right = 0;
+    int top = 0;
+    int bottom = 0;
+    resizeAxis((int)currentRect.left, (int)currentRect.right, targetW, (int)bounds.left, (int)bounds.right, left, right);
+    resizeAxis((int)currentRect.top, (int)currentRect.bottom, targetH, (int)bounds.top, (int)bounds.bottom, top, bottom);
+    result.left = left;
+    result.right = right;
+    result.top = top;
+    result.bottom = bottom;
+
+    return result;
 }
 
 // [Visual Rotation] Helper to calculate accumulated matrix
@@ -6717,12 +6809,12 @@ SKIP_EDGE_NAV:;
         // Zoom
         case '1': case 'Z': case VK_NUMPAD1: // 100% Original size
             if (IsCompareModeActive()) PerformCompareZoom100(hwnd);
-            else PerformZoom100(hwnd);
+            else PerformZoom100(hwnd, false);
             break;
             
         case '0': case 'F': case VK_NUMPAD0: // Fit to Screen (Best Fit)
             if (IsCompareModeActive()) PerformCompareZoomFit(hwnd);
-            else PerformZoomFit(hwnd);
+            else PerformZoomFit(hwnd, 1.0f, false);
             break;
 
         case VK_ADD: case VK_OEM_PLUS: // Zoom In
@@ -6741,8 +6833,8 @@ SKIP_EDGE_NAV:;
             float delta = isZoomIn ? 1.0f : -1.0f;
             float newTotalScale = CalculateTargetZoom(hwnd, delta, isCtrl);
             
-            // [Refactor] Use Centralized Smart Zoom
-            PerformSmartZoom(hwnd, newTotalScale, nullptr, true);
+            // Keyboard step zoom should respect the current lock-window policy.
+            PerformSmartZoom(hwnd, newTotalScale, nullptr, false);
 
             g_viewState.IsInteracting = true;
             SetTimer(hwnd, IDT_INTERACTION, 150, nullptr);
@@ -9184,14 +9276,15 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
     bool willResizeWindow = false;
     bool resizeIsScreenLimited = false;
 
+    RECT bounds = { 0, 0, 0, 0 };
+
     if (canResizeConfig) {
          float oldZoom = g_viewState.Zoom;
 
          // Calculate Target Dimensions
-         HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-         MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
-         int maxW = (mi.rcWork.right - mi.rcWork.left);
-         int maxH = (mi.rcWork.bottom - mi.rcWork.top);
+         bounds = GetWindowExpansionBounds(hwnd);
+         int maxW = (bounds.right - bounds.left);
+         int maxH = (bounds.bottom - bounds.top);
          
          // Logic 1:1 Scale Target
          int targetW = (int)(vs.VisualSize.width * newTotalScale);
@@ -9226,7 +9319,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
                  
                  g_programmaticResize = true;
                  SetWindowPos(hwnd, nullptr, cX - finalWinW/2, cY - finalWinH/2, finalWinW, finalWinH, 
-                              SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+                              SWP_NOZORDER | SWP_NOACTIVATE);
                               
                  if (g_compEngine && g_compEngine->IsInitialized()) {
                     RECT rc; GetClientRect(hwnd, &rc);
@@ -9266,10 +9359,8 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
                  finalWinW = targetW;
                  finalWinH = targetH;
                  
-                 if (!g_config.EnableCrossMonitor) {
-                    if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
-                    if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
-                 }
+                 if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
+                 if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
                  resizeIsScreenLimited = capped;
                  
                  if (finalWinW < 200) finalWinW = 200;
@@ -9294,19 +9385,17 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
 
          // Apply Resize
          RECT rcWin; GetWindowRect(hwnd, &rcWin);
-         int cX = rcWin.left + (rcWin.right - rcWin.left) / 2;
-         int cY = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
-         
          g_programmaticResize = true;
-         SetWindowPos(hwnd, nullptr, cX - finalWinW/2, cY - finalWinH/2, finalWinW, finalWinH, 
-                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+         RECT targetRect = ExpandWindowRectToTargetWithinBounds(rcWin, finalWinW, finalWinH, bounds);
+         SetWindowPos(hwnd, nullptr, targetRect.left, targetRect.top,
+                      targetRect.right - targetRect.left, targetRect.bottom - targetRect.top,
+                      SWP_NOZORDER | SWP_NOACTIVATE);
 
          if (g_compEngine && g_compEngine->IsInitialized()) {
              RECT rc; GetClientRect(hwnd, &rc);
 
-             // Smart mouse-anchor: when resize is capped by screen bounds, keep zoom centered at cursor.
-             // This extends lock-window behavior into normal mode once the image effectively exceeds screen space.
-             if (centerPt && resizeIsScreenLimited && oldZoom > 0.0001f) {
+             // Keep the pixel under the cursor visually stable even while the window itself is resizing.
+             if (centerPt && oldZoom > 0.0001f) {
                  float winW = (float)rc.right;
                  float winH = (float)rc.bottom;
                  float zoomRatio = g_viewState.Zoom / oldZoom;
