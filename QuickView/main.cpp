@@ -191,7 +191,7 @@ static std::unique_ptr<UIRenderer> g_uiRenderer;  // 独立 UI 层渲染器
 static InputController g_inputController;  // Quantum Stream: 输入状态机
 
 // [Fix] Fullscreen State Tracking
-static bool g_isFullScreen = false;
+bool g_isFullScreen = false;
 static WINDOWPLACEMENT g_savedWindowPlacement = { sizeof(WINDOWPLACEMENT) };
 
 // [Step 3] Unified Resource Management
