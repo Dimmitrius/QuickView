@@ -4092,16 +4092,29 @@ RECT GetVirtualScreenRect() {
 }
 
 static RECT GetWindowExpansionBounds(HWND hwnd) {
+    RECT bounds = { 0, 0, 0, 0 };
     if (g_config.EnableCrossMonitor) {
-        return GetVirtualScreenRect();
+        bounds = GetVirtualScreenRect();
+    } else {
+        HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetMonitorInfoW(hMon, &mi)) {
+            bounds = mi.rcWork;
+        }
     }
 
-    RECT bounds = { 0, 0, 0, 0 };
-    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
-    if (GetMonitorInfoW(hMon, &mi)) {
-        bounds = mi.rcWork;
-    }
+    // Apply user configured maximum size percentage to expansion bounds
+    float maxSizePercent = g_config.WindowMaxSizePercent / 100.0f;
+    int centerX = (bounds.left + bounds.right) / 2;
+    int centerY = (bounds.top + bounds.bottom) / 2;
+    int maxW = (int)((bounds.right - bounds.left) * maxSizePercent);
+    int maxH = (int)((bounds.bottom - bounds.top) * maxSizePercent);
+
+    bounds.left = centerX - maxW / 2;
+    bounds.right = centerX + maxW / 2;
+    bounds.top = centerY - maxH / 2;
+    bounds.bottom = centerY + maxH / 2;
+
     return bounds;
 }
 
