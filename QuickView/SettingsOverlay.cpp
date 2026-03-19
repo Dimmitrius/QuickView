@@ -1869,13 +1869,16 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             // 2. Normal Item Row
             
             // Label
-            D2D1_RECT_F labelRect = D2D1::RectF(contentX, contentY, contentX + 250, contentY + rowHeight);
+            float labelWidth = 270.0f * s; // Balanced with button space
+            D2D1_RECT_F labelRect = D2D1::RectF(contentX, contentY, contentX + labelWidth, contentY + rowHeight);
             pRT->DrawTextW(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), labelRect, m_brushTextDim.Get());
 
             // Control Area
-            float controlX = contentX + 260.0f;
-            float controlW = contentW - 260.0f;
-            D2D1_RECT_F controlRect = D2D1::RectF(controlX, contentY + 5, controlX + controlW, contentY + rowHeight - 5);
+            float controlOffset = 280.0f * s; 
+            float controlX = contentX + controlOffset;
+            float controlW = contentW - controlOffset;
+            float insetY = 5.0f * s;
+            D2D1_RECT_F controlRect = D2D1::RectF(controlX, contentY + insetY, controlX + controlW, contentY + rowHeight - insetY);
 
             bool isHovered = (&item == m_pHoverItem);
 
@@ -1944,7 +1947,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      }
 
                      float btnWidth = std::max(btnMinWidth, textW + btnPadX * 2.0f);
-                     float btnMaxWidth = controlW * 0.55f;
+                     float btnMaxWidth = controlW * 0.85f; // Increased from 0.55f to prevent button text wrap
                      if (btnWidth > btnMaxWidth) btnWidth = btnMaxWidth;
 
                      float btnX = controlX + controlW - btnWidth; // Right-aligned
@@ -2168,9 +2171,10 @@ void SettingsOverlay::DrawToggle(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect
 }
 
 void SettingsOverlay::DrawSlider(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered) {
-    // Width 150, Height 4
-    float w = 150.0f; 
-    float h = 4.0f;
+    const float s = m_uiScale;
+    // Width 150, Height 4 (Scaled)
+    float w = 150.0f * s; 
+    float h = 4.0f * s;
     float x = rect.right - w; // Right aligned
     float y = rect.top + (rect.bottom - rect.top - h) / 2.0f;
     
@@ -2331,10 +2335,11 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
 
     // 0. Active Combo Logic (Priority)
     if (m_pActiveCombo) {
-        float controlX = m_pActiveCombo->rect.left + 260.0f;
+        const float s = m_uiScale;
+        float controlX = m_pActiveCombo->rect.left + 280.0f * s;
         float controlW = m_pActiveCombo->rect.right - controlX;
         float dropY = m_pActiveCombo->rect.bottom;
-        float itemH = 30.0f;
+        float itemH = ITEM_HEIGHT * s;
         int count = (int)m_pActiveCombo->options.size();
         int maxItems = 8;
         int visibleItems = (count > maxItems) ? maxItems : count;
@@ -2501,10 +2506,11 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
 
     // 3. Active Combo Processing
     if (m_pActiveCombo) {
-        float controlX = m_pActiveCombo->rect.left + 260.0f;
+        const float s = m_uiScale;
+        float controlX = m_pActiveCombo->rect.left + 280.0f * s;
         float controlW = m_pActiveCombo->rect.right - controlX;
         float dropY = m_pActiveCombo->rect.bottom;
-        float itemH = 30.0f;
+        float itemH = ITEM_HEIGHT * s;
         int count = (int)m_pActiveCombo->options.size();
         int maxItems = 8;
         int visibleItems = (count > maxItems) ? maxItems : count;
@@ -2580,7 +2586,8 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         }
         // Segment
         if (m_pHoverItem->type == OptionType::Segment && m_pHoverItem->pIntVal) {
-             float controlX = m_pHoverItem->rect.left + 260.0f;
+             const float s = m_uiScale;
+             float controlX = m_pHoverItem->rect.left + 280.0f * s;
              float controlW = m_pHoverItem->rect.right - controlX;
              
              if (x >= controlX && x <= controlX + controlW) {
@@ -2634,7 +2641,8 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         }
         // Custom Color Row: Checkbox vs Button
         if (m_pHoverItem->type == OptionType::CustomColorRow) {
-             float controlX = m_pHoverItem->rect.left + 260.0f;
+             const float s = m_uiScale;
+             float controlX = m_pHoverItem->rect.left + 280.0f * s;
              // Checkbox Area (left half)
              if (x < controlX + 200.0f) {
                  g_config.CanvasShowGrid = !g_config.CanvasShowGrid;
@@ -2728,11 +2736,12 @@ void SettingsOverlay::DrawComboBox(ID2D1RenderTarget* pRT, const D2D1_RECT_F& re
 void SettingsOverlay::DrawComboDropdown(ID2D1RenderTarget* pRT) {
     if (!m_pActiveCombo) return;
     
-    float controlX = m_pActiveCombo->rect.left + 260.0f;
+    const float s = m_uiScale;
+    float controlX = m_pActiveCombo->rect.left + 280.0f * s;
     float controlW = m_pActiveCombo->rect.right - controlX;
     float dropY = m_pActiveCombo->rect.bottom;
     
-    float itemH = 30.0f;
+    float itemH = ITEM_HEIGHT * s;
     int count = (int)m_pActiveCombo->options.size();
     int maxItems = 8;
     int visibleItems = (count > maxItems) ? maxItems : count;

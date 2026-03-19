@@ -384,7 +384,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"Rotate Right (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"Flip Horizontal (H)";
         static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Lock Window";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Unlock Window Size";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Unlock Window";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"Gallery (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"Info Panel";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: Preview (Click for Full)";
@@ -415,8 +415,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"Zoom: Fit Screen";
         static constexpr const wchar_t* OSD_PrintInstruction = L"Print: Use Ctrl+P in opened app";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"Moved to Recycle Bin";
-        static constexpr const wchar_t* OSD_WindowLocked = L"Window Size Locked";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"Window Size Unlocked";
+        static constexpr const wchar_t* OSD_WindowLocked = L"Window Locked";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"Window Unlocked";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"Always on Top: ON";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"Always on Top: OFF";
         static constexpr const wchar_t* OSD_WallpaperSet = L"Wallpaper Set";
@@ -854,7 +854,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"向右旋转 (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"水平翻转 (H)";
         static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"锁定窗口";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"解锁窗口大小";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"解锁窗口";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"缩略图 (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"信息面板";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: 快速预览 (点击切换完整)";
@@ -885,8 +885,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"缩放: 适应屏幕";
         static constexpr const wchar_t* OSD_PrintInstruction = L"打印: 请在打开的应用中使用 Ctrl+P";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"已移至回收站";
-        static constexpr const wchar_t* OSD_WindowLocked = L"窗口大小已锁定";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"窗口大小已解锁";
+        static constexpr const wchar_t* OSD_WindowLocked = L"窗口已锁定";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"窗口已解锁";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"窗口置顶: 开";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"窗口置顶: 关";
         static constexpr const wchar_t* OSD_WallpaperSet = L"壁纸已设置";
@@ -1000,7 +1000,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"向右旋轉 (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"水平翻轉 (H)";
         static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"鎖定視窗";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"解鎖視窗大小";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"解鎖視窗";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"縮圖 (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"資訊面板";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: 快速預覽 (點選切換完整)";
@@ -1029,8 +1029,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"縮放: 適應螢幕";
         static constexpr const wchar_t* OSD_PrintInstruction = L"列印: 請在開啟的應用程式中使用 Ctrl+P";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"已移至資源回收筒";
-        static constexpr const wchar_t* OSD_WindowLocked = L"視窗大小已鎖定";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"視窗大小已解鎖";
+        static constexpr const wchar_t* OSD_WindowLocked = L"視窗已鎖定";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"視窗已解鎖";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"視窗置頂: 開";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"視窗置頂: 關";
         static constexpr const wchar_t* OSD_WallpaperSet = L"桌布已設定";
@@ -1291,7 +1291,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"右回転 (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"水平反転 (H)";
         static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"ウィンドウをロック";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"ウィンドウサイズを解除";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"ウィンドウ固定を解除";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"ギャラリー (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"情報パネル";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: プレビュー (クリックでフル)";
@@ -1320,8 +1320,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"ズーム: 画面に合わせる";
         static constexpr const wchar_t* OSD_PrintInstruction = L"印刷: 開いたアプリでCtrl+Pを使用";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"ごみ箱に移動しました";
-        static constexpr const wchar_t* OSD_WindowLocked = L"ウィンドウサイズ固定";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"ウィンドウサイズ解除";
+        static constexpr const wchar_t* OSD_WindowLocked = L"ウィンドウ固定";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"ウィンドウ固定解除";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"常に手前: オン";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"常に手前: オフ";
         static constexpr const wchar_t* OSD_WallpaperSet = L"壁紙を設定しました";
@@ -1581,8 +1581,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"Повернуть влево (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"Повернуть вправо (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"Отразить по горизонтали (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Зафиксировать размер окна";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Разблокировать размер окна";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Зафиксировать окно";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Разблокировать окно";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"Галерея (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"Информационная панель";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: Предпросмотр (Нажмите для полного)";
@@ -1611,8 +1611,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"Масштаб: По размеру экрана";
         static constexpr const wchar_t* OSD_PrintInstruction = L"Печать: Используйте Ctrl+P в открытом приложении";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"Перемещено в корзину";
-        static constexpr const wchar_t* OSD_WindowLocked = L"Размер окна зафиксирован";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"Размер окна разблокирован";
+        static constexpr const wchar_t* OSD_WindowLocked = L"Окно зафиксировано";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"Окно разблокировано";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"Always on Top: ON";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"Always on Top: OFF";
         static constexpr const wchar_t* OSD_WallpaperSet = L"Обои установлены";
@@ -1872,8 +1872,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"Links drehen (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"Rechts drehen (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"Horizontal spiegeln (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Fenstergröße sperren";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Fenstergröße entsperren";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Fenster sperren";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Fenster entsperren";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"Galerie (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"Info-Panel";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: Vorschau (Klick für Voll)";
@@ -1902,8 +1902,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"Zoom: An Bildschirm anpassen";
         static constexpr const wchar_t* OSD_PrintInstruction = L"Drucken: Benutzen Sie Strg+P in der geöffneten App";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"In Papierkorb verschoben";
-        static constexpr const wchar_t* OSD_WindowLocked = L"Fenstergröße gesperrt";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"Fenstergröße entsperrt";
+        static constexpr const wchar_t* OSD_WindowLocked = L"Fenster gesperrt";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"Fenster entsperrt";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"Immer im Vordergrund: AN";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"Immer im Vordergrund: AUS";
         static constexpr const wchar_t* OSD_WallpaperSet = L"Hintergrundbild gesetzt";
@@ -2164,7 +2164,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"Girar derecha (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"Voltear horizontal (H)";
         static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Bloquear ventana";
-        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Desbloquear tamaño de ventana";
+        static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Desbloquear ventana";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"Galería (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"Panel de información";
         static constexpr const wchar_t* Toolbar_Tooltip_RawPreview = L"RAW: Vista previa (Clic para completo)";
@@ -2193,8 +2193,8 @@ namespace AppStrings {
         static constexpr const wchar_t* OSD_ZoomFit = L"Zoom: Ajustar a pantalla";
         static constexpr const wchar_t* OSD_PrintInstruction = L"Imprimir: Use Ctrl+P en la aplicación abierta";
         static constexpr const wchar_t* OSD_MovedToRecycleBin = L"Movido a la papelera";
-        static constexpr const wchar_t* OSD_WindowLocked = L"Tamaño de ventana bloqueado";
-        static constexpr const wchar_t* OSD_WindowUnlocked = L"Tamaño de ventana desbloqueado";
+        static constexpr const wchar_t* OSD_WindowLocked = L"Ventana bloqueada";
+        static constexpr const wchar_t* OSD_WindowUnlocked = L"Ventana desbloqueada";
         static constexpr const wchar_t* OSD_AlwaysOnTopOn = L"Siempre visible: ACTIVADO";
         static constexpr const wchar_t* OSD_AlwaysOnTopOff = L"Siempre visible: DESACTIVADO";
         static constexpr const wchar_t* OSD_WallpaperSet = L"Fondo de pantalla establecido";
