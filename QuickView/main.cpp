@@ -260,6 +260,7 @@ static float GetMinWindowWidth() {
 
 static ComPtr<IDWriteTextFormat> g_pPanelTextFormat;
 static D2D1_RECT_F g_gpsLinkRect = {}; 
+int g_galleryContextMenuIndex = -1;
 static D2D1_RECT_F g_gpsCoordRect = {};  // GPS Coordinates click area
 static D2D1_RECT_F g_filenameRect = {};  // Filename click area
 static D2D1_RECT_F g_panelToggleRect = {}; // Expand/Collapse Button Rect
@@ -7162,6 +7163,15 @@ SKIP_EDGE_NAV:;
         POINT pt = ptClient;
         ClientToScreen(hwnd, &pt);
 
+        if (g_gallery.IsVisible()) {
+            int idx = g_gallery.HitTestClient(ptClient.x, ptClient.y);
+            if (idx >= 0) {
+                g_galleryContextMenuIndex = idx;
+                ShowGalleryContextMenu(hwnd, pt);
+            }
+            return 0;
+        }
+
         if (IsCompareModeActive()) {
             g_compare.contextPane = HitTestComparePane(hwnd, ptClient);
             g_compare.activePane = g_compare.contextPane;
@@ -7212,6 +7222,37 @@ SKIP_EDGE_NAV:;
         const std::wstring& contextPath = contextLeft ? g_compare.left.path : g_imagePath;
         const CImageLoader::ImageMetadata& contextMeta = contextLeft ? g_compare.left.metadata : g_currentMetadata;
         switch (cmdId) {
+        case IDM_GALLERY_OPEN_COMPARE: {
+            if (g_galleryContextMenuIndex >= 0 && g_galleryContextMenuIndex < (int)g_navigator.Count()) {
+                std::wstring path = g_navigator.GetFile(g_galleryContextMenuIndex);
+                g_gallery.Close();
+                RestoreOverlayWindowState(hwnd);
+                if (!IsCompareModeActive()) {
+                    EnterCompareMode(hwnd);
+                }
+                if (IsCompareModeActive()) {
+                    if (LoadImageIntoCompareLeftSlot(hwnd, path)) {
+                        g_compare.activePane = ComparePane::Left;
+                        MarkCompareDirty();
+                    }
+                }
+                RequestRepaint(PaintLayer::All);
+            }
+            break;
+        }
+
+        case IDM_GALLERY_OPEN_NEW_WINDOW: {
+            if (g_galleryContextMenuIndex >= 0 && g_galleryContextMenuIndex < (int)g_navigator.Count()) {
+                std::wstring path = g_navigator.GetFile(g_galleryContextMenuIndex);
+                wchar_t exePath[MAX_PATH];
+                if (GetModuleFileNameW(nullptr, exePath, MAX_PATH)) {
+                    // Enclose path in quotes
+                    std::wstring args = L"\"" + path + L"\"";
+                    ShellExecuteW(nullptr, L"open", exePath, args.c_str(), nullptr, SW_SHOWNORMAL);
+                }
+            }
+            break;
+        }
         case IDM_OPEN: {
             if (!CheckUnsavedChanges(hwnd)) break;
             OPENFILENAMEW ofn = {};

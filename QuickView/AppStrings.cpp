@@ -98,6 +98,8 @@ namespace AppStrings {
     const wchar_t* Context_Settings = nullptr;
     const wchar_t* Context_About = nullptr;
     const wchar_t* Context_CompareMode = nullptr; // New
+    const wchar_t* Context_GalleryOpenCompare = nullptr;
+    const wchar_t* Context_GalleryOpenNewWindow = nullptr;
     const wchar_t* Context_Exit = nullptr;
 
     const wchar_t* HUD_Label_High = nullptr;
@@ -470,6 +472,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"Settings...";
         static constexpr const wchar_t* Context_About = L"About QuickView";
         static constexpr const wchar_t* Context_CompareMode = L"Compare Mode\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"Open in Compare Mode";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"Open in New Window";
         static constexpr const wchar_t* Context_Exit = L"Exit\tMButton/Esc";
 
         static constexpr const wchar_t* Settings_Tab_Visuals = L"Visuals";
@@ -847,6 +851,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"设置...";
         static constexpr const wchar_t* Context_About = L"关于 QuickView";
         static constexpr const wchar_t* Context_CompareMode = L"对比模式\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"在对比模式中打开";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"在新窗口中打开";
         static constexpr const wchar_t* Context_Exit = L"退出\tMButton/Esc";
 
         // Messages
@@ -1086,6 +1092,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"設定...";
         static constexpr const wchar_t* Context_About = L"關於 QuickView";
         static constexpr const wchar_t* Context_CompareMode = L"對比模式\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"在對比模式中打開";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"在新視窗中打開";
         static constexpr const wchar_t* Context_Exit = L"結束\tMButton/Esc";
         static constexpr const wchar_t* Settings_Tab_Visuals = L"外觀";
         static constexpr const wchar_t* Settings_Tab_Controls = L"操作";
@@ -1379,6 +1387,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"設定...";
         static constexpr const wchar_t* Context_About = L"QuickViewについて";
         static constexpr const wchar_t* Context_CompareMode = L"比較モード\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"比較モードで開く";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"新しいウィンドウで開く";
         static constexpr const wchar_t* Context_Exit = L"終了\tMButton/Esc";
         static constexpr const wchar_t* Settings_Tab_Visuals = L"外観";
         static constexpr const wchar_t* Settings_Tab_Controls = L"操作";
@@ -1672,6 +1682,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"Настройки...";
         static constexpr const wchar_t* Context_About = L"О QuickView";
         static constexpr const wchar_t* Context_CompareMode = L"Режим сравнения\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"Открыть в режиме сравнения";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"Открыть в новом окне";
         static constexpr const wchar_t* Context_Exit = L"Выход\tMButton/Esc";
         static constexpr const wchar_t* Settings_Tab_Visuals = L"Внешний вид";
         static constexpr const wchar_t* Settings_Tab_Controls = L"Управление";
@@ -1965,6 +1977,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"Einstellungen...";
         static constexpr const wchar_t* Context_About = L"Über QuickView";
         static constexpr const wchar_t* Context_CompareMode = L"Vergleichsmodus\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"Im Vergleichsmodus öffnen";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"In neuem Fenster öffnen";
         static constexpr const wchar_t* Context_Exit = L"Beenden\tMButton/Esc";
         static constexpr const wchar_t* Settings_Tab_Visuals = L"Aussehen";
         static constexpr const wchar_t* Settings_Tab_Controls = L"Steuerung";
@@ -2258,6 +2272,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_Settings = L"Configuración...";
         static constexpr const wchar_t* Context_About = L"Acerca de QuickView";
         static constexpr const wchar_t* Context_CompareMode = L"Modo comparación\tC";
+        static constexpr const wchar_t* Context_GalleryOpenCompare = L"Abrir en modo de comparación";
+        static constexpr const wchar_t* Context_GalleryOpenNewWindow = L"Abrir en una ventana nueva";
         static constexpr const wchar_t* Context_Exit = L"Salir\tMButton/Esc";
         static constexpr const wchar_t* Settings_Tab_Visuals = L"Apariencia";
         static constexpr const wchar_t* Settings_Tab_Controls = L"Controles";
@@ -2510,6 +2526,8 @@ namespace AppStrings {
         Context_Settings = T::Context_Settings;
         Context_About = T::Context_About;
         Context_CompareMode = T::Context_CompareMode;
+        Context_GalleryOpenCompare = T::Context_GalleryOpenCompare;
+        Context_GalleryOpenNewWindow = T::Context_GalleryOpenNewWindow;
         Context_Exit = T::Context_Exit;
 
         Message_SaveErrorTitle = T::Message_SaveErrorTitle;
