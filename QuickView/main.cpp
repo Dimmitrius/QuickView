@@ -5099,9 +5099,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         
         // OSD Timer (999) - Heartbeat/Expiration check
         if (wParam == OSD_TIMER_ID) {
+             RequestRepaint(PaintLayer::Dynamic);  // Heartbeat for smooth fade
              if (!g_osd.IsVisible()) {
                  KillTimer(hwnd, OSD_TIMER_ID);
-                 RequestRepaint(PaintLayer::Dynamic);  // OSD is on Dynamic layer
              }
         }
         
@@ -9523,7 +9523,12 @@ void OnPaint(HWND hwnd) {
         // Sync OSD state
         if (g_osd.IsVisible()) {
             float elapsed = (GetTickCount() - g_osd.StartTime) / 1000.0f;
-            float opacity = 1.0f - (elapsed / (g_osd.Duration / 1000.0f));
+            float totalSecs = g_osd.Duration / 1000.0f;
+            float progress = (totalSecs > 0) ? (elapsed / totalSecs) : 1.0f;
+            float opacity = 1.0f;
+            if (progress > 0.5f) { // Stay solid for 50%, then fade
+                opacity = 1.0f - (progress - 0.5f) / 0.5f;
+            }
             if (opacity > 0) {
                 // Resolve text color from OSDState
                 D2D1_COLOR_F osdColor = g_osd.CustomColor;

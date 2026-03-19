@@ -11,7 +11,7 @@ struct OSDState {
     std::wstring MessageRight; // For compare mode
     bool IsCompareOSD = false;
     DWORD StartTime = 0;
-    DWORD Duration = 2000;
+    DWORD Duration = 1000;
     bool IsError = false;
     bool IsWarning = false;
     D2D1_COLOR_F CustomColor = D2D1::ColorF(D2D1::ColorF::Black, 0.0f);
@@ -26,7 +26,7 @@ struct OSDState {
         CustomColor = color;
         Position = pos;
         if (hwnd) {
-            SetTimer(hwnd, 999, 250, nullptr);
+            SetTimer(hwnd, 994, 30, nullptr);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
     }
@@ -42,7 +42,7 @@ struct OSDState {
         CustomColor = color;
         Position = OSDPosition::Bottom;
         if (hwnd) {
-            SetTimer(hwnd, 999, 250, nullptr);
+            SetTimer(hwnd, 994, 30, nullptr);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
     }

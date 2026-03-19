@@ -704,8 +704,8 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
     if (m_osdText.empty()) return;
 
     // Match original style: bottom position, padding 30/15
-    float paddingH = 30.0f * s;
-    float paddingV = 15.0f * s;
+    float paddingH = 20.0f * s;
+    float paddingV = 10.0f * s;
     
     // Create text layout to measure
     ComPtr<IDWriteTextLayout> textLayout;
