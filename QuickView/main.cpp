@@ -376,7 +376,7 @@ struct CompareState {
 static CompareState g_compare;
 
 // Forward Declaration needed for UpgradeSvgSurface and Helpers
-static void SyncDCompState(HWND hwnd, float w, float h);
+static void SyncDCompState(HWND hwnd, float w, float h, bool animate = false);
 static UINT GetSvgSurfaceSizeLimit();
 static D2D1_MATRIX_3X2_F CombineWithCurrentTransform(ID2D1DeviceContext* ctx, const D2D1_MATRIX_3X2_F& transform);
 static bool RenderCompareComposite(HWND hwnd);
@@ -4216,7 +4216,7 @@ static RECT ExpandWindowRectToTargetWithinBounds(const RECT& currentRect, int ta
 // [Visual Rotation] Helper to calculate accumulated matrix
 // [Fix] Centralized DComp Synchronization Logic
 // Calculates correct Zoom/Pan/Centering based on Visual Dimensions (Rotated)
-static void SyncDCompState(HWND hwnd, float winW, float winH) {
+static void SyncDCompState(HWND hwnd, float winW, float winH, bool animate) {
     if (!g_compEngine || !g_compEngine->IsInitialized()) return;
     if (winW <= 0 || winH <= 0) return;
 
@@ -4280,6 +4280,8 @@ static void SyncDCompState(HWND hwnd, float winW, float winH) {
 
             ClampPanForViewport(vs, winW, winH, targetZoom);
 
+            float animationDurationMs = animate ? 150.0f : 0.0f;
+
             if (UseSvgViewportRendering(g_imageResource)) {
                 VisualState surfaceVs{};
                 surfaceVs.PhysicalSize = D2D1::SizeF(winW, winH);
@@ -4288,9 +4290,9 @@ static void SyncDCompState(HWND hwnd, float winW, float winH) {
                 surfaceVs.IsRotated90 = false;
                 surfaceVs.FlipX = 1.0f;
                 surfaceVs.FlipY = 1.0f;
-                g_compEngine->UpdateTransformMatrix(surfaceVs, winW, winH, 1.0f, 0.0f, 0.0f);
+                g_compEngine->UpdateTransformMatrix(surfaceVs, winW, winH, 1.0f, 0.0f, 0.0f, animationDurationMs);
             } else {
-                g_compEngine->UpdateTransformMatrix(vs, winW, winH, targetZoom, g_viewState.PanX, g_viewState.PanY);
+                g_compEngine->UpdateTransformMatrix(vs, winW, winH, targetZoom, g_viewState.PanX, g_viewState.PanY, animationDurationMs);
             }
 
             // Set DComp Interpolation Mode
@@ -9723,7 +9725,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
          g_viewState.Zoom = newZoom;
          
          if (g_compEngine && g_compEngine->IsInitialized()) {
-              SyncDCompState(hwnd, winW, winH);
+              SyncDCompState(hwnd, winW, winH, true);
               g_compEngine->Commit();
          }
          RequestRepaint(PaintLayer::Dynamic | PaintLayer::Image); 
