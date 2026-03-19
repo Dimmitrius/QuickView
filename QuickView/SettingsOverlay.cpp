@@ -1546,7 +1546,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
             // Calculate Rect for Hit Testing
             item.rect = D2D1::RectF(contentX, contentY, contentX + contentW, contentY + rowHeight);
-
+            item.interactRect = item.rect; // Default
 
 
             // 1. Header Type
@@ -1860,6 +1860,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
             switch (item.type) {
                 case OptionType::Toggle:
+                    item.interactRect = D2D1::RectF(controlRect.right - 44.0f, controlRect.top + (controlRect.bottom - controlRect.top - 22.0f) / 2.0f, controlRect.right, controlRect.top + (controlRect.bottom - controlRect.top - 22.0f) / 2.0f + 22.0f);
                     if (item.isDisabled) {
                         // Disabled: Draw gray toggle background + disabled text
                         ComPtr<ID2D1SolidColorBrush> brushDisabled;
@@ -1891,9 +1892,11 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                     }
                     break;
                 case OptionType::Slider:
+                    item.interactRect = D2D1::RectF(controlRect.right - 150.0f, controlRect.top, controlRect.right, controlRect.bottom);
                     DrawSlider(pRT, controlRect, (item.pFloatVal ? *item.pFloatVal : 0.0f), item.minVal, item.maxVal, isHovered);
                     break;
                 case OptionType::Segment:
+                    item.interactRect = controlRect;
                     // Need index selection. Assume pIntVal or temporary pIntVal... 
                     // Segment usually binds to Int.
                     DrawSegment(pRT, controlRect, (item.pIntVal ? *item.pIntVal : 0), item.options);
@@ -1925,6 +1928,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
                      float btnX = controlX + controlW - btnWidth; // Right-aligned
                      D2D1_RECT_F btnRect = D2D1::RectF(btnX, contentY + btnInsetY, btnX + btnWidth, contentY + rowHeight - btnInsetY);
+                     item.interactRect = btnRect;
                      
                      ComPtr<ID2D1SolidColorBrush> btnBrush;
                      
@@ -2005,6 +2009,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      break;
                 }
                 case OptionType::CustomColorRow: {
+                     item.interactRect = controlRect;
                      // Inline DrawCustomColorRow logic
                      bool gridOn = g_config.CanvasShowGrid;
                      D2D1::ColorF color(g_config.CanvasCustomR, g_config.CanvasCustomG, g_config.CanvasCustomB);
@@ -2037,6 +2042,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      break;
                 }
                 case OptionType::ComboBox: {
+                    item.interactRect = controlRect;
                     // Render Closed State
                     bool isOpen = (m_pActiveCombo == &item);
                     DrawComboBox(pRT, controlRect, (item.pIntVal ? *item.pIntVal : 0), item.options, isOpen);
@@ -2153,6 +2159,51 @@ void SettingsOverlay::DrawSlider(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect
     // Ideally right align this text. But OK for now.
 }
 
+std::vector<float> SettingsOverlay::CalculateSegmentWidths(const std::vector<std::wstring>& options, float totalW) {
+    std::vector<float> widths;
+    if (options.empty()) return widths;
+
+    float totalTextW = 0.0f;
+    for (const auto& opt : options) {
+        float textW = 0.0f;
+        if (m_dwriteFactory && m_textFormatItem) {
+            ComPtr<IDWriteTextLayout> layout;
+            if (SUCCEEDED(m_dwriteFactory->CreateTextLayout(
+                opt.c_str(),
+                (UINT32)opt.length(),
+                m_textFormatItem.Get(),
+                2000.0f,
+                50.0f,
+                &layout))) {
+                DWRITE_TEXT_METRICS metrics = {};
+                if (SUCCEEDED(layout->GetMetrics(&metrics))) {
+                    textW = ceilf(metrics.widthIncludingTrailingWhitespace);
+                }
+            }
+        }
+        if (textW <= 0.0f) textW = (float)opt.length() * 8.0f * m_uiScale;
+        widths.push_back(textW);
+        totalTextW += textW;
+    }
+
+    float remainingW = totalW - totalTextW;
+    if (remainingW > 0.0f) {
+        // Distribute remaining space equally as padding
+        float paddingPerItem = remainingW / options.size();
+        for (auto& w : widths) {
+            w += paddingPerItem;
+        }
+    } else {
+        // If text is too wide, scale proportionally
+        float scale = totalW / totalTextW;
+        for (auto& w : widths) {
+            w *= scale;
+        }
+    }
+
+    return widths;
+}
+
 void SettingsOverlay::DrawSegment(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options) {
     if (options.empty()) return;
 
@@ -2160,29 +2211,33 @@ void SettingsOverlay::DrawSegment(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rec
     // Actually, stick to a fixed width or fill control area?
     // Let's use Rect provided (Control Area).
     float totalW = rect.right - rect.left;
-    float itemW = totalW / options.size();
+    std::vector<float> itemWidths = CalculateSegmentWidths(options, totalW);
     
     // Background Container
     pRT->FillRoundedRectangle(D2D1::RoundedRect(rect, 4.0f, 4.0f), m_brushControlBg.Get());
 
     // Selected Highlight
     if (selectedIdx >= 0 && selectedIdx < (int)options.size()) {
-        float selX = rect.left + itemW * selectedIdx;
-        D2D1_RECT_F selRect = D2D1::RectF(selX + 2, rect.top + 2, selX + itemW - 2, rect.bottom - 2);
+        float selX = rect.left;
+        for (int i = 0; i < selectedIdx; ++i) {
+            selX += itemWidths[i];
+        }
+        D2D1_RECT_F selRect = D2D1::RectF(selX + 2, rect.top + 2, selX + itemWidths[selectedIdx] - 2, rect.bottom - 2);
         pRT->FillRoundedRectangle(D2D1::RoundedRect(selRect, 3.0f, 3.0f), m_brushAccent.Get());
     }
 
     // Dividers/Text
     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER); // Switch to Center
 
+    float currentX = rect.left;
     for (size_t i = 0; i < options.size(); i++) {
-        float tx = rect.left + itemW * i;
-        D2D1_RECT_F tRect = D2D1::RectF(tx, rect.top, tx + itemW, rect.bottom);
+        D2D1_RECT_F tRect = D2D1::RectF(currentX, rect.top, currentX + itemWidths[i], rect.bottom);
         
         bool isSel = ((int)i == selectedIdx);
         // Draw Divider (if not first and not selected/adjacent) - simplified: just text
         
         pRT->DrawTextW(options[i].c_str(), (UINT32)options[i].length(), m_textFormatItem.Get(), tRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
+        currentX += itemWidths[i];
     }
     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING); // Restore Default
 }
@@ -2292,8 +2347,8 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
 
     if (m_activeTab >= 0 && m_activeTab < (int)m_tabs.size()) {
         for (auto& item : m_tabs[m_activeTab].items) {
-            if (x >= item.rect.left && x <= item.rect.right &&
-                y >= item.rect.top && y <= item.rect.bottom) {
+            if (x >= item.interactRect.left && x <= item.interactRect.right &&
+                y >= item.interactRect.top && y <= item.interactRect.bottom) {
                 
                 // If ComboBox is Active, do NOT verify hover on other items effectively?
                 // Actually, if we want to click outside to close, we should allow hover?
@@ -2479,9 +2534,17 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
              float controlX = m_pHoverItem->rect.left + 260.0f;
              float controlW = m_pHoverItem->rect.right - controlX;
              
-             if (x >= controlX) {
-                 float itemW = controlW / m_pHoverItem->options.size();
-                 int idx = (int)((x - controlX) / itemW);
+             if (x >= controlX && x <= controlX + controlW) {
+                 std::vector<float> itemWidths = CalculateSegmentWidths(m_pHoverItem->options, controlW);
+                 float currentX = controlX;
+                 int idx = -1;
+                 for (size_t i = 0; i < itemWidths.size(); ++i) {
+                     if (x >= currentX && x < currentX + itemWidths[i]) {
+                         idx = (int)i;
+                         break;
+                     }
+                     currentX += itemWidths[i];
+                 }
                  if (idx >= 0 && idx < (int)m_pHoverItem->options.size()) {
                      *m_pHoverItem->pIntVal = idx;
                      if (m_pHoverItem->onChange) m_pHoverItem->onChange();
