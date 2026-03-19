@@ -328,8 +328,8 @@ static bool g_deferProgrammaticZoomResizeSync = false;
 
 struct SmoothWindowZoomState {
     bool active = false;
-    DWORD startTick = 0;
-    DWORD durationMs = 90;
+    std::chrono::steady_clock::time_point startTime;
+    float durationMs = 90.0f;
     RECT startRect{};
     RECT targetRect{};
     float startZoom = 1.0f;
@@ -4409,8 +4409,8 @@ static void StartSmoothWindowZoom(HWND hwnd,
                                   float targetPanX,
                                   float targetPanY) {
     g_smoothWindowZoom.active = true;
-    g_smoothWindowZoom.startTick = GetTickCount();
-    g_smoothWindowZoom.durationMs = 90;
+    g_smoothWindowZoom.startTime = std::chrono::steady_clock::now();
+    g_smoothWindowZoom.durationMs = 90.0f;
     g_smoothWindowZoom.startRect = startRect;
     g_smoothWindowZoom.targetRect = targetRect;
     g_smoothWindowZoom.startZoom = startZoom;
@@ -4421,16 +4421,17 @@ static void StartSmoothWindowZoom(HWND hwnd,
     g_smoothWindowZoom.targetPanY = targetPanY;
     g_programmaticResize = true;
     g_deferProgrammaticZoomResizeSync = true;
-    SetTimer(hwnd, IDT_SMOOTH_WINDOW_ZOOM, 16, nullptr);
+    SetTimer(hwnd, IDT_SMOOTH_WINDOW_ZOOM, 8, nullptr);
     TickSmoothWindowZoom(hwnd);
 }
 
 static void TickSmoothWindowZoom(HWND hwnd) {
     if (!g_smoothWindowZoom.active) return;
 
-    DWORD now = GetTickCount();
+    auto now = std::chrono::steady_clock::now();
+    float elapsedMs = std::chrono::duration<float, std::milli>(now - g_smoothWindowZoom.startTime).count();
     float t = (g_smoothWindowZoom.durationMs > 0)
-        ? (float)(now - g_smoothWindowZoom.startTick) / (float)g_smoothWindowZoom.durationMs
+        ? std::clamp(elapsedMs / g_smoothWindowZoom.durationMs, 0.0f, 1.0f)
         : 1.0f;
     float eased = EaseOutCubic01(t);
 
@@ -4452,12 +4453,15 @@ static void TickSmoothWindowZoom(HWND hwnd) {
     g_viewState.PanX = lerpFloat(g_smoothWindowZoom.startPanX, g_smoothWindowZoom.targetPanX);
     g_viewState.PanY = lerpFloat(g_smoothWindowZoom.startPanY, g_smoothWindowZoom.targetPanY);
 
+    g_programmaticResize = true;
+    g_deferProgrammaticZoomResizeSync = true;
     SetWindowPos(hwnd, nullptr,
                  stepRect.left,
                  stepRect.top,
                  stepRect.right - stepRect.left,
                  stepRect.bottom - stepRect.top,
                  SWP_NOZORDER | SWP_NOACTIVATE);
+    g_deferProgrammaticZoomResizeSync = false;
 
     if (g_compEngine && g_compEngine->IsInitialized()) {
         RECT rc; GetClientRect(hwnd, &rc);
