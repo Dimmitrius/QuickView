@@ -4737,7 +4737,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         // Edge Nav Cursor: Only for Cursor mode (NavIndicator == 1)
         if (g_config.EdgeNavClick && g_config.NavIndicator == 1) {
-            if (!g_gallery.IsVisible() && !g_settingsOverlay.IsVisible()) {
+            if (!g_gallery.IsVisible() && !g_settingsOverlay.IsVisible() && !g_helpOverlay.IsVisible() && !g_dialog.IsVisible) {
                 bool hoverEdge = false;
                 if (IsCompareModeActive()) {
                     hoverEdge = (g_viewState.EdgeHoverLeft != 0) || (g_viewState.EdgeHoverRight != 0);
@@ -5177,7 +5177,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
           }
           
             // Edge Navigation Hover Detection
-            if (g_config.EdgeNavClick && !g_gallery.IsVisible() && !g_settingsOverlay.IsVisible()) {
+            if (g_config.EdgeNavClick && !g_gallery.IsVisible() && !g_settingsOverlay.IsVisible() && !g_helpOverlay.IsVisible() && !g_dialog.IsVisible) {
                 RECT rcv; GetClientRect(hwnd, &rcv);
                 int w = rcv.right - rcv.left;
                 int h = rcv.bottom - rcv.top;
@@ -5494,6 +5494,7 @@ SKIP_EDGE_NAV:;
         
     case WM_LBUTTONDBLCLK: {
         POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        if (g_gallery.IsVisible() || g_settingsOverlay.IsVisible() || g_helpOverlay.IsVisible() || g_dialog.IsVisible) return 0;
         if (g_toolbar.IsVisible() && g_toolbar.HitTest((float)pt.x, (float)pt.y)) {
             return 0;
         }
@@ -6066,7 +6067,7 @@ SKIP_EDGE_NAV:;
         int w = rcCheck.right - rcCheck.left;
         int h = rcCheck.bottom - rcCheck.top;
         bool inEdgeZone = false;
-        if (g_config.EdgeNavClick && !g_gallery.IsVisible()) {
+        if (g_config.EdgeNavClick && !g_gallery.IsVisible() && !g_settingsOverlay.IsVisible() && !g_helpOverlay.IsVisible() && !g_dialog.IsVisible) {
             if (IsCompareModeActive()) {
                 float splitX = (g_compare.mode == ViewMode::CompareWipe)
                     ? ClampCompareRatio(g_compare.splitRatio) * (float)w
@@ -6363,7 +6364,7 @@ SKIP_EDGE_NAV:;
         g_viewState.IsInteracting = false;  // End interaction mode
 
         // Edge Navigation Click
-        if (g_config.EdgeNavClick && !g_gallery.IsVisible() && !g_compare.draggingDivider && !g_viewState.IsDragging) {
+        if (g_config.EdgeNavClick && !g_gallery.IsVisible() && !g_settingsOverlay.IsVisible() && !g_helpOverlay.IsVisible() && !g_dialog.IsVisible && !g_compare.draggingDivider && !g_viewState.IsDragging) {
             // [Fix] Block edge nav if clicking on Info UI / HUD
             if (g_uiRenderer) {
                 auto hit = g_uiRenderer->HitTest((float)pt.x, (float)pt.y);
