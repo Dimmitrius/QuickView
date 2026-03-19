@@ -78,7 +78,7 @@ namespace AppStrings {
     const wchar_t* Context_FitToScreen = nullptr;
     const wchar_t* Context_ZoomIn = nullptr;
     const wchar_t* Context_ZoomOut = nullptr;
-    const wchar_t* Context_LockWindowSize = nullptr;
+    const wchar_t* Context_LockWindow = nullptr;
     const wchar_t* Context_AlwaysOnTop = nullptr;
     const wchar_t* Context_HUDGallery = nullptr;
     const wchar_t* Context_LiteInfoPanel = nullptr;
@@ -383,7 +383,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"Rotate Left (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"Rotate Right (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"Flip Horizontal (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Lock Window Size";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Lock Window";
         static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Unlock Window Size";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"Gallery (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"Info Panel";
@@ -448,7 +448,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"Fit to Screen\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"Zoom In\t+ / Ctrl +";
         static constexpr const wchar_t* Context_ZoomOut = L"Zoom Out\t- / Ctrl -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"Lock Window Size";
+        static constexpr const wchar_t* Context_LockWindow = L"Lock Window";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"Always on Top\tCtrl+T";
         static constexpr const wchar_t* Context_HUDGallery = L"HUD Gallery\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Lite Info Panel\tTab";
@@ -492,7 +492,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_Overlay = L"Overlay";
         static constexpr const wchar_t* Settings_Label_ShowGrid = L"Show Grid Overlay";
         static constexpr const wchar_t* Settings_Label_AlwaysOnTop = L"Always on Top";
-        static constexpr const wchar_t* Settings_Label_LockWindow = L"Lock Window Size";
+        static constexpr const wchar_t* Settings_Label_LockWindow = L"Lock Window";
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Auto-Hide Title Bar";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Rounded Corners";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Lock Bottom Toolbar";
@@ -821,7 +821,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"适应屏幕\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"放大\t+ / Ctrl +";
         static constexpr const wchar_t* Context_ZoomOut = L"缩小\t- / Ctrl -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"锁定窗口大小";
+        static constexpr const wchar_t* Context_LockWindow = L"锁定窗口";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"窗口置顶\tCtrl+T";
         static constexpr const wchar_t* Context_HUDGallery = L"HUD 照片墙\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"简略信息面板\tTab";
@@ -853,7 +853,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"向左旋转 (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"向右旋转 (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"水平翻转 (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"锁定窗口大小";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"锁定窗口";
         static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"解锁窗口大小";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"缩略图 (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"信息面板";
@@ -999,7 +999,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"向左旋轉 (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"向右旋轉 (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"水平翻轉 (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"鎖定視窗大小";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"鎖定視窗";
         static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"解鎖視窗大小";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"縮圖 (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"資訊面板";
@@ -1060,7 +1060,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"適應螢幕\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"放大\t+ / Ctrl +";
         static constexpr const wchar_t* Context_ZoomOut = L"縮小\t- / Ctrl -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"鎖定視窗大小";
+        static constexpr const wchar_t* Context_LockWindow = L"鎖定視窗";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"視窗置頂\tCtrl+T";
         static constexpr const wchar_t* Context_HUDGallery = L"HUD 照片牆\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"簡略資訊面板\tTab";
@@ -1290,7 +1290,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"左回転 (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"右回転 (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"水平反転 (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"ウィンドウサイズを固定";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"ウィンドウをロック";
         static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"ウィンドウサイズを解除";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"ギャラリー (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"情報パネル";
@@ -1351,7 +1351,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"画面に合わせる\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"拡大\t+ / Ctrl +";
         static constexpr const wchar_t* Context_ZoomOut = L"縮小\t- / Ctrl -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"ウィンドウサイズを固定";
+        static constexpr const wchar_t* Context_LockWindow = L"ウィンドウをロック";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"常に手前に表示\tCtrl+T";
         static constexpr const wchar_t* Context_HUDGallery = L"HUDギャラリー\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"簡易情報パネル\tTab";
@@ -1642,7 +1642,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"По размеру экрана\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"Увеличить\t+ / Ctrl +";
         static constexpr const wchar_t* Context_ZoomOut = L"Уменьшить\t- / Ctrl -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"Зафиксировать размер окна";
+        static constexpr const wchar_t* Context_LockWindow = L"Зафиксировать размер окна";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"Поверх всех окон\tCtrl+T";
         static constexpr const wchar_t* Context_HUDGallery = L"HUD Галерея\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Краткая панель информации\tTab";
@@ -1933,7 +1933,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"An Bildschirm anpassen\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"Vergrößern\t+ / Strg +";
         static constexpr const wchar_t* Context_ZoomOut = L"Verkleinern\t- / Strg -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"Fenstergröße sperren";
+        static constexpr const wchar_t* Context_LockWindow = L"Fenstergröße sperren";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"Immer im Vordergrund\tStrg+T";
         static constexpr const wchar_t* Context_HUDGallery = L"HUD-Galerie\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Kompaktes Info-Panel\tTab";
@@ -2163,7 +2163,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Toolbar_Tooltip_RotateL = L"Girar izquierda (Shift+R)";
         static constexpr const wchar_t* Toolbar_Tooltip_RotateR = L"Girar derecha (R)";
         static constexpr const wchar_t* Toolbar_Tooltip_FlipH = L"Voltear horizontal (H)";
-        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Bloquear tamaño de ventana";
+        static constexpr const wchar_t* Toolbar_Tooltip_Lock = L"Bloquear ventana";
         static constexpr const wchar_t* Toolbar_Tooltip_Unlock = L"Desbloquear tamaño de ventana";
         static constexpr const wchar_t* Toolbar_Tooltip_Gallery = L"Galería (T)";
         static constexpr const wchar_t* Toolbar_Tooltip_Info = L"Panel de información";
@@ -2224,7 +2224,7 @@ namespace AppStrings {
         static constexpr const wchar_t* Context_FitToScreen = L"Ajustar a pantalla\t0 / F";
         static constexpr const wchar_t* Context_ZoomIn = L"Acercar\t+ / Ctrl +";
         static constexpr const wchar_t* Context_ZoomOut = L"Alejar\t- / Ctrl -";
-        static constexpr const wchar_t* Context_LockWindowSize = L"Bloquear tamaño de ventana";
+        static constexpr const wchar_t* Context_LockWindow = L"Bloquear ventana";
         static constexpr const wchar_t* Context_AlwaysOnTop = L"Siempre visible\tCtrl+T";
         static constexpr const wchar_t* Context_HUDGallery = L"Galería HUD\tT";
         static constexpr const wchar_t* Context_LiteInfoPanel = L"Panel de info compacto\tTab";
@@ -2475,7 +2475,7 @@ namespace AppStrings {
         Context_FitToScreen = T::Context_FitToScreen;
         Context_ZoomIn = T::Context_ZoomIn;
         Context_ZoomOut = T::Context_ZoomOut;
-        Context_LockWindowSize = T::Context_LockWindowSize;
+        Context_LockWindow = T::Context_LockWindow;
         Context_AlwaysOnTop = T::Context_AlwaysOnTop;
         Context_HUDGallery = T::Context_HUDGallery;
         Context_LiteInfoPanel = T::Context_LiteInfoPanel;

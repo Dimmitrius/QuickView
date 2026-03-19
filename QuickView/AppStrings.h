@@ -62,7 +62,7 @@ namespace AppStrings {
     extern const wchar_t* Context_FitToScreen;
     extern const wchar_t* Context_ZoomIn;
     extern const wchar_t* Context_ZoomOut;
-    extern const wchar_t* Context_LockWindowSize;
+    extern const wchar_t* Context_LockWindow;
     extern const wchar_t* Context_AlwaysOnTop;
     extern const wchar_t* Context_HUDGallery;
     extern const wchar_t* Context_LiteInfoPanel;

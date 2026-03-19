@@ -4701,7 +4701,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     int winH = 600;
 
     // Load last window size if RememberLastWindowSize is true
-    if (g_config.RememberLastWindowSize) {
+    if (g_config.RememberLastWindowSize && g_config.LockWindowSize) {
         std::wstring iniPath = GetConfigPath();
         if (g_config.PortableMode) {
             wchar_t exePath[MAX_PATH];
@@ -5303,7 +5303,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (!CheckUnsavedChanges(hwnd)) return 0;
 
         // Save Last Window Size
-        if (g_config.RememberLastWindowSize && !IsZoomed(hwnd) && !IsIconic(hwnd) && !g_isFullScreen) {
+        if (g_config.RememberLastWindowSize && g_config.LockWindowSize && !IsZoomed(hwnd) && !IsIconic(hwnd) && !g_isFullScreen) {
             RECT rc;
             if (GetWindowRect(hwnd, &rc)) {
                 std::wstring iniPath = GetConfigPath();
@@ -8958,11 +8958,11 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
         
         // [Fix] Window Lock Persistence: Reset Lock state to User Preference on navigation.
         // This ensures that an "Auto-Lock" (from small image zoom) doesn't trap subsequent large images.
-        if (!g_config.KeepWindowSizeOnNav) {
+        if (!g_config.KeepWindowSizeOnNav || !g_runtime.LockWindowSize) {
             g_runtime.LockWindowSize = g_config.LockWindowSize;
             g_isAutoLocked = false;
         } else {
-            // If KeepWindowSizeOnNav is true, we force it to locked so window doesn't resize
+            // If KeepWindowSizeOnNav is true AND currently locked, we force it to stay locked
             g_runtime.LockWindowSize = true;
             g_isAutoLocked = false;
         }
