@@ -213,7 +213,7 @@ struct RuntimeConfig {
     bool RenderRAW = false;
 
     // Feature Toggles (Temporary Session Flags)
-    bool ForcePixelArtMode = false;
+    int PixelArtModeOverride = 0; // 0=None, 1=Force ON, 2=Force OFF
 
     // Verification Flags (Phase 5)
     bool EnableScout = true;

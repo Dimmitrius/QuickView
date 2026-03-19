@@ -387,49 +387,82 @@ static RECT ExpandWindowRectToTargetWithinBounds(const RECT& currentRect, int ta
 
 
 static D2D1_SIZE_F GetLogicalImageSize();
+static D2D1_SIZE_F GetVisualImageSize();
 VisualState GetVisualState();
 static bool g_isAutoLocked = false;
 
 // [Interpolation] Get best interpolation mode
+static bool IsEffectivelyPixelArtMode(float totalScale, float origW, float origH) {
+    // 1. Temporary Override wins all
+    if (g_runtime.PixelArtModeOverride == 1) return true;
+    if (g_runtime.PixelArtModeOverride == 2) return false;
+
+    // 2. Setting
+    int mode = (totalScale >= 1.0f) ? g_config.ZoomModeIn : g_config.ZoomModeOut;
+    if (mode == 2) return true;
+
+    // 3. Auto Mode (0) heuristics
+    if (mode == 0 && totalScale >= 1.0f) {
+        if ((origW > 0 && origW <= 256 && origH > 0 && origH <= 256) || totalScale >= 3.0f) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static D2D1_INTERPOLATION_MODE GetOptimalD2DInterpolationMode(float totalScale, float origW, float origH) {
-    if (g_runtime.ForcePixelArtMode) return D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
+    if (IsEffectivelyPixelArtMode(totalScale, origW, origH)) {
+        return D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
+    }
 
     int mode = (totalScale >= 1.0f) ? g_config.ZoomModeIn : g_config.ZoomModeOut;
-
     if (mode == 1) return D2D1_INTERPOLATION_MODE_LINEAR;
-    if (mode == 2) return D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
     if (mode == 3) return D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
-    // Auto Mode (0)
-    if (totalScale >= 1.0f) {
-        // Zooming in: Nearest neighbor for pixel art / small images, or any image zoomed way past 300%
-        if ((origW > 0 && origW <= 256 && origH > 0 && origH <= 256) || totalScale >= 3.0f) {
-            return D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
-        }
-        return D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC; // Or Linear depending on preference, Cubic is usually nicer
-    } else {
-        // Zooming out: HQ Cubic prevents moire and preserves detail
-        return D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
-    }
+    // Default Fallback
+    return D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 }
 
 static DCOMPOSITION_BITMAP_INTERPOLATION_MODE GetOptimalDCompInterpolationMode(float totalScale, float origW, float origH) {
-    if (g_runtime.ForcePixelArtMode) return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
-
-    int mode = (totalScale >= 1.0f) ? g_config.ZoomModeIn : g_config.ZoomModeOut;
-
-    if (mode == 1) return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR;
-    if (mode == 2) return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
-    if (mode == 3) return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR; // DComp lacks cubic, fallback to linear
-
-    // Auto Mode (0)
-    if (totalScale >= 1.0f) {
-        if ((origW > 0 && origW <= 256 && origH > 0 && origH <= 256) || totalScale >= 3.0f) {
-            return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
-        }
+    if (IsEffectivelyPixelArtMode(totalScale, origW, origH)) {
+        return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
     }
 
+    int mode = (totalScale >= 1.0f) ? g_config.ZoomModeIn : g_config.ZoomModeOut;
+    // DComp lacks cubic, fallback to linear for mode 3
     return DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR;
+}
+
+bool GetCurrentPixelArtState(HWND hwnd) {
+    if (!g_imageResource) return false;
+
+    D2D1_SIZE_F visualSize = GetVisualImageSize();
+    float imgW = visualSize.width;
+    float imgH = visualSize.height;
+    if (imgW <= 0 || imgH <= 0) return false;
+
+    RECT rc; GetClientRect(hwnd, &rc);
+    float winW = (float)(rc.right - rc.left);
+    float winH = (float)(rc.bottom - rc.top);
+    if (winW <= 0 || winH <= 0) return false;
+
+    float fitScale = std::min(winW / imgW, winH / imgH);
+    if (imgW < 200.0f && imgH < 200.0f && !g_imageResource.isSvg) {
+        if (fitScale > 1.0f) fitScale = 1.0f;
+    }
+
+    float totalScale = fitScale * g_viewState.Zoom;
+
+    // Also resolve origW/origH
+    float origW = imgW;
+    float origH = imgH;
+    if (g_currentMetadata.Width > 0 && g_currentMetadata.Height > 0) {
+        origW = (float)g_currentMetadata.Width;
+        origH = (float)g_currentMetadata.Height;
+    }
+
+    return IsEffectivelyPixelArtMode(totalScale, origW, origH);
 }
 
 
@@ -7000,7 +7033,8 @@ SKIP_EDGE_NAV:;
              isRaw = IsRawFile(targetPath);
         }
         
-        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode, IsCompareModeActive());
+        bool isPixelArtMode = GetCurrentPixelArtState(hwnd);
+        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode, IsCompareModeActive(), isPixelArtMode);
         return 0;
     }
     
@@ -7562,12 +7596,14 @@ SKIP_EDGE_NAV:;
 
         case IDM_PIXEL_ART_MODE: {
              // Toggle Pixel Art Mode (Nearest Neighbor) - Temporary runtime override
-             g_runtime.ForcePixelArtMode = !g_runtime.ForcePixelArtMode;
+             bool isCurrentlyPixelArt = GetCurrentPixelArtState(hwnd);
 
-             if (g_runtime.ForcePixelArtMode) {
-                 g_osd.Show(hwnd, L"Pixel Art Mode: ON", false);
-             } else {
+             if (isCurrentlyPixelArt) {
+                 g_runtime.PixelArtModeOverride = 2; // Force OFF
                  g_osd.Show(hwnd, L"Pixel Art Mode: OFF", false);
+             } else {
+                 g_runtime.PixelArtModeOverride = 1; // Force ON
+                 g_osd.Show(hwnd, L"Pixel Art Mode: ON", false);
              }
 
              // Update interpolation immediately by redrawing the surface
@@ -8783,6 +8819,9 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
         // This ensures that an "Auto-Lock" (from small image zoom) doesn't trap subsequent large images.
         g_runtime.LockWindowSize = g_config.LockWindowSize;
         g_isAutoLocked = false; 
+
+        // Reset Temporary Pixel Art Mode override for new images
+        g_runtime.PixelArtModeOverride = 0;
     }
     
     g_imagePath = path; // Set target path immediately for UI consistency
