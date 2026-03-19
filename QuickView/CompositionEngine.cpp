@@ -967,6 +967,11 @@ HRESULT CompositionEngine::UpdateTransformMatrix(VisualState vs, float winW, flo
     float targetScaleY = zoom * compScaleY;
 
     // 3. Apply Animation or Set Directly
+    bool targetChanged = (fabsf(targetScaleX - m_currentScale * m_currentCompScaleX) > 0.0001f) ||
+                         (fabsf(targetScaleY - m_currentScale * m_currentCompScaleY) > 0.0001f) ||
+                         (fabsf(panX - m_currentPanX) > 0.0001f) ||
+                         (fabsf(panY - m_currentPanY) > 0.0001f);
+
     if (animationDurationMs > 0.0f) {
         float duration = animationDurationMs / 1000.0f;
 
@@ -1013,8 +1018,8 @@ HRESULT CompositionEngine::UpdateTransformMatrix(VisualState vs, float winW, flo
             m_translateTransform->SetOffsetY(panY);
         }
 
-    } else {
-        // No animation, set directly
+    } else if (targetChanged) {
+        // No animation, set directly. Only set if changed to avoid canceling a running animation.
         m_scaleTransform->SetScaleX(targetScaleX);
         m_scaleTransform->SetScaleY(targetScaleY);
         m_translateTransform->SetOffsetX(panX);
