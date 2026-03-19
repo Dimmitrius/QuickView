@@ -2180,7 +2180,7 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
     // [Fix] Enable smooth cross-fade transition.
     // Use 150ms fade to eliminate transparent flicker.
     // For fast upgrades (same image, new surface size), swap instantly to avoid scale-jump artifacts.
-    float fadeMs = isFastUpgrade ? 0.0f : 150.0f;
+    float fadeMs = (isFastUpgrade || !g_config.EnableSmoothScaling) ? 0.0f : 90.0f;
     g_compEngine->PlayPingPongCrossFade(fadeMs);
     if (g_compEngine->IsInitialized()) {
         SyncDCompState(hwnd, (float)winW, (float)winH);
@@ -3604,6 +3604,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"View", L"NavIndicator", std::to_wstring(g_config.NavIndicator).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"EnableCrossMonitor", g_config.EnableCrossMonitor ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"RoundedCorners", g_config.RoundedCorners ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"View", L"EnableSmoothScaling", g_config.EnableSmoothScaling ? L"1" : L"0", iniPath.c_str());
 
     // Control
     WritePrivateProfileStringW(L"Controls", L"ZoomModeIn", std::to_wstring(g_config.ZoomModeIn).c_str(), iniPath.c_str());
@@ -3719,6 +3720,7 @@ void LoadConfig() {
     g_config.NavIndicator = GetPrivateProfileIntW(L"View", L"NavIndicator", 0, iniPath.c_str());
     g_config.EnableCrossMonitor = GetPrivateProfileIntW(L"View", L"EnableCrossMonitor", 0, iniPath.c_str()) != 0;
     g_config.RoundedCorners = GetPrivateProfileIntW(L"View", L"RoundedCorners", 1, iniPath.c_str()) != 0;
+    g_config.EnableSmoothScaling = GetPrivateProfileIntW(L"View", L"EnableSmoothScaling", 0, iniPath.c_str()) != 0;
 
     // Control
     g_config.ZoomModeIn = GetPrivateProfileIntW(L"Controls", L"ZoomModeIn", 0, iniPath.c_str());
@@ -4309,7 +4311,7 @@ static void SyncDCompState(HWND hwnd, float winW, float winH, bool animate) {
 
             ClampPanForViewport(vs, winW, winH, targetZoom);
 
-            float animationDurationMs = animate ? 150.0f : 0.0f;
+            float animationDurationMs = (animate && g_config.EnableSmoothScaling) ? 90.0f : 0.0f;
 
             if (UseSvgViewportRendering(g_imageResource)) {
                 VisualState surfaceVs{};
@@ -9789,7 +9791,6 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
              float winW = (float)finalWinW;
              float winH = (float)finalWinH;
              float zoomRatio = targetZoomState / oldZoom;
-
              POINT pt = *centerPt;
              ScreenToClient(hwnd, &pt);
 
@@ -9797,17 +9798,31 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
              float dy = (float)pt.y - winH / 2.0f;
              targetPanX = startPanX * zoomRatio + dx * (1.0f - zoomRatio);
              targetPanY = startPanY * zoomRatio + dy * (1.0f - zoomRatio);
-         }
+          }
 
-         StartSmoothWindowZoom(hwnd,
-                               rcWin,
-                               targetRect,
-                               startZoom,
-                               targetZoomState,
-                               startPanX,
-                               startPanY,
-                               targetPanX,
-                               targetPanY);
+          if (g_config.EnableSmoothScaling) {
+              StartSmoothWindowZoom(hwnd,
+                                    rcWin,
+                                    targetRect,
+                                    startZoom,
+                                    targetZoomState,
+                                    startPanX,
+                                    startPanY,
+                                    targetPanX,
+                                    targetPanY);
+          } else {
+              // Direct Mode - Snap to target immediately
+              g_viewState.Zoom = targetZoomState;
+              g_viewState.PanX = targetPanX;
+              g_viewState.PanY = targetPanY;
+              
+              SetWindowPos(hwnd, NULL, targetRect.left, targetRect.top, 
+                           targetRect.right - targetRect.left, targetRect.bottom - targetRect.top, 
+                           SWP_NOZORDER | SWP_NOACTIVATE);
+              
+              SyncDCompState(hwnd, (float)finalWinW, (float)finalWinH, false);
+              g_compEngine->Commit();
+          }
          
          RequestRepaint(PaintLayer::Dynamic);
          
