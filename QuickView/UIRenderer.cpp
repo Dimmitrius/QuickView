@@ -1058,14 +1058,15 @@ void UIRenderer::DrawBorderIndicators(ID2D1DeviceContext* dc) {
         }
     }
 
-    float targetZoom = baseFit * m_viewState.Zoom;
+    // Use the global g_viewState which is updated synchronously by main.cpp during panning
+    float targetZoom = baseFit * g_viewState.Zoom;
     float scaledW = imgSize.width * targetZoom;
     float scaledH = imgSize.height * targetZoom;
 
-    float imgLeft = (winW * 0.5f) - (scaledW * 0.5f) + m_viewState.PanX;
-    float imgRight = (winW * 0.5f) + (scaledW * 0.5f) + m_viewState.PanX;
-    float imgTop = (winH * 0.5f) - (scaledH * 0.5f) + m_viewState.PanY;
-    float imgBottom = (winH * 0.5f) + (scaledH * 0.5f) + m_viewState.PanY;
+    float imgLeft = (winW * 0.5f) - (scaledW * 0.5f) + g_viewState.PanX;
+    float imgRight = (winW * 0.5f) + (scaledW * 0.5f) + g_viewState.PanX;
+    float imgTop = (winH * 0.5f) - (scaledH * 0.5f) + g_viewState.PanY;
+    float imgBottom = (winH * 0.5f) + (scaledH * 0.5f) + g_viewState.PanY;
 
     // Buffer to avoid flickering at exact edge bounds
     const float edgeBuffer = 1.0f;
