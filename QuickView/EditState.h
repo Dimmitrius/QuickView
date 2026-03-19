@@ -89,7 +89,7 @@ struct AppConfig {
     bool CanvasShowGrid = false; // Overlay grid
     bool AlwaysOnTop = false;
     int OpenFullScreenMode = 0;         // 0=Off, 1=Large Only, 2=All
-    bool ResizeWindowOnZoom = true;
+    bool LockWindowSize = false;
     bool AutoHideWindowControls = true;
     bool LockBottomToolbar = false;
     bool EnableCrossMonitor = false; // [Phase 2] Cross-Monitor Spanning

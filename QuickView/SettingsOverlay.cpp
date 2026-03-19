@@ -990,7 +990,14 @@ void SettingsOverlay::BuildMenu() {
     };
     tabVisuals.items.push_back(itemRounded);
 
-    tabVisuals.items.push_back({ AppStrings::Settings_Label_ResizeOnZoom, OptionType::Toggle, &g_config.ResizeWindowOnZoom });
+    SettingsItem itemLockWindow = { AppStrings::Settings_Label_LockWindow, OptionType::Toggle, &g_config.LockWindowSize };
+    itemLockWindow.onChange = []() {
+        g_runtime.LockWindowSize = g_config.LockWindowSize;
+        g_toolbar.SetLockState(g_runtime.LockWindowSize);
+        SaveConfig();
+    };
+    tabVisuals.items.push_back(itemLockWindow);
+
     tabVisuals.items.push_back({ AppStrings::Settings_Label_AutoHideTitle, OptionType::Toggle, &g_config.AutoHideWindowControls });
     
     tabVisuals.items.push_back({ AppStrings::Settings_Header_WindowLock, OptionType::Header });
@@ -1524,6 +1531,10 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         // Track content height for scrolling
         float startContentY = contentY; 
         m_settingsContentHeight = 0.0f; // Reset
+
+        // Create scroll bounds clip
+        D2D1_RECT_F scrollClipRect = D2D1::RectF(contentX, hudY, contentX + contentW, hudY + hudH);
+        pRT->PushAxisAlignedClip(scrollClipRect, D2D1_ANTIALIAS_MODE_ALIASED);
 
         // Draw Active Tab Content
         if (m_activeTab >= 0 && m_activeTab < (int)m_tabs.size()) {
@@ -2064,6 +2075,24 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             if (currentH > m_settingsContentHeight) m_settingsContentHeight = currentH;
         } // End Item Loop
     } // End Active Tab Check
+    pRT->PopAxisAlignedClip();
+
+    // Draw Scrollbar
+    float visibleH = hudH - 60.0f * s;
+    float overflow = m_settingsContentHeight - visibleH;
+    if (overflow > 0) {
+        float maxScroll = overflow;
+        float thumbRatio = visibleH / m_settingsContentHeight;
+        float thumbH = std::max(20.0f * s, visibleH * thumbRatio);
+        float scrollProgress = -m_scrollOffset / maxScroll;
+        float thumbY = hudY + 50.0f * s + (visibleH - thumbH) * scrollProgress;
+
+        D2D1_RECT_F thumbRect = D2D1::RectF(hudX + hudW - 8.0f * s, thumbY, hudX + hudW - 4.0f * s, thumbY + thumbH);
+        ComPtr<ID2D1SolidColorBrush> scrollBrush;
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.2f), &scrollBrush);
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(thumbRect, 2.0f * s, 2.0f * s), scrollBrush.Get());
+    }
+
     } // End if (m_visible)
 
     // Draw Update Toast on Top (Always check)
@@ -2088,7 +2117,10 @@ bool SettingsOverlay::OnMouseWheel(float delta) {
     // Fallback to Settings Scroll
     if (!m_visible) return false;
     
-    m_scrollOffset += delta * 20.0f;
+    // delta is normalized in main.cpp to 1.0 or -1.0. Map to pixel scroll speed.
+    // E.g. delta > 0 -> Scroll Up (increase offset), delta < 0 -> Scroll Down (decrease offset)
+    m_scrollOffset += delta * 60.0f * m_uiScale;
+
     if (m_scrollOffset > 0.0f) m_scrollOffset = 0.0f;
     
     // Bottom Limit
@@ -2350,10 +2382,16 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
     // Default Cursor
     ::SetCursor(::LoadCursor(NULL, IDC_ARROW));
 
+    // Scroll clipping bounds
+    float hudY = m_hudY;
+    float hudBottom = m_hudY + HUD_HEIGHT * m_uiScale;
+
     if (m_activeTab >= 0 && m_activeTab < (int)m_tabs.size()) {
         for (auto& item : m_tabs[m_activeTab].items) {
-            if (x >= item.interactRect.left && x <= item.interactRect.right &&
-                y >= item.interactRect.top && y <= item.interactRect.bottom) {
+            // Must be within visible vertical bounds (accounting for clip rect)
+            if (y >= hudY && y <= hudBottom) {
+                if (x >= item.interactRect.left && x <= item.interactRect.right &&
+                    y >= item.interactRect.top && y <= item.interactRect.bottom) {
                 
                 // If ComboBox is Active, do NOT verify hover on other items effectively?
                 // Actually, if we want to click outside to close, we should allow hover?
@@ -2362,18 +2400,19 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
                 
                 m_pHoverItem = &item;
                 
-                // Sub-item Hit Testing
-                if (item.type == OptionType::AboutLinks) {
-                    LinkRects r = GetLinkButtonRects(item.rect);
-                    if (x >= r.github.left && x <= r.github.right && y >= r.github.top && y <= r.github.bottom) m_hoverLinkIndex = 0;
-                    else if (x >= r.issues.left && x <= r.issues.right && y >= r.issues.top && y <= r.issues.bottom) m_hoverLinkIndex = 1;
-                    else if (x >= r.keys.left && x <= r.keys.right && y >= r.keys.top && y <= r.keys.bottom) m_hoverLinkIndex = 2;
+                    // Sub-item Hit Testing
+                    if (item.type == OptionType::AboutLinks) {
+                        LinkRects r = GetLinkButtonRects(item.rect);
+                        if (x >= r.github.left && x <= r.github.right && y >= r.github.top && y <= r.github.bottom) m_hoverLinkIndex = 0;
+                        else if (x >= r.issues.left && x <= r.issues.right && y >= r.issues.top && y <= r.issues.bottom) m_hoverLinkIndex = 1;
+                        else if (x >= r.keys.left && x <= r.keys.right && y >= r.keys.top && y <= r.keys.bottom) m_hoverLinkIndex = 2;
+
+
+                        if (m_hoverLinkIndex != -1) ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+                    }
                     
-                    
-                    if (m_hoverLinkIndex != -1) ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+                    break;
                 }
-                
-                break;
             }
         }
     }
@@ -2602,7 +2641,17 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
         }
     }
 
-    // Clicked content background - trigger window drag (unless combo box is active)
+    // Check if clicked in scroll bounds
+    float contentX = m_hudX + SIDEBAR_WIDTH * m_uiScale;
+    float contentRight = m_hudX + HUD_WIDTH * m_uiScale;
+
+    if (x >= contentX && x <= contentRight && y >= m_hudY && y <= m_hudY + HUD_HEIGHT * m_uiScale) {
+        // If clicked in content area but not on an item, do nothing (prevent dragging window if they miss a button)
+        // Actually native drag is nice on blank areas.
+        return (m_pActiveCombo) ? SettingsAction::RepaintAll : SettingsAction::DragWindow;
+    }
+
+    // Clicked outside content?
     return (m_pActiveCombo) ? SettingsAction::RepaintAll : SettingsAction::DragWindow;
 }
 

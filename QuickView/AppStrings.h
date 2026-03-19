@@ -194,7 +194,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_Overlay;
     extern const wchar_t* Settings_Label_ShowGrid;
     extern const wchar_t* Settings_Label_AlwaysOnTop;
-    extern const wchar_t* Settings_Label_ResizeOnZoom;
+    extern const wchar_t* Settings_Label_LockWindow;
     extern const wchar_t* Settings_Label_AutoHideTitle;
     extern const wchar_t* Settings_Label_RoundedCorners; // [v3.1.2]
     extern const wchar_t* Settings_Label_LockToolbar;
