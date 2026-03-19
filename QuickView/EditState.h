@@ -98,6 +98,10 @@ struct AppConfig {
     wchar_t CustomLiteTags[256] = L"ISO, Aperture, Shutter, Date"; // Using array for easier serialization or wstring
     bool RoundedCorners = true; // [v3.1.2] Toggle rounded corners
 
+    // --- Window Size Limits ---
+    float WindowMinSize = 0.0f;         // Minimum window size (0 means auto-calculate from UI controls)
+    float WindowMaxSizePercent = 80.0f; // Maximum window size percentage relative to monitor (default 80%)
+
     // --- Window Lock Behaviors ---
     bool KeepWindowSizeOnNav = false;
     bool RememberLastWindowSize = false;

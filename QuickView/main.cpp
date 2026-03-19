@@ -250,6 +250,14 @@ CImageLoader::ImageMetadata g_currentMetadata;  // Non-static for extern access 
 static UINT g_windowDpi = USER_DEFAULT_SCREEN_DPI;
 static float g_uiScale = 1.0f;
 
+static float GetMinWindowWidth() {
+    float defaultMinW = 4.0f * 38.0f * g_uiScale; // window controls
+    if (g_config.WindowMinSize < defaultMinW) {
+        return defaultMinW;
+    }
+    return g_config.WindowMinSize;
+}
+
 static ComPtr<IDWriteTextFormat> g_pPanelTextFormat;
 static D2D1_RECT_F g_gpsLinkRect = {}; 
 static D2D1_RECT_F g_gpsCoordRect = {};  // GPS Coordinates click area
@@ -1934,8 +1942,9 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
             float screenW = (float)(mi.rcWork.right - mi.rcWork.left);
             float screenH = (float)(mi.rcWork.bottom - mi.rcWork.top);
             
-            float maxW = screenW * 0.9f;
-            float maxH = screenH * 0.9f;
+            float maxSizePercent = g_config.WindowMaxSizePercent / 100.0f;
+            float maxW = screenW * maxSizePercent;
+            float maxH = screenH * maxSizePercent;
             
             float contentW = res.isSvg ? res.svgW : (res.bitmap ? res.bitmap->GetSize().width : 800.0f);
             float contentH = res.isSvg ? res.svgH : (res.bitmap ? res.bitmap->GetSize().height : 600.0f);
@@ -3549,6 +3558,10 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"View", L"AutoHideWindowControls", g_config.AutoHideWindowControls ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"LockBottomToolbar", g_config.LockBottomToolbar ? L"1" : L"0", iniPath.c_str());
 
+    // Window Size Limits
+    WritePrivateProfileStringW(L"View", L"WindowMinSize", std::to_wstring(g_config.WindowMinSize).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"View", L"WindowMaxSizePercent", std::to_wstring(g_config.WindowMaxSizePercent).c_str(), iniPath.c_str());
+
     // Window Lock Behaviors
     WritePrivateProfileStringW(L"View", L"KeepWindowSizeOnNav", g_config.KeepWindowSizeOnNav ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"RememberLastWindowSize", g_config.RememberLastWindowSize ? L"1" : L"0", iniPath.c_str());
@@ -3649,6 +3662,13 @@ void LoadConfig() {
     }
     g_config.AutoHideWindowControls = GetPrivateProfileIntW(L"View", L"AutoHideWindowControls", 1, iniPath.c_str()) != 0;
     g_config.LockBottomToolbar = GetPrivateProfileIntW(L"View", L"LockBottomToolbar", 0, iniPath.c_str()) != 0;
+
+    // Window Size Limits
+    wchar_t bufMin[32], bufMax[32];
+    GetPrivateProfileStringW(L"View", L"WindowMinSize", L"0.0", bufMin, 32, iniPath.c_str());
+    g_config.WindowMinSize = (float)_wtof(bufMin);
+    GetPrivateProfileStringW(L"View", L"WindowMaxSizePercent", L"80.0", bufMax, 32, iniPath.c_str());
+    g_config.WindowMaxSizePercent = (float)_wtof(bufMax);
 
     // Window Lock Behaviors
     g_config.KeepWindowSizeOnNav = GetPrivateProfileIntW(L"View", L"KeepWindowSizeOnNav", 0, iniPath.c_str()) != 0;
@@ -3969,8 +3989,9 @@ void AdjustWindowToImage(HWND hwnd) {
     int windowH = static_cast<int>(imgHeight);
     
     const RECT bounds = GetWindowExpansionBounds(hwnd);
-    const int maxWinW = bounds.right - bounds.left;
-    const int maxWinH = bounds.bottom - bounds.top;
+    float maxSizePercent = g_config.WindowMaxSizePercent / 100.0f;
+    const int maxWinW = (int)((bounds.right - bounds.left) * maxSizePercent);
+    const int maxWinH = (int)((bounds.bottom - bounds.top) * maxSizePercent);
     
     // Scale down if Window is too big for screen
     if (windowW > maxWinW || windowH > maxWinH) {
@@ -3982,8 +4003,8 @@ void AdjustWindowToImage(HWND hwnd) {
     // Minimum size for UI controls (Preserve Aspect Ratio)
     // [Phase 3] User Requested: Min 100x100. Small images stay at 100% inside this.
     // If Settings is visible, we might want larger, but AdjustWindowToImage returns early if Settings visible.
-    int minW = 200;
-    int minH = 200;
+    int minW = (int)GetMinWindowWidth();
+    int minH = (int)GetMinWindowWidth();
     
     // [Phase 3] Special handling for small images
     if (imgWidth < minW && imgHeight < minH) {
@@ -5144,9 +5165,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_GETMINMAXINFO: {
         MINMAXINFO* pMMI = (MINMAXINFO*)lParam;
         
-        // [Phase 3] Default minimum window size: 200x200
-        pMMI->ptMinTrackSize.x = 200; 
-        pMMI->ptMinTrackSize.y = 200;
+        // [Phase 3] Default minimum window size
+        pMMI->ptMinTrackSize.x = (int)GetMinWindowWidth();
+        pMMI->ptMinTrackSize.y = (int)GetMinWindowWidth();
         
         // [Fix] For borderless/custom title bar windows, correctly position maximized window.
         // Without this, maximized window extends beyond screen edges (to hide resize borders),
@@ -9593,8 +9614,8 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
          if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
          resizeIsScreenLimited = capped;
          
-         if (finalWinW < 200) finalWinW = 200;
-         if (finalWinH < 200) finalWinH = 200;
+         if (finalWinW < (int)GetMinWindowWidth()) finalWinW = (int)GetMinWindowWidth();
+         if (finalWinH < (int)GetMinWindowWidth()) finalWinH = (int)GetMinWindowWidth();
          
          if (!capped && !centerPt) {
              g_viewState.PanX = 0;
