@@ -9582,95 +9582,23 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
          int targetW = (int)(vs.VisualSize.width * newTotalScale);
          int targetH = (int)(vs.VisualSize.height * newTotalScale);
          
-         // Auto-Unlock Logic
-         if (g_runtime.LockWindowSize && g_isAutoLocked) {
-             if (targetW > 200 && targetH > 200) {
-                 g_runtime.LockWindowSize = false;
-                 g_isAutoLocked = false;
-             }
-         }
-
-         // Auto-Lock Logic
-         if (!g_runtime.LockWindowSize) {
-             if (targetW < 200 || targetH < 200) {
-                 // Clamp to Min(200)
-                 int clientW = std::max(200, targetW);
-                 int clientH = std::max(200, targetH);
-                 
-                 finalWinW = clientW;
-                 finalWinH = clientH;
-                 
-                 // Engage Lock
-                 g_runtime.LockWindowSize = true;
-                 g_isAutoLocked = true;
-                 
-                 // Apply Lock Size Immediately
-                 RECT rcWin; GetWindowRect(hwnd, &rcWin);
-                 g_programmaticResize = true;
-                 const POINT* windowAnchor = (g_config.MouseAnchoredWindowZoom ? centerPt : nullptr);
-                 RECT targetRect = ExpandWindowRectToTargetWithinBounds(rcWin, finalWinW, finalWinH, bounds, windowAnchor);
-                 SetWindowPos(hwnd, nullptr, targetRect.left, targetRect.top,
-                              targetRect.right - targetRect.left, targetRect.bottom - targetRect.top,
-                              SWP_NOZORDER | SWP_NOACTIVATE);
-                              
-                 if (g_compEngine && g_compEngine->IsInitialized()) {
-                    RECT rc; GetClientRect(hwnd, &rc);
-                    float winW = (float)rc.right;
-                    float winH = (float)rc.bottom;
-                    float fitScale = std::min(winW / imgW, winH / imgH);
-                    if (!g_imageResource.isSvg) {
-                        if (g_runtime.LockWindowSize) {
-                            if (!g_config.UpscaleSmallImagesWhenLocked && fitScale > 1.0f) {
-                                fitScale = 1.0f;
-                            }
-                        } else {
-                            if (imgW < 200.0f && imgH < 200.0f && fitScale > 1.0f) {
-                                fitScale = 1.0f;
-                            }
-                        }
-                    }
-                    if (fitScale > 0.0001f) {
-                        float newZoom = newTotalScale / fitScale;
-                        if (centerPt && oldZoom > 0.0001f) {
-                            float zoomRatio = newZoom / oldZoom;
-                            POINT pt = *centerPt;
-                            ScreenToClient(hwnd, &pt);
-
-                            float dx = (float)pt.x - winW / 2.0f;
-                            float dy = (float)pt.y - winH / 2.0f;
-                            g_viewState.PanX = g_viewState.PanX * zoomRatio + dx * (1.0f - zoomRatio);
-                            g_viewState.PanY = g_viewState.PanY * zoomRatio + dy * (1.0f - zoomRatio);
-                        } else if (oldZoom > 0.0001f) {
-                            float zoomRatio = newZoom / oldZoom;
-                            g_viewState.PanX *= zoomRatio;
-                            g_viewState.PanY *= zoomRatio;
-                        }
-                        g_viewState.Zoom = newZoom;
-                    }
-                    SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
-                    g_compEngine->Commit();
-                    g_programmaticResize = false;
-                 }
-             } else {
-                 // Normal Resize
-                 willResizeWindow = true;
-                 
-                 bool capped = false;
-                 finalWinW = targetW;
-                 finalWinH = targetH;
-                 
-                 if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
-                 if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
-                 resizeIsScreenLimited = capped;
-                 
-                 if (finalWinW < 200) finalWinW = 200;
-                 if (finalWinH < 200) finalWinH = 200;
-                 
-                 if (!capped && !centerPt) {
-                     g_viewState.PanX = 0;
-                     g_viewState.PanY = 0;
-                 }
-             }
+         // 200px Minimum logic is now handled in 'Normal Resize' path below
+         // to prevent accidental mode switches that cause UI deadlocks.
+         willResizeWindow = true;
+         finalWinW = targetW;
+         finalWinH = targetH;
+         
+         bool capped = false;
+         if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
+         if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
+         resizeIsScreenLimited = capped;
+         
+         if (finalWinW < 200) finalWinW = 200;
+         if (finalWinH < 200) finalWinH = 200;
+         
+         if (!capped && !centerPt) {
+             g_viewState.PanX = 0;
+             g_viewState.PanY = 0;
          }
     }
     
