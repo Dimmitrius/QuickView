@@ -107,6 +107,8 @@ struct AppConfig {
     bool RememberLastWindowSize = false;
     bool UpscaleSmallImagesWhenLocked = false;
 
+    bool ShowBorderIndicator = true;
+
     // --- Control ---
     int ZoomModeIn = 0;                 // 0=Auto, 1=Linear, 2=Nearest, 3=High Quality Cubic
     int ZoomModeOut = 0;                // 0=Auto, 1=Linear, 2=Nearest, 3=High Quality Cubic

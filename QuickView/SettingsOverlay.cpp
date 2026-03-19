@@ -1019,6 +1019,8 @@ void SettingsOverlay::BuildMenu() {
     itemMaxSize.displayFormat = L"%.0f %%";
     tabVisuals.items.push_back(itemMaxSize);
 
+    tabVisuals.items.push_back({ AppStrings::Settings_Label_ShowBorderIndicator, OptionType::Toggle, &g_config.ShowBorderIndicator });
+
     tabVisuals.items.push_back({ AppStrings::Settings_Header_WindowLock, OptionType::Header });
     tabVisuals.items.push_back({ AppStrings::Settings_Label_KeepWindowSizeOnNav, OptionType::Toggle, &g_config.KeepWindowSizeOnNav });
     tabVisuals.items.push_back({ AppStrings::Settings_Label_RememberLastWindowSize, OptionType::Toggle, &g_config.RememberLastWindowSize });
