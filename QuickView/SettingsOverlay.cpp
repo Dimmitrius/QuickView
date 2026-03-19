@@ -1000,6 +1000,23 @@ void SettingsOverlay::BuildMenu() {
 
     tabVisuals.items.push_back({ AppStrings::Settings_Label_AutoHideTitle, OptionType::Toggle, &g_config.AutoHideWindowControls });
     
+    // Window Min Width Slider (200px to 800px)
+    SettingsItem itemMinSize = { AppStrings::Settings_Label_WindowMinSize, OptionType::Slider, nullptr, &g_config.WindowMinSize };
+    // UI controls width is roughly 38.0f * 4 * m_uiScale (which is 152 at 1.0 scale).
+    // We can set the minimum of the slider to 152.0f * m_uiScale to ensure we never go below the window controls width.
+    itemMinSize.minVal = 152.0f * m_uiScale;
+    if (g_config.WindowMinSize < itemMinSize.minVal) {
+        g_config.WindowMinSize = itemMinSize.minVal;
+    }
+    itemMinSize.maxVal = 800.0f;
+    tabVisuals.items.push_back(itemMinSize);
+
+    // Window Max Start Size Percent Slider (10% to 100%)
+    SettingsItem itemMaxSize = { AppStrings::Settings_Label_WindowMaxSizePercent, OptionType::Slider, nullptr, &g_config.WindowMaxSizePercent };
+    itemMaxSize.minVal = 10.0f;
+    itemMaxSize.maxVal = 100.0f;
+    tabVisuals.items.push_back(itemMaxSize);
+
     tabVisuals.items.push_back({ AppStrings::Settings_Header_WindowLock, OptionType::Header });
     tabVisuals.items.push_back({ AppStrings::Settings_Label_KeepWindowSizeOnNav, OptionType::Toggle, &g_config.KeepWindowSizeOnNav });
     tabVisuals.items.push_back({ AppStrings::Settings_Label_RememberLastWindowSize, OptionType::Toggle, &g_config.RememberLastWindowSize });

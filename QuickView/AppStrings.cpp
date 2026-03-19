@@ -187,6 +187,8 @@ namespace AppStrings {
     const wchar_t* Settings_Label_AutoHideTitle = nullptr;
     const wchar_t* Settings_Label_RoundedCorners = nullptr;
     const wchar_t* Settings_Label_LockToolbar = nullptr;
+    const wchar_t* Settings_Label_WindowMinSize = nullptr;
+    const wchar_t* Settings_Label_WindowMaxSizePercent = nullptr;
     const wchar_t* Settings_Label_KeepWindowSizeOnNav = nullptr;
     const wchar_t* Settings_Label_RememberLastWindowSize = nullptr;
     const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = nullptr;
@@ -496,6 +498,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Auto-Hide Title Bar";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Rounded Corners";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Lock Bottom Toolbar";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"Minimum Window Width";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"Maximum Start Size (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"Keep window size on navigation";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"Remember last window size";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"Adapt small images";
@@ -712,6 +716,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"自动隐藏标题栏";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"圆角窗口";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"锁定底部工具栏";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"默认最小窗口宽度";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"默认最大启动尺寸 (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"导航时保持窗口尺寸不变";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"记住最后窗口尺寸";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"小于窗口尺寸图片适应窗口";
@@ -1105,6 +1111,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"自動隱藏標題列";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"圓角視窗";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"鎖定底部工具列";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"預設最小視窗寬度";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"預設最大啟動尺寸 (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"導航時保持視窗尺寸不變";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"記住最後視窗尺寸";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"小於視窗尺寸圖片適應視窗";
@@ -1396,6 +1404,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"タイトルバー自動非表示";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"角丸ウィンドウ";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"下部ツールバー固定";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"最小ウィンドウ幅";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"最大起動サイズ (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"ナビゲーション時にウィンドウサイズを保持";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"最後のウィンドウサイズを記憶";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"小さな画像をウィンドウに合わせる";
@@ -1687,6 +1697,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Автоскрытие заголовка";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Закругленные углы";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Закрепить нижнюю панель";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"Мин. ширина окна";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"Макс. начальный размер (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"Сохранять размер окна при навигации";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"Запомнить последний размер окна";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"Адаптировать мелкие изображения";
@@ -1978,6 +1990,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Titelleiste automatisch ausblenden";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Abgerundete Ecken";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Untere Symbolleiste sperren";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"Minimale Fensterbreite";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"Maximale Startgröße (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"Fenstergröße bei Navigation beibehalten";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"Letzte Fenstergröße merken";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"Kleine Bilder anpassen";
@@ -2269,6 +2283,8 @@ namespace AppStrings {
         static constexpr const wchar_t* Settings_Label_AutoHideTitle = L"Ocultar barra de título";
         static constexpr const wchar_t* Settings_Label_RoundedCorners = L"Esquinas Redondeadas";
         static constexpr const wchar_t* Settings_Label_LockToolbar = L"Bloquear barra inferior";
+        static constexpr const wchar_t* Settings_Label_WindowMinSize = L"Anchura mínima de ventana";
+        static constexpr const wchar_t* Settings_Label_WindowMaxSizePercent = L"Tamaño máximo de inicio (%)";
         static constexpr const wchar_t* Settings_Label_KeepWindowSizeOnNav = L"Mantener el tamaño de la ventana al navegar";
         static constexpr const wchar_t* Settings_Label_RememberLastWindowSize = L"Recordar el último tamaño de ventana";
         static constexpr const wchar_t* Settings_Label_UpscaleSmallImagesWhenLocked = L"Adaptar imágenes pequeñas";
@@ -2580,6 +2596,8 @@ namespace AppStrings {
         Settings_Label_AutoHideTitle = T::Settings_Label_AutoHideTitle;
         Settings_Label_RoundedCorners = T::Settings_Label_RoundedCorners;
         Settings_Label_LockToolbar = T::Settings_Label_LockToolbar;
+        Settings_Label_WindowMinSize = T::Settings_Label_WindowMinSize;
+        Settings_Label_WindowMaxSizePercent = T::Settings_Label_WindowMaxSizePercent;
         Settings_Label_KeepWindowSizeOnNav = T::Settings_Label_KeepWindowSizeOnNav;
         Settings_Label_RememberLastWindowSize = T::Settings_Label_RememberLastWindowSize;
         Settings_Label_UpscaleSmallImagesWhenLocked = T::Settings_Label_UpscaleSmallImagesWhenLocked;

@@ -967,11 +967,12 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
 
 void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
     if (!m_showControls && m_winCtrlHover == -1) return;
-    if (m_width < 200) return;
     const float s = m_uiScale;
-    
     float btnW = 38.0f * s;
     float btnH = 28.0f * s;
+
+    // Do not draw if there is not even enough space for the buttons
+    if (m_width < btnW * 4) return;
     
     // [Fix] Only apply offset when MAXIMIZED (has hidden border)
     // Fullscreen has NO border, so no offset needed
