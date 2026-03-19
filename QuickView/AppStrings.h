@@ -204,6 +204,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_LockToolbar;
     extern const wchar_t* Settings_Label_WindowMinSize;
     extern const wchar_t* Settings_Label_WindowMaxSizePercent;
+    extern const wchar_t* Settings_Label_ShowBorderIndicator;
 
     extern const wchar_t* Settings_Label_KeepWindowSizeOnNav;
     extern const wchar_t* Settings_Label_RememberLastWindowSize;

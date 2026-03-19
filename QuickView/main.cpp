@@ -3601,6 +3601,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"View", L"LockWindowSize", g_config.LockWindowSize ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"AutoHideWindowControls", g_config.AutoHideWindowControls ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"LockBottomToolbar", g_config.LockBottomToolbar ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"View", L"ShowBorderIndicator", g_config.ShowBorderIndicator ? L"1" : L"0", iniPath.c_str());
 
     // Window Size Limits
     WritePrivateProfileStringW(L"View", L"WindowMinSize", std::to_wstring(g_config.WindowMinSize).c_str(), iniPath.c_str());
@@ -3708,6 +3709,7 @@ void LoadConfig() {
     }
     g_config.AutoHideWindowControls = GetPrivateProfileIntW(L"View", L"AutoHideWindowControls", 1, iniPath.c_str()) != 0;
     g_config.LockBottomToolbar = GetPrivateProfileIntW(L"View", L"LockBottomToolbar", 0, iniPath.c_str()) != 0;
+    g_config.ShowBorderIndicator = GetPrivateProfileIntW(L"View", L"ShowBorderIndicator", 1, iniPath.c_str()) != 0;
 
     // Window Size Limits
     wchar_t bufMin[32], bufMax[32];
@@ -5678,7 +5680,7 @@ SKIP_EDGE_NAV:;
                      }
                  }
                  MarkCompareDirty();
-                 RequestRepaint(PaintLayer::Image);
+                 RequestRepaint(PaintLayer::Image | PaintLayer::Static);
              } else {
                  g_viewState.PanX += dx; 
                  g_viewState.PanY += dy; 
@@ -5686,9 +5688,9 @@ SKIP_EDGE_NAV:;
                  RECT rc; GetClientRect(hwnd, &rc);
                  SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
                  if (UseSvgViewportRendering(g_imageResource)) {
-                     RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
+                     RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic | PaintLayer::Static);
                  } else {
-                     RequestRepaint(PaintLayer::Dynamic);  // OSD update only
+                     RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);  // OSD and Border indicators update
                  }
              }
          }

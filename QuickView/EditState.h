@@ -108,6 +108,8 @@ struct AppConfig {
     bool RememberLastWindowSize = false;
     bool UpscaleSmallImagesWhenLocked = false;
 
+    bool ShowBorderIndicator = true;
+
     // --- Control ---
     bool EnableCrossFade = true;        // Enable cross-fade animation when changing images
     int ZoomModeIn = 0;                 // 0=Auto, 1=Linear, 2=Nearest, 3=High Quality Cubic
