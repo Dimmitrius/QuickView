@@ -3841,26 +3841,26 @@ bool CheckExtensionMismatch(const std::wstring& path, const std::wstring& format
     std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::towlower);
     
     // Basic mapping & Loader Name Detection
-    if (fmt == L"jpeg" || fmt.find(L"jpeg") != std::wstring::npos) return (ext != L".jpg" && ext != L".jpeg" && ext != L".jpe" && ext != L".jfif");
-    if (fmt == L"png" || fmt.find(L"png") != std::wstring::npos) return (ext != L".png");
-    if (fmt == L"webp" || fmt.find(L"webp") != std::wstring::npos) return (ext != L".webp");
-    if (fmt == L"avif" || fmt.find(L"avif") != std::wstring::npos || fmt.find(L"libavif") != std::wstring::npos) return (ext != L".avif");
-    if (fmt == L"gif" || fmt.find(L"gif") != std::wstring::npos) return (ext != L".gif");
-    if (fmt == L"bmp" || fmt.find(L"bmp") != std::wstring::npos) return (ext != L".bmp" && ext != L".dib");
-    if (fmt == L"tiff" || fmt == L"tiff" || fmt.find(L"tiff") != std::wstring::npos) return (ext != L".tif" && ext != L".tiff");
-    if (fmt == L"heif" || fmt == L"heic" || fmt.find(L"heic") != std::wstring::npos) return (ext != L".heic" && ext != L".heif");
+    if (fmt == L"jpeg" || fmt.contains(L"jpeg")) return (ext != L".jpg" && ext != L".jpeg" && ext != L".jpe" && ext != L".jfif");
+    if (fmt == L"png" || fmt.contains(L"png")) return (ext != L".png");
+    if (fmt == L"webp" || fmt.contains(L"webp")) return (ext != L".webp");
+    if (fmt == L"avif" || fmt.contains(L"avif") || fmt.contains(L"libavif")) return (ext != L".avif");
+    if (fmt == L"gif" || fmt.contains(L"gif")) return (ext != L".gif");
+    if (fmt == L"bmp" || fmt.contains(L"bmp")) return (ext != L".bmp" && ext != L".dib");
+    if (fmt == L"tiff" || fmt.contains(L"tiff")) return (ext != L".tif" && ext != L".tiff");
+    if (fmt == L"heif" || fmt == L"heic" || fmt.contains(L"heic")) return (ext != L".heic" && ext != L".heif");
     
     // JXL
-    if (fmt == L"jxl" || fmt == L"jpeg xl" || fmt.find(L"jxl") != std::wstring::npos) return (ext != L".jxl");
+    if (fmt == L"jxl" || fmt == L"jpeg xl" || fmt.contains(L"jxl")) return (ext != L".jxl");
     
     // HDR (Stb Image (HDR))
-    if (fmt == L"hdr" || fmt.find(L"hdr") != std::wstring::npos) return (ext != L".hdr" && ext != L".pic");
+    if (fmt == L"hdr" || fmt.contains(L"hdr")) return (ext != L".hdr" && ext != L".pic");
     
     // PSD / PSB
-    if (fmt == L"psd" || fmt.find(L"psd") != std::wstring::npos) return (ext != L".psd" && ext != L".psb");
+    if (fmt == L"psd" || fmt.contains(L"psd")) return (ext != L".psd" && ext != L".psb");
     
     // EXR
-    if (fmt == L"exr" || fmt.find(L"exr") != std::wstring::npos || fmt.find(L"tinyexr") != std::wstring::npos) return (ext != L".exr");
+    if (fmt == L"exr" || fmt.contains(L"exr") || fmt.contains(L"tinyexr")) return (ext != L".exr");
 
     return false;
 }
