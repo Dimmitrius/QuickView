@@ -277,7 +277,7 @@ static constexpr UINT_PTR IDT_INTERACTION = 1001; // Interaction debounce for HQ
 
 static constexpr UINT_PTR IDT_SMOOTH_WINDOW_ZOOM = 1002;
 
-static constexpr UINT_PTR IDT_SMOOTH_ZOOM = 1002; // Drive transform-only smooth zoom animation
+static constexpr UINT_PTR IDT_SMOOTH_ZOOM = 1003; // Drive transform-only smooth zoom animation
 
 
 // Phase 2: Queue Drop Debounce (single-slot sliding window)
@@ -3084,7 +3084,7 @@ static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = f
 
     // 0. [Logic] Magnetic Snap Time Lock (Moved here to use valid currentTotalScale)
     static DWORD s_lastSnapTime = 0;
-    if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 80)) {
+    if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 120)) {
          return currentTotalScale; 
     }
 
@@ -4742,7 +4742,7 @@ static void StartSmoothWindowZoom(HWND hwnd,
                                   float targetPanY) {
     g_smoothWindowZoom.active = true;
     g_smoothWindowZoom.startTime = std::chrono::steady_clock::now();
-    g_smoothWindowZoom.durationMs = 90.0f;
+    g_smoothWindowZoom.durationMs = 50.0f;
     g_smoothWindowZoom.startRect = startRect;
     g_smoothWindowZoom.targetRect = targetRect;
     g_smoothWindowZoom.startZoom = startZoom;
@@ -4787,6 +4787,9 @@ static void TickSmoothWindowZoom(HWND hwnd) {
 
     g_programmaticResize = true;
     g_deferProgrammaticZoomResizeSync = true;
+
+    // By calling SetWindowPos, WM_SIZE will be emitted, but we defer the
+    // DComp Sync there because we want to sync our exact step state here.
     SetWindowPos(hwnd, nullptr,
                  stepRect.left,
                  stepRect.top,
@@ -4799,6 +4802,7 @@ static void TickSmoothWindowZoom(HWND hwnd) {
         RECT rc; GetClientRect(hwnd, &rc);
         SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom, false);
         g_compEngine->Commit();
+        DwmFlush(); // Force DWM to sync, preventing tearing during window animation
     }
     RequestRepaint(PaintLayer::Dynamic);
 
@@ -10252,17 +10256,18 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
          finalWinW = targetW;
          finalWinH = targetH;
          
-         bool capped = false;
-         if (finalWinW > maxW) { finalWinW = maxW; capped = true; }
-         if (finalWinH > maxH) { finalWinH = maxH; capped = true; }
-         resizeIsScreenLimited = capped;
+         bool cappedW = false;
+         bool cappedH = false;
+         if (finalWinW > maxW) { finalWinW = maxW; cappedW = true; }
+         if (finalWinH > maxH) { finalWinH = maxH; cappedH = true; }
+         resizeIsScreenLimited = cappedW || cappedH;
          
          if (finalWinW < (int)GetMinWindowWidth()) finalWinW = (int)GetMinWindowWidth();
          if (finalWinH < (int)GetMinWindowWidth()) finalWinH = (int)GetMinWindowWidth();
          
-         if (!capped && !centerPt) {
-             g_viewState.PanX = 0;
-             g_viewState.PanY = 0;
+         if (!centerPt) {
+             if (!cappedW) g_viewState.PanX = 0;
+             if (!cappedH) g_viewState.PanY = 0;
          }
     }
     
@@ -10289,20 +10294,25 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
          float targetPanX = startPanX;
          float targetPanY = startPanY;
 
-         if (centerPt && oldZoom > 0.0001f) {
-             float winW = (float)finalWinW;
-             float winH = (float)finalWinH;
+         if (oldZoom > 0.0001f) {
              float zoomRatio = targetZoomState / oldZoom;
-             POINT pt = *centerPt;
-             ScreenToClient(hwnd, &pt);
+             if (centerPt) {
+                 float winW = (float)finalWinW;
+                 float winH = (float)finalWinH;
+                 POINT pt = *centerPt;
+                 ScreenToClient(hwnd, &pt);
 
-             float dx = (float)pt.x - winW / 2.0f;
-             float dy = (float)pt.y - winH / 2.0f;
-             targetPanX = startPanX * zoomRatio + dx * (1.0f - zoomRatio);
-             targetPanY = startPanY * zoomRatio + dy * (1.0f - zoomRatio);
-          }
+                 float dx = (float)pt.x - winW / 2.0f;
+                 float dy = (float)pt.y - winH / 2.0f;
+                 targetPanX = startPanX * zoomRatio + dx * (1.0f - zoomRatio);
+                 targetPanY = startPanY * zoomRatio + dy * (1.0f - zoomRatio);
+             } else {
+                 targetPanX = startPanX * zoomRatio;
+                 targetPanY = startPanY * zoomRatio;
+             }
+         }
 
-          if (g_config.EnableSmoothScaling) {
+          if (useSmoothZoomAnimation && g_config.EnableSmoothScaling) {
               StartSmoothWindowZoom(hwnd,
                                     rcWin,
                                     targetRect,
@@ -10324,6 +10334,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
               
               SyncDCompState(hwnd, (float)finalWinW, (float)finalWinH, false);
               g_compEngine->Commit();
+              DwmFlush(); // Force DWM to sync, preventing tearing when smooth scaling is off
           }
           RequestRepaint(PaintLayer::Dynamic);
      } else {
