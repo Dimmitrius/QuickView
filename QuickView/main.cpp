@@ -1386,10 +1386,19 @@ static void CaptureCurrentImageAsCompareLeft() {
     g_compare.left.view.Zoom = g_viewState.Zoom;
     g_compare.left.view.PanX = g_viewState.PanX;
     g_compare.left.view.PanY = g_viewState.PanY;
-    g_compare.left.view.ExifOrientation = g_viewState.ExifOrientation;
+    // [Fix] Use g_renderExifOrientation instead of g_viewState.ExifOrientation.
+    // After RenderImageToDComp, g_viewState.ExifOrientation is neutralized to 1
+    // (since the DComp surface is physically rotated). But the bitmap in
+    // g_imageResource is still un-rotated, so compare mode's DrawResourceIntoViewport
+    // needs the original orientation to apply the rotation correctly.
+    g_compare.left.view.ExifOrientation = g_renderExifOrientation;
     if (!g_config.AutoRotate) {
         g_compare.left.view.ExifOrientation = 1;
         g_compare.left.metadata.ExifOrientation = 1;
+    }
+    // [Fix] Also restore metadata ExifOrientation (was neutralized after RenderImageToDComp)
+    if (g_config.AutoRotate && g_renderExifOrientation > 1) {
+        g_compare.left.metadata.ExifOrientation = g_renderExifOrientation;
     }
 }
 
