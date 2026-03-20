@@ -8680,6 +8680,10 @@ void ProcessEngineEvents(HWND hwnd) {
                     g_toolbar.SetExtensionWarning(false);
                 }
                 
+                // Refresh Layout to recalculate Warning Icon bounds
+                RECT rc; GetClientRect(hwnd, &rc);
+                g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+
                 // [v5.3] Set EXIF Orientation based on AutoRotate config
                 if (g_config.AutoRotate) {
                      // Trust the metadata.

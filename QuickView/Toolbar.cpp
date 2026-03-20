@@ -54,7 +54,7 @@ Toolbar::Toolbar() {
        {},
        false,
        false,
-       true}, // Hidden if no mismatch
+       false}, // Hidden if no mismatch
 
       {ToolbarButtonID::CompareToggle, ICON_COMPARE[0], {}, true, false},
 
