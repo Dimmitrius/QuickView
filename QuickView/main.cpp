@@ -1321,19 +1321,20 @@ static void DrawResourceIntoViewport(ID2D1DeviceContext* ctx,
 static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
     if (path.empty() || !g_imageLoader || !g_renderEngine) return false;
 
-    ComPtr<IWICBitmap> wicBitmap;
+    // [Fix] Use LoadToFrame (same pipeline as right pane / ImageEngine) instead of
+    // LoadToMemory. This ensures identical output: same embedded preview for RAW,
+    // same decoder path, and accurate exifOrientation from the codec.
+    QuickView::RawImageFrame frame;
+    CImageLoader::ImageMetadata meta;
     std::wstring loaderName;
-    if (FAILED(g_imageLoader->LoadToMemory(path.c_str(), &wicBitmap, &loaderName, g_runtime.ForceRawDecode))) {
-        return false;
-    }
+    HRESULT hr = g_imageLoader->LoadToFrame(path.c_str(), &frame, nullptr, 0, 0,
+                                             &loaderName, nullptr, &meta);
+    if (FAILED(hr) || !frame.IsValid()) return false;
 
-    ComPtr<ID2D1DeviceContext> dc = g_renderEngine->GetDeviceContext();
-    if (!dc || !wicBitmap) return false;
-
+    // Upload pixel data to D2D bitmap (same as main pipeline)
     ComPtr<ID2D1Bitmap> d2dBitmap;
-    if (FAILED(dc->CreateBitmapFromWicBitmap(wicBitmap.Get(), nullptr, &d2dBitmap)) || !d2dBitmap) {
-        return false;
-    }
+    hr = g_renderEngine->UploadRawFrameToGPU(frame, &d2dBitmap);
+    if (FAILED(hr) || !d2dBitmap) return false;
 
     g_compare.left.Reset();
     g_compare.left.resource.bitmap = d2dBitmap;
@@ -1341,43 +1342,19 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
     g_compare.left.valid = true;
     g_compare.left.view = {};
 
-    CImageLoader::ImageMetadata meta;
-    if (SUCCEEDED(g_imageLoader->ReadMetadata(path.c_str(), &meta, true))) {
-        g_compare.left.metadata = meta;
-    }
+    g_compare.left.metadata = meta;
     D2D1_SIZE_U pixel = d2dBitmap->GetPixelSize();
     if (g_compare.left.metadata.Width == 0 || g_compare.left.metadata.Height == 0) {
         g_compare.left.metadata.Width = pixel.width;
         g_compare.left.metadata.Height = pixel.height;
     }
-    if (g_compare.left.metadata.ExifOrientation < 1 || g_compare.left.metadata.ExifOrientation > 8) {
-        g_compare.left.metadata.ExifOrientation = 1;
-    }
 
-    // [Fix] Use g_lastExifOrientation from decoder when available.
-    // LoadRaw now sets this accurately:
-    //   - Embedded JPEG preview (pre-rotated by camera) → g_lastExifOrientation = 1
-    //   - Bitmap thumbnail (un-rotated) → g_lastExifOrientation = real orientation
-    //   - Full decode (user_flip=0, un-rotated) → g_lastExifOrientation = real orientation
-    // This is far more reliable than the old dimension-based heuristic which fails
-    // when preview resolution differs from sensor resolution.
-    extern int g_lastExifOrientation;
-    if (g_lastExifOrientation >= 1 && g_lastExifOrientation <= 8) {
-        g_compare.left.metadata.ExifOrientation = g_lastExifOrientation;
-    } else {
-        // Fallback: dimension-based pre-rotation detection (for non-RAW formats)
-        if (g_compare.left.metadata.ExifOrientation >= 5 && g_compare.left.metadata.ExifOrientation <= 8) {
-            int wDiff = (int)pixel.width - (int)g_compare.left.metadata.Height;
-            int hDiff = (int)pixel.height - (int)g_compare.left.metadata.Width;
-            if (wDiff < 0) wDiff = -wDiff;
-            if (hDiff < 0) hDiff = -hDiff;
-            if (wDiff < 5 && hDiff < 5) {
-                g_compare.left.metadata.ExifOrientation = 1;
-            }
-        }
-    }
-
-    g_compare.left.view.ExifOrientation = g_config.AutoRotate ? g_compare.left.metadata.ExifOrientation : 1;
+    // [Fix] EXIF orientation comes directly from the codec via RawImageFrame.
+    // No need for unreliable dimension-based pre-rotation heuristics.
+    int frameExif = frame.exifOrientation;
+    if (frameExif < 1 || frameExif > 8) frameExif = 1;
+    g_compare.left.metadata.ExifOrientation = frameExif;
+    g_compare.left.view.ExifOrientation = g_config.AutoRotate ? frameExif : 1;
 
     // [v10.0] Trigger Histogram calculation if HUD is showing
     if (g_runtime.ShowCompareInfo && (g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded)) {
