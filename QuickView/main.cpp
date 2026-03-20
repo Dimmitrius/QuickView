@@ -3841,6 +3841,7 @@ static constexpr FormatExtRule g_formatRules[] = {
     { L"gif",  L".gif" },
     { L"bmp",  L".bmp", L".dib" },
     { L"tiff", L".tiff", L".tif" },
+    { L"tif",  L".tiff", L".tif" },
     { L"heif", L".heic", L".heif" },
     { L"heic", L".heic", L".heif" },
     { L"jxl",  L".jxl", L"jpeg xl" },
@@ -3862,7 +3863,7 @@ static std::wstring_view GetPrimaryExtensionForFormat(std::wstring_view format) 
     std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::towlower);
     
     for (const auto& rule : g_formatRules) {
-        if (fmt == rule.format || (rule.format.length() > 3 && fmt.contains(rule.format))) return rule.primary;
+        if (fmt == rule.format || fmt.contains(rule.format)) return rule.primary;
     }
     return {};
 }
@@ -3887,7 +3888,7 @@ bool CheckExtensionMismatch(std::wstring_view path, std::wstring_view format) {
     std::wstring_view ext = extStr;
     
     for (const auto& rule : g_formatRules) {
-        if (fmt == rule.format || (rule.format.length() > 3 && fmt.contains(rule.format))) {
+        if (fmt == rule.format || fmt.contains(rule.format)) {
             if (ext == rule.primary) return false;
             if (!rule.alt1.empty() && ext == rule.alt1) return false;
             if (!rule.alt2.empty() && ext == rule.alt2) return false;
