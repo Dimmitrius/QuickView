@@ -1057,6 +1057,7 @@ static void ZoomCompareView(CompareView& view,
     view.Zoom = newZoom;
 }
 
+
 static D2D1_RECT_F GetCompareViewport(HWND hwnd, ComparePane pane) {
     RECT rc{};
     GetClientRect(hwnd, &rc);
@@ -2845,6 +2846,63 @@ static bool TickSmoothZoom(HWND hwnd) {
 
 
 
+static void CycleCompareZoomForPane(CompareView& view, const ImageResource& res, const D2D1_RECT_F& viewport) {
+    D2D1_SIZE_F sz = GetOrientedSize(res, view.ExifOrientation);
+    float vpW = viewport.right - viewport.left;
+    float vpH = viewport.bottom - viewport.top;
+    if (sz.width <= 0 || sz.height <= 0 || vpW <= 0 || vpH <= 0) return;
+    float fit = std::min(vpW / sz.width, vpH / sz.height);
+    float fill = std::max(vpW / sz.width, vpH / sz.height);
+    float pixelScale = view.Zoom * fit;
+    if (fabsf(view.Zoom - 1.0f) < 0.05f) {
+        view.Zoom = 1.0f / fit;
+    } else if (fabsf(pixelScale - 1.0f) < 0.05f) {
+        view.Zoom = fill / fit;
+    } else {
+        view.Zoom = 1.0f;
+    }
+    view.PanX = 0.0f; view.PanY = 0.0f;
+}
+
+static void ToggleCompareHUD(HWND hwnd, int targetMode) {
+    if (!g_runtime.ShowCompareInfo) {
+        g_runtime.ShowCompareInfo = true;
+        g_runtime.CompareHudMode = targetMode; 
+    } else if (g_runtime.CompareHudMode != targetMode) {
+        g_runtime.CompareHudMode = targetMode; 
+    } else {
+        g_runtime.ShowCompareInfo = false; 
+    }
+
+    g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
+    if (g_runtime.ShowCompareInfo) {
+        if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) {
+            UpdateHistogramAsync(hwnd, g_imagePath);
+        }
+        if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty()) {
+            UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
+        }
+        
+        // Elastic HUD: Expand window if it's too small for the HUD
+        RECT rcClient;
+        if (GetClientRect(hwnd, &rcClient)) {
+            int w = rcClient.right - rcClient.left;
+            int h = rcClient.bottom - rcClient.top;
+            
+            // Target HUD Size + margins
+            int minW = (int)(450.0f * g_uiScale);
+            int minH = (int)(300.0f * g_uiScale);
+            
+            if (w < minW || h < minH) {
+                int targetW = std::max(w, minW);
+                int targetH = std::max(h, minH);
+                SetWindowPos(hwnd, nullptr, 0, 0, targetW, targetH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+    RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
+}
+
 static RECT s_restoredWindowRect = { 0 };
 
 // Inlined Logic to avoid dependency on local lambdas
@@ -3783,26 +3841,26 @@ bool CheckExtensionMismatch(const std::wstring& path, const std::wstring& format
     std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::towlower);
     
     // Basic mapping & Loader Name Detection
-    if (fmt == L"jpeg" || fmt.contains(L"jpeg")) return (ext != L".jpg" && ext != L".jpeg" && ext != L".jpe" && ext != L".jfif");
-    if (fmt == L"png" || fmt.contains(L"png")) return (ext != L".png");
-    if (fmt == L"webp" || fmt.contains(L"webp")) return (ext != L".webp");
-    if (fmt == L"avif" || fmt.contains(L"avif") || fmt.contains(L"libavif")) return (ext != L".avif");
-    if (fmt == L"gif" || fmt.contains(L"gif")) return (ext != L".gif");
-    if (fmt == L"bmp" || fmt.contains(L"bmp")) return (ext != L".bmp" && ext != L".dib");
-    if (fmt == L"tiff" || fmt.contains(L"tiff")) return (ext != L".tif" && ext != L".tiff");
-    if (fmt == L"heif" || fmt == L"heic" || fmt.contains(L"heic")) return (ext != L".heic" && ext != L".heif");
+    if (fmt == L"jpeg" || fmt.find(L"jpeg") != std::wstring::npos) return (ext != L".jpg" && ext != L".jpeg" && ext != L".jpe" && ext != L".jfif");
+    if (fmt == L"png" || fmt.find(L"png") != std::wstring::npos) return (ext != L".png");
+    if (fmt == L"webp" || fmt.find(L"webp") != std::wstring::npos) return (ext != L".webp");
+    if (fmt == L"avif" || fmt.find(L"avif") != std::wstring::npos || fmt.find(L"libavif") != std::wstring::npos) return (ext != L".avif");
+    if (fmt == L"gif" || fmt.find(L"gif") != std::wstring::npos) return (ext != L".gif");
+    if (fmt == L"bmp" || fmt.find(L"bmp") != std::wstring::npos) return (ext != L".bmp" && ext != L".dib");
+    if (fmt == L"tiff" || fmt == L"tiff" || fmt.find(L"tiff") != std::wstring::npos) return (ext != L".tif" && ext != L".tiff");
+    if (fmt == L"heif" || fmt == L"heic" || fmt.find(L"heic") != std::wstring::npos) return (ext != L".heic" && ext != L".heif");
     
     // JXL
-    if (fmt == L"jxl" || fmt == L"jpeg xl" || fmt.contains(L"jxl")) return (ext != L".jxl");
+    if (fmt == L"jxl" || fmt == L"jpeg xl" || fmt.find(L"jxl") != std::wstring::npos) return (ext != L".jxl");
     
     // HDR (Stb Image (HDR))
-    if (fmt == L"hdr" || fmt.contains(L"hdr")) return (ext != L".hdr" && ext != L".pic");
+    if (fmt == L"hdr" || fmt.find(L"hdr") != std::wstring::npos) return (ext != L".hdr" && ext != L".pic");
     
     // PSD / PSB
-    if (fmt == L"psd" || fmt.contains(L"psd")) return (ext != L".psd" && ext != L".psb");
+    if (fmt == L"psd" || fmt.find(L"psd") != std::wstring::npos) return (ext != L".psd" && ext != L".psb");
     
     // EXR
-    if (fmt == L"exr" || fmt.contains(L"exr") || fmt.contains(L"tinyexr")) return (ext != L".exr");
+    if (fmt == L"exr" || fmt.find(L"exr") != std::wstring::npos || fmt.find(L"tinyexr") != std::wstring::npos) return (ext != L".exr");
 
     return false;
 }
@@ -5649,8 +5707,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return HTCLIENT;
     }
 
-
-    
     case WM_MOVE:
         if (g_dialog.IsVisible && g_dialog.HasInput && g_dialog.hInputHost) {
             RECT rcClient; GetClientRect(hwnd, &rcClient);
@@ -5740,8 +5796,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
 
-// Merged into previous handler
-    
     case WM_DPICHANGED: {
         // Handle DPI change (e.g., window dragged to different monitor)
         // wParam: LOWORD = new X DPI, HIWORD = new Y DPI
@@ -6157,46 +6211,12 @@ SKIP_EDGE_NAV:;
             auto cyclePane = [&](ComparePane p) {
                 if (p == ComparePane::Left) {
                     if (!g_compare.left.valid) return;
-                    D2D1_SIZE_F sz = GetOrientedSize(g_compare.left.resource, g_compare.left.view.ExifOrientation);
-                    D2D1_RECT_F vp = GetCompareViewport(hwnd, ComparePane::Left);
-                    float vpW = vp.right - vp.left;
-                    float vpH = vp.bottom - vp.top;
-                    if (sz.width > 0 && sz.height > 0 && vpW > 0 && vpH > 0) {
-                        float fit = std::min(vpW / sz.width, vpH / sz.height);
-                        float fill = std::max(vpW / sz.width, vpH / sz.height);
-                        float curZoom = g_compare.left.view.Zoom;
-                        float pixelScale = curZoom * fit;
-                        if (fabsf(curZoom - 1.0f) < 0.05f) { // Fit -> 100%
-                            g_compare.left.view.Zoom = 1.0f / fit;
-                        } else if (fabsf(pixelScale - 1.0f) < 0.05f) { // 100% -> Fill
-                            g_compare.left.view.Zoom = fill / fit;
-                        } else { // Fill/Other -> Fit
-                            g_compare.left.view.Zoom = 1.0f;
-                        }
-                        g_compare.left.view.PanX = 0.0f; g_compare.left.view.PanY = 0.0f;
-                    }
+                    CycleCompareZoomForPane(g_compare.left.view, g_compare.left.resource, GetCompareViewport(hwnd, ComparePane::Left));
                 } else {
                     if (!g_imageResource) return;
                     CompareView right = GetRightCompareView();
-                    D2D1_SIZE_F sz = GetOrientedSize(g_imageResource, right.ExifOrientation);
-                    D2D1_RECT_F vp = GetCompareViewport(hwnd, ComparePane::Right);
-                    float vpW = vp.right - vp.left;
-                    float vpH = vp.bottom - vp.top;
-                    if (sz.width > 0 && sz.height > 0 && vpW > 0 && vpH > 0) {
-                        float fit = std::min(vpW / sz.width, vpH / sz.height);
-                        float fill = std::max(vpW / sz.width, vpH / sz.height);
-                        float curZoom = right.Zoom;
-                        float pixelScale = curZoom * fit;
-                        if (fabsf(curZoom - 1.0f) < 0.05f) { // Fit -> 100%
-                            right.Zoom = 1.0f / fit;
-                        } else if (fabsf(pixelScale - 1.0f) < 0.05f) { // 100% -> Fill
-                            right.Zoom = fill / fit;
-                        } else { // Fill/Other -> Fit
-                            right.Zoom = 1.0f;
-                        }
-                        right.PanX = 0.0f; right.PanY = 0.0f;
-                        SetRightCompareView(right);
-                    }
+                    CycleCompareZoomForPane(right, g_imageResource, GetCompareViewport(hwnd, ComparePane::Right));
+                    SetRightCompareView(right);
                 }
             };
 
@@ -6321,7 +6341,6 @@ SKIP_EDGE_NAV:;
             g_compare.activePane = HitTestComparePane(hwnd, pt);
         }
         
-        // Check MiddleDragAction config
         // Check MiddleDragAction config
         if (g_config.MiddleDragAction == MouseAction::WindowDrag) {
             // [Fix] Disable Window Drag in Fullscreen
@@ -6450,16 +6469,6 @@ SKIP_EDGE_NAV:;
 
     case WM_PAINT:
         OnPaint(hwnd);
-        // Gallery Animation Loop if visible
-        if (g_gallery.IsVisible()) {
-            // Need continuous update for fade-in?
-            // Simple hack: Invalidate if fading
-            // Or use OnPaint delta time?
-            // Let's assume OnPaint happens? 
-            // Better: SetTimer logic or just Invalidate if opacity < 1.0f inside Render?
-            // GalleryOverlay::Render doesn't invalidate.
-            // Let's do nothing special here, OnPaint calls Render.
-        }
         return 0;
         
     case WM_THUMB_KEY_READY:
@@ -6932,25 +6941,7 @@ SKIP_EDGE_NAV:;
                     break;
                 case ToolbarButtonID::CompareInfo:
                     if (IsCompareModeActive() && g_compare.left.valid && g_imageResource) {
-                        if (!g_runtime.ShowCompareInfo) {
-                            g_runtime.ShowCompareInfo = true;
-                            g_runtime.CompareHudMode = 1; // Default to Normal
-                        } else if (g_runtime.CompareHudMode == 0) {
-                            g_runtime.CompareHudMode = 1; // Lite -> Normal
-                        } else {
-                            g_runtime.ShowCompareInfo = false; // Normal -> Hide
-                        }
-                        
-                        g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
-                        if (g_runtime.ShowCompareInfo) {
-                            if (g_currentMetadata.HistL.empty()) {
-                                UpdateHistogramAsync(hwnd, g_imagePath);
-                            }
-                            if (g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) {
-                                UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
-                            }
-                        }
-                        RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
+                        ToggleCompareHUD(hwnd, 1);
                     }
                     break;
                 case ToolbarButtonID::CompareDelete:
@@ -7406,21 +7397,7 @@ SKIP_EDGE_NAV:;
             break;
         case VK_TAB: // Tab: Toggle compact info panel
             if (IsCompareModeActive()) {
-                if (!g_runtime.ShowCompareInfo) {
-                    g_runtime.ShowCompareInfo = true;
-                    g_runtime.CompareHudMode = 0; // Lite
-                } else if (g_runtime.CompareHudMode != 0) {
-                    g_runtime.CompareHudMode = 0; // Collapse to Lite
-                } else {
-                    g_runtime.ShowCompareInfo = false; // Hide
-                }
-                g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
-                if (g_runtime.ShowCompareInfo) {
-                    if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) UpdateHistogramAsync(hwnd, g_imagePath);
-                    if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty())
-                        UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
-                }
-                RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
+                ToggleCompareHUD(hwnd, 0);
             } else {
                 if (!g_runtime.ShowInfoPanel) {
                     g_runtime.ShowInfoPanel = true;
@@ -7438,41 +7415,7 @@ SKIP_EDGE_NAV:;
             break;
         case 'I': // I: Toggle HUD (Compare) or Panel (Normal)
             if (IsCompareModeActive()) {
-                // Toggle Compare HUD
-                if (!g_runtime.ShowCompareInfo) {
-                    g_runtime.ShowCompareInfo = true;
-                    g_runtime.CompareHudMode = 1; // Default to Normal
-                } else if (g_runtime.CompareHudMode == 0) {
-                    g_runtime.CompareHudMode = 1; // Lite -> Normal
-                } else {
-                    g_runtime.ShowCompareInfo = false; // Normal -> Hide
-                }
-                g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
-                if (g_runtime.ShowCompareInfo) {
-                    if (g_currentMetadata.HistL.empty() && !g_imagePath.empty()) {
-                        UpdateHistogramAsync(hwnd, g_imagePath);
-                    }
-                    if ((g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded) && !g_compare.left.path.empty()) {
-                        UpdateCompareLeftHistogramAsync(hwnd, g_compare.left.path);
-                    }
-                    // Elastic HUD: Expand window if it's too small for the HUD
-                    RECT rcClient;
-                    if (GetClientRect(hwnd, &rcClient)) {
-                        int w = rcClient.right - rcClient.left;
-                        int h = rcClient.bottom - rcClient.top;
-                        
-                        // Target HUD Size + margins
-                        int minW = (int)(450.0f * g_uiScale);
-                        int minH = (int)(300.0f * g_uiScale);
-                        
-                        if (w < minW || h < minH) {
-                            int targetW = std::max(w, minW);
-                            int targetH = std::max(h, minH);
-                            SetWindowPos(hwnd, nullptr, 0, 0, targetW, targetH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                        }
-                    }
-                }
-                RequestRepaint(PaintLayer::Dynamic | PaintLayer::Static);
+                ToggleCompareHUD(hwnd, 1);
             } else {
                 // Normal Mode: Toggle Info Panel
                 if (!g_runtime.ShowInfoPanel) {
@@ -7517,8 +7460,6 @@ SKIP_EDGE_NAV:;
         case 'H': PerformTransform(hwnd, TransformType::FlipHorizontal); break;
         case 'V': PerformTransform(hwnd, TransformType::FlipVertical); break;
         
-        // Zoom
-        // Zoom
         // Zoom
         case '1': case 'Z': case VK_NUMPAD1: // 100% Original size
             if (IsCompareModeActive()) PerformCompareZoom100(hwnd);
