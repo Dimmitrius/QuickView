@@ -1330,7 +1330,11 @@ static void DrawResourceIntoViewport(ID2D1DeviceContext* ctx,
 }
 
 static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
-    if (path.empty() || !g_imageLoader || !g_renderEngine) return false;
+    // [Fix] Make a local copy immediately. `path` may be a reference to
+    // g_compare.left.path (via IDM_RENDER_RAW's contextPath), and Reset()
+    // below would invalidate it, causing empty path and broken state.
+    const std::wstring localPath = path;
+    if (localPath.empty() || !g_imageLoader || !g_renderEngine) return false;
 
     // [Fix] Use LoadToFrame (same pipeline as right pane / ImageEngine) instead of
     // LoadToMemory. This ensures identical output: same embedded preview for RAW,
@@ -1338,7 +1342,7 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
     QuickView::RawImageFrame frame;
     CImageLoader::ImageMetadata meta;
     std::wstring loaderName;
-    HRESULT hr = g_imageLoader->LoadToFrame(path.c_str(), &frame, nullptr, 0, 0,
+    HRESULT hr = g_imageLoader->LoadToFrame(localPath.c_str(), &frame, nullptr, 0, 0,
                                              &loaderName, nullptr, &meta);
     if (FAILED(hr) || !frame.IsValid()) return false;
 
@@ -1349,7 +1353,7 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
 
     g_compare.left.Reset();
     g_compare.left.resource.bitmap = d2dBitmap;
-    g_compare.left.path = path;
+    g_compare.left.path = localPath;
     g_compare.left.valid = true;
     g_compare.left.view = {};
 
@@ -1369,7 +1373,7 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
 
     // [v10.0] Trigger Histogram calculation if HUD is showing
     if (g_runtime.ShowCompareInfo && (g_compare.left.metadata.HistL.empty() || !g_compare.left.metadata.IsFullMetadataLoaded)) {
-        UpdateCompareLeftHistogramAsync(hwnd, path);
+        UpdateCompareLeftHistogramAsync(hwnd, localPath);
     }
 
     // [Compare RAW] Update toolbar button if left pane is currently selected
