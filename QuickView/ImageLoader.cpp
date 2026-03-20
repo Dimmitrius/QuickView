@@ -2,7 +2,6 @@
 #include <filesystem>
 #include <fstream> 
 #include <memory>
-#include <regex>
 #include <map>
 
 // Helper
@@ -5875,35 +5874,52 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
         std::string xml(data, data + size);
         
         try {
-            std::smatch m;
-            
-            // Priority 1: width="..." height="..." (pixel rendering size per W3C SVG spec)
-            std::regex reWidth("width=\"([0-9\\.]+)[a-z]*\"");
-            std::regex reHeight("height=\"([0-9\\.]+)[a-z]*\"");
-            float w = 0, h = 0;
-            
-            if (std::regex_search(xml, m, reWidth)) w = std::stof(m[1]);
-            if (std::regex_search(xml, m, reHeight)) h = std::stof(m[1]);
-            
-            if (w > 0 && h > 0) {
-                pInfo->width = (int)std::lround(w);
-                pInfo->height = (int)std::lround(h);
+            auto GetAttrVal = [](const std::string& s, const char* attr) -> std::string {
+                std::string key = attr;
+                key += "=\"";
+                size_t pos = s.find(key);
+                if (pos == std::string::npos) return "";
+                pos += key.length();
+                size_t end = s.find("\"", pos);
+                if (end == std::string::npos) return "";
+                return s.substr(pos, end - pos);
+            };
+
+            float pw = 0, ph = 0;
+            std::string wStr = GetAttrVal(xml, "width");
+            std::string hStr = GetAttrVal(xml, "height");
+            if (!wStr.empty()) try { pw = std::stof(wStr); } catch (...) {}
+            if (!hStr.empty()) try { ph = std::stof(hStr); } catch (...) {}
+
+            if (pw > 0 && ph > 0) {
+                pInfo->width = (int)std::lround(pw);
+                pInfo->height = (int)std::lround(ph);
                 return S_OK;
-            }
-            
-            // Priority 2 (Fallback): viewBox="x y W H" (internal coordinate system)
-            std::regex reViewBox("viewBox=\"([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+) ([0-9\\.]+)\"");
-            if (std::regex_search(xml, m, reViewBox)) {
-                float vw = std::stof(m[3]);
-                float vh = std::stof(m[4]);
-                if (vw > 0 && vh > 0) {
-                    pInfo->width = (int)std::lround(vw);
-                    pInfo->height = (int)std::lround(vh);
+            } else {
+                std::string vbStr = GetAttrVal(xml, "viewBox");
+                if (!vbStr.empty()) {
+                    size_t p = 0;
+                    int skipped = 0;
+                    while (skipped < 2 && p < vbStr.length()) {
+                        if (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',') {
+                            while (p < vbStr.length() && (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',')) p++;
+                            skipped++;
+                        } else p++;
+                    }
+                    if (p < vbStr.length()) {
+                        char* endptr = nullptr;
+                        float vw = strtof(vbStr.c_str() + p, &endptr);
+                        if (endptr && endptr > vbStr.c_str() + p) {
+                            float vh = strtof(endptr, nullptr);
+                            if (vw > 0 && vh > 0) {
+                                pInfo->width = (int)std::lround(vw);
+                                pInfo->height = (int)std::lround(vh);
+                            }
+                        }
+                    }
                 }
             }
-        } catch (...) {
-            // Ignore parsing errors, return default
-        }
+        } catch (...) {}
         return S_OK;
     }
 
@@ -8342,38 +8358,53 @@ static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height
     if (bytesRead == 0) return false;
     
     std::string header(buffer, bytesRead);
-    std::smatch match;
     
-    // 1. Try width="..." height="..." (pixel rendering size - takes priority per W3C SVG spec)
-    // Handles "100px", "100", "100pt" roughly
-    std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
-    std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
-    
-    float w=0, h=0;
-    bool foundW = false, foundH = false;
-    
-    if (std::regex_search(header, match, reWidth)) {
-        try { w = std::stof(match[1].str()); foundW = true; } catch(...) {}
-    }
-    if (std::regex_search(header, match, reHeight)) {
-        try { h = std::stof(match[1].str()); foundH = true; } catch(...) {}
-    }
-    
-    if (foundW && foundH && w > 0 && h > 0) {
+    // 1. Try width="..." height="..."
+    auto GetAttrVal = [](const std::string& s, const char* attr) -> std::string {
+        std::string key = attr;
+        key += "=\"";
+        size_t pos = s.find(key);
+        if (pos == std::string::npos) return "";
+        pos += key.length();
+        size_t end = s.find("\"", pos);
+        if (end == std::string::npos) return "";
+        return s.substr(pos, end - pos);
+    };
+
+    float w = 0, h = 0;
+    std::string wStr = GetAttrVal(header, "width");
+    std::string hStr = GetAttrVal(header, "height");
+    if (!wStr.empty()) try { w = std::stof(wStr); } catch (...) {}
+    if (!hStr.empty()) try { h = std::stof(hStr); } catch (...) {}
+
+    if (w > 0 && h > 0) {
         *width = (uint32_t)std::lround(w);
         *height = (uint32_t)std::lround(h);
         return true;
     }
-    
-    // 2. Fallback: viewBox="x y w h" (internal coordinate system)
-    // Handles space or comma separators.
-    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
-    if (std::regex_search(header, match, reViewBox)) {
-        try {
-            *width = (uint32_t)std::lround(std::stof(match[1].str()));
-            *height = (uint32_t)std::lround(std::stof(match[2].str()));
-            return true;
-        } catch (...) {}
+
+    std::string vbStr = GetAttrVal(header, "viewBox");
+    if (!vbStr.empty()) {
+        size_t p = 0;
+        int skipped = 0;
+        while (skipped < 2 && p < vbStr.length()) {
+            if (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',') {
+                while (p < vbStr.length() && (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',')) p++;
+                skipped++;
+            } else p++;
+        }
+        if (p < vbStr.length()) {
+            char* endptr = nullptr;
+            float vw = strtof(vbStr.c_str() + p, &endptr);
+            if (endptr && endptr > vbStr.c_str() + p) {
+                float vh = strtof(endptr, nullptr);
+                if (vw > 0 && vh > 0) {
+                    *width = (uint32_t)std::lround(vw);
+                    *height = (uint32_t)std::lround(vh);
+                    return true;
+                }
+            }
+        }
     }
     
     return false;
@@ -8889,17 +8920,17 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                 // PHASE 1: ID SANITIZATION (Fix Broken Links)
                 // =========================================================
                 try {
-                    // Regex: id="([^"]+)"
-                    std::regex reID("id=\"([^\"]+)\"");
-                    auto words_begin = std::sregex_iterator(svgContent.begin(), svgContent.end(), reID);
-                    auto words_end = std::sregex_iterator();
-                    
                     std::map<std::string, std::string> replacements;
                     int count = 0;
                     
-                    for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-                        std::smatch match = *i;
-                        std::string val = match.str(1);
+                    size_t pos_id = 0;
+                    while ((pos_id = svgContent.find("id=\"", pos_id)) != std::string::npos) {
+                        pos_id += 4;
+                        size_t end_id = svgContent.find("\"", pos_id);
+                        if (end_id == std::string::npos) break;
+                        
+                        std::string val = svgContent.substr(pos_id, end_id - pos_id);
+                        pos_id = end_id + 1;
                         
                         bool unsafe = false;
                         for (unsigned char c : val) {
@@ -8934,48 +8965,62 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                 // Adobe format: .st0{fill:url(#ID);} or .st0 { fill: #FFF; }
                 // Regex: Find class name and fill value
                 try {
-                    // Regex captures: Group 1 = Class Name, Group 2 = Fill Value
-                    std::regex reStyle("\\.([a-zA-Z0-9_-]+)\\s*\\{\\s*fill:\\s*([^;\\}]+);?\\s*\\}");
-                    auto style_begin = std::sregex_iterator(svgContent.begin(), svgContent.end(), reStyle);
-                    auto style_end = std::sregex_iterator();
-                    
                     int inlinedCount = 0;
-
-                    for (std::sregex_iterator i = style_begin; i != style_end; ++i) {
-                        std::smatch match = *i;
-                        std::string className = match.str(1); // e.g. "st0"
-                        std::string fillVal = match.str(2);   // e.g. "url(#qv_fix_0)"
-
-                        // We inject the fill attribute directly into the tag using that class.
-                        // Find: class="st0"
-                        // Replace: fill="url(#qv_fix_0)" class="st0"
-                        // Note: This relies on 'class=' being the hook.
+                    size_t pos_style = 0;
+                    while ((pos_style = svgContent.find(".", pos_style)) != std::string::npos) {
+                        size_t brace_open = svgContent.find("{", pos_style);
+                        if (brace_open == std::string::npos) break;
                         
-                        std::string searchPattern = "class=\"" + className + "\"";
-                        std::string replacePattern = "fill=\"" + fillVal + "\" class=\"" + className + "\"";
+                        std::string className = svgContent.substr(pos_style + 1, brace_open - pos_style - 1);
+                        // Simple Trim
+                        className.erase(0, className.find_first_not_of(" \n\r\t"));
+                        size_t last = className.find_last_not_of(" \n\r\t");
+                        if (last != std::string::npos) className.erase(last + 1);
+                        
+                        size_t brace_close = svgContent.find("}", brace_open);
+                        if (brace_close == std::string::npos) break;
+                        
+                        std::string styleBody = svgContent.substr(brace_open + 1, brace_close - brace_open - 1);
+                        size_t fillPos = styleBody.find("fill:");
+                        if (fillPos != std::string::npos) {
+                            size_t fillStart = fillPos + 5;
+                            // Skip whitespace
+                            while (fillStart < styleBody.length() && isspace((unsigned char)styleBody[fillStart])) fillStart++;
+                            size_t fillEnd = styleBody.find(";", fillStart);
+                            if (fillEnd == std::string::npos) fillEnd = styleBody.length();
+                            
+                            std::string fillVal = styleBody.substr(fillStart, fillEnd - fillStart);
+                            // Simple Trim
+                            fillVal.erase(0, fillVal.find_first_not_of(" \n\r\t"));
+                            size_t lastF = fillVal.find_last_not_of(" \n\r\t");
+                            if (lastF != std::string::npos) fillVal.erase(lastF + 1);
 
-                        if (!searchPattern.empty()) {
-                            size_t firstMatch = svgContent.find(searchPattern);
-                            if (firstMatch != std::string::npos) {
-                                std::string result;
-                                result.reserve(svgContent.size() + svgContent.size() / 10);
+                            if (!className.empty() && !fillVal.empty()) {
+                                std::string searchPattern = "class=\"" + className + "\"";
+                                std::string replacePattern = "fill=\"" + fillVal + "\" class=\"" + className + "\"";
 
-                                result.append(svgContent, 0, firstMatch);
-                                result.append(replacePattern);
-                                inlinedCount++;
-
-                                size_t pos = firstMatch + searchPattern.length();
-                                size_t match_pos;
-                                while ((match_pos = svgContent.find(searchPattern, pos)) != std::string::npos) {
-                                    result.append(svgContent, pos, match_pos - pos);
+                                size_t firstMatch = svgContent.find(searchPattern);
+                                if (firstMatch != std::string::npos) {
+                                    std::string result;
+                                    result.reserve(svgContent.size() + svgContent.size() / 10);
+                                    result.append(svgContent, 0, firstMatch);
                                     result.append(replacePattern);
-                                    pos = match_pos + searchPattern.length();
                                     inlinedCount++;
+
+                                    size_t pos = firstMatch + searchPattern.length();
+                                    size_t match_pos;
+                                    while ((match_pos = svgContent.find(searchPattern, pos)) != std::string::npos) {
+                                        result.append(svgContent, pos, match_pos - pos);
+                                        result.append(replacePattern);
+                                        pos = match_pos + searchPattern.length();
+                                        inlinedCount++;
+                                    }
+                                    result.append(svgContent, pos, svgContent.length() - pos);
+                                    svgContent = std::move(result);
                                 }
-                                result.append(svgContent, pos, svgContent.length() - pos);
-                                svgContent = std::move(result);
                             }
                         }
+                        pos_style = brace_close + 1;
                     }
                     
                     if (inlinedCount > 0) {
@@ -8997,34 +9042,55 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             // No rendering here! We just pass the sanitized XML to UI thread.
             // =========================================================
 
-            // 2. Parse Dimensions (Regex)
-            // We need dimensions for the initial window size.
-            // Since we have the sanitized content string, we can parse it directly.
+            // 2. Parse Dimensions (Manual Search)
             float svgW = 512.0f;
             float svgH = 512.0f;
             
-            // Reconstruct string from fileData (it was sanitized above)
             std::string svgContent(fileData.begin(), fileData.end());
 
             try {
-                std::smatch match;
-                
-                // Priority 1: width="..." height="..." (pixel rendering size per W3C SVG spec)
-                std::regex reWidth("width=\"([\\d\\.]+)[a-z]*\"");
-                std::regex reHeight("height=\"([\\d\\.]+)[a-z]*\"");
+                auto GetAttrVal = [](const std::string& s, const char* attr) -> std::string {
+                    std::string key = attr;
+                    key += "=\"";
+                    size_t pos = s.find(key);
+                    if (pos == std::string::npos) return "";
+                    pos += key.length();
+                    size_t end = s.find("\"", pos);
+                    if (end == std::string::npos) return "";
+                    return s.substr(pos, end - pos);
+                };
+
                 float pw = 0, ph = 0;
-                if (std::regex_search(svgContent, match, reWidth)) pw = std::stof(match[1]);
-                if (std::regex_search(svgContent, match, reHeight)) ph = std::stof(match[1]);
+                std::string wStr = GetAttrVal(svgContent, "width");
+                std::string hStr = GetAttrVal(svgContent, "height");
+                if (!wStr.empty()) try { pw = std::stof(wStr); } catch (...) {}
+                if (!hStr.empty()) try { ph = std::stof(hStr); } catch (...) {}
                 
                 if (pw > 0 && ph > 0) {
                     svgW = pw;
                     svgH = ph;
                 } else {
-                    // Priority 2 (Fallback): viewBox="x y w h" (internal coordinate system)
-                    std::regex reViewBox("viewBox=\"[\\d\\.-]+[ ,]+[\\d\\.-]+[ ,]+([\\d\\.]+)[ ,]+([\\d\\.]+)\"");
-                    if (std::regex_search(svgContent, match, reViewBox)) {
-                        svgW = std::stof(match[1]);
-                        svgH = std::stof(match[2]);
+                    std::string vbStr = GetAttrVal(svgContent, "viewBox");
+                    if (!vbStr.empty()) {
+                        // viewBox="x y w h" - need w and h (3rd and 4th)
+                        size_t p = 0;
+                        int skipped = 0;
+                        while (skipped < 2 && p < vbStr.length()) {
+                            if (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',') {
+                                while (p < vbStr.length() && (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',')) p++;
+                                skipped++;
+                            } else p++;
+                        }
+                        if (p < vbStr.length()) {
+                            char* endptr = nullptr;
+                            float vw = strtof(vbStr.c_str() + p, &endptr);
+                            if (endptr && endptr > vbStr.c_str() + p) {
+                                float vh = strtof(endptr, nullptr);
+                                if (vw > 0 && vh > 0) {
+                                    svgW = vw; svgH = vh;
+                                }
+                            }
+                        }
                     }
                 }
             } catch (...) {
