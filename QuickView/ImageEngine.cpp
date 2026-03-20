@@ -1080,6 +1080,7 @@ void ImageEngine::FastLane::QueueWorker() {
                 auto safeFrame = std::make_shared<QuickView::RawImageFrame>();
                 if (rawFrame.IsSvg()) {
                     safeFrame->format = rawFrame.format;
+                    safeFrame->formatDetails = rawFrame.formatDetails;
                     safeFrame->width = rawFrame.width;
                     safeFrame->height = rawFrame.height;
                     safeFrame->svg = std::make_unique<QuickView::RawImageFrame::SvgData>();
@@ -1441,6 +1442,7 @@ void ImageEngine::AddToCache(int index, const std::wstring& path, std::shared_pt
         if (frame->IsSvg()) {
             // SVG: Copy the SVG data struct
             cachedFrame->format = frame->format;
+            cachedFrame->formatDetails = frame->formatDetails;
             cachedFrame->width = frame->width;
             cachedFrame->height = frame->height;
             cachedFrame->svg = std::make_unique<QuickView::RawImageFrame::SvgData>();
