@@ -3831,30 +3831,42 @@ struct FormatExtRule {
     std::wstring_view alt1 = {};
     std::wstring_view alt2 = {};
     std::wstring_view alt3 = {};
+    std::wstring_view alt4 = {};
+    std::wstring_view alt5 = {};
 };
 
 static constexpr FormatExtRule g_formatRules[] = {
+    // Specific compound/derived names first to avoid prefix/substring matches
+    { L"wbmp", L".wbmp" },
+    { L"jpeg xl", L".jxl" },
+    { L"jxl",  L".jxl" },
+    { L"libavif", L".avif" },
+    { L"tinyexr", L".exr" },
+    { L"jpeg (mmf)", L".jpg", L".jpeg", L".jpe", L".jfif" },
+
+    // Core formats
     { L"jpeg", L".jpg", L".jpeg", L".jpe", L".jfif" },
     { L"png",  L".png" },
     { L"webp", L".webp" },
-    { L"avif", L".avif", L"libavif" },
+    { L"avif", L".avif" },
     { L"gif",  L".gif" },
     { L"bmp",  L".bmp", L".dib" },
     { L"tiff", L".tiff", L".tif" },
     { L"tif",  L".tiff", L".tif" },
     { L"heif", L".heic", L".heif" },
     { L"heic", L".heic", L".heif" },
-    { L"jxl",  L".jxl", L"jpeg xl" },
     { L"hdr",  L".hdr", L".pic" },
     { L"psd",  L".psd", L".psb" },
-    { L"exr",  L".exr", L"tinyexr" },
+    { L"exr",  L".exr" },
     { L"qoi",  L".qoi" },
-    { L"tga",  L".tga" },
+    { L"tga",  L".tga", L".icb", L".vda", L".vst" },
     { L"pcx",  L".pcx" },
     { L"svg",  L".svg" },
     { L"ico",  L".ico" },
-    { L"wbmp", L".wbmp" },
-    { L"pnm",  L".pnm", L".pgm", L".ppm" }
+    { L"pnm",  L".pnm", L".pgm", L".ppm", L".pbm" },
+    { L"pgm",  L".pgm", L".pnm", L".ppm", L".pbm" },
+    { L"ppm",  L".ppm", L".pnm", L".pgm", L".pbm" },
+    { L"pbm",  L".pbm", L".pnm", L".pgm", L".ppm" },
 };
 
 static std::wstring_view GetPrimaryExtensionForFormat(std::wstring_view format) {
@@ -3863,7 +3875,7 @@ static std::wstring_view GetPrimaryExtensionForFormat(std::wstring_view format) 
     std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::towlower);
     
     for (const auto& rule : g_formatRules) {
-        if (fmt == rule.format || fmt.contains(rule.format)) return rule.primary;
+        if (fmt == rule.format || fmt.find(rule.format) != std::wstring::npos) return rule.primary;
     }
     return {};
 }
@@ -3888,11 +3900,13 @@ bool CheckExtensionMismatch(std::wstring_view path, std::wstring_view format) {
     std::wstring_view ext = extStr;
     
     for (const auto& rule : g_formatRules) {
-        if (fmt == rule.format || fmt.contains(rule.format)) {
+        if (fmt == rule.format || fmt.find(rule.format) != std::wstring::npos) {
             if (ext == rule.primary) return false;
             if (!rule.alt1.empty() && ext == rule.alt1) return false;
             if (!rule.alt2.empty() && ext == rule.alt2) return false;
             if (!rule.alt3.empty() && ext == rule.alt3) return false;
+            if (!rule.alt4.empty() && ext == rule.alt4) return false;
+            if (!rule.alt5.empty() && ext == rule.alt5) return false;
             return true;
         }
     }
