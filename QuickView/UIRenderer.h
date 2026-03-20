@@ -200,6 +200,7 @@ private:
     D2D1_RECT_F m_gpsCoordRect = {};
     D2D1_RECT_F m_gpsLinkRect = {};
     D2D1_RECT_F m_lastHUDRect = {}; // Track HUD area for hit testing
+    std::vector<D2D1_RECT_F> m_compareRowRects; // Track individual row rects in Compare HUD
     D2D1_RECT_F m_hudToggleLiteRect = {}; // Track HUD lite mode icon area
     D2D1_RECT_F m_hudToggleExpandRect = {}; // Track HUD expand mode icon area
     

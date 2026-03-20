@@ -132,8 +132,17 @@ HitTestResult UIRenderer::HitTest(float x, float y) {
 
         if (PointInRect(x, y, m_lastHUDRect)) {
             result.type = UIHitResult::InfoRow; 
-            result.rowIndex = -2; 
-            m_hoverRowIndex = -2; // Set hover state here for prompt tooltip
+            result.rowIndex = -2; // Default for empty HUD space
+
+            // Check individual rows to trigger repaint on hover change
+            for (size_t i = 0; i < m_compareRowRects.size(); ++i) {
+                if (PointInRect(x, y, m_compareRowRects[i])) {
+                    result.rowIndex = -100 - (int)i; // Unique ID for Compare HUD rows
+                    break;
+                }
+            }
+
+            m_hoverRowIndex = result.rowIndex; // Set hover state here for prompt tooltip
             return result;
         }
     }
@@ -1962,7 +1971,7 @@ void UIRenderer::DrawGridTooltip(ID2D1DeviceContext* dc) {
     if (m_hoverRowIndex >= 0 && m_hoverRowIndex < (int)m_infoGrid.size()) {
         row = m_infoGrid[m_hoverRowIndex];
         if (!row.isTruncated || row.fullText.empty()) return;
-    } else if (m_hoverRowIndex == -2) {
+    } else if (m_hoverRowIndex <= -2) { // Changed to <= -2 to pick up unique IDs like -100
         row = m_hoverInfoRow;
         if (row.fullText.empty()) return;
     } else {
@@ -2476,6 +2485,9 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     y += headerH;
 
+    m_compareRowRects.clear();
+    m_hoverInfoRow = InfoRow{}; // Clear previous hover state to prevent sticky tooltips
+
     for (const auto& group : hudGroups) {
         // Group visibility check taking identical hiding into account
         bool groupHasData = false;
@@ -2517,13 +2529,14 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
             }
 
             D2D1_RECT_F rowRect = D2D1::RectF(panelX + 4, y, panelX + panelW - 4, y + rowH);
+            m_compareRowRects.push_back(rowRect);
+
             if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rowRect)) {
                 ComPtr<ID2D1SolidColorBrush> brushHover;
                 dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.05f), &brushHover);
                 dc->FillRectangle(rowRect, brushHover.Get());
                 
-                // Track hover row consistently with HitTest
-                m_hoverRowIndex = -2; 
+                // Rely on HitTest to set m_hoverRowIndex
                 m_hoverInfoRow = lRow ? *lRow : (rRow ? *rRow : InfoRow{});
                 
                 // If this is the File row, ensure tooltip shows full filename
@@ -2694,6 +2707,6 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     // Reset hover if outside HUD
     if (!PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, m_lastHUDRect)) {
-        if (m_hoverRowIndex == -2) m_hoverRowIndex = -1;
+        if (m_hoverRowIndex <= -2) m_hoverRowIndex = -1;
     }
 }
