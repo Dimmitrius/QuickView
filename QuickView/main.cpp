@@ -3867,6 +3867,10 @@ static constexpr FormatExtRule g_formatRules[] = {
     { L"pgm",  L".pgm", L".pnm", L".ppm", L".pbm" },
     { L"ppm",  L".ppm", L".pnm", L".pgm", L".pbm" },
     { L"pbm",  L".pbm", L".pnm", L".pgm", L".ppm" },
+    
+    // [v10.1] New: Support all RAW formats in extension check
+    { L"raw",  L".dng", L".arw", L".nef", L".cr2", L".cr3", L".raf" },
+    { L"dds",  L".dds" },
 };
 
 static std::wstring_view GetPrimaryExtensionForFormat(std::wstring_view format) {

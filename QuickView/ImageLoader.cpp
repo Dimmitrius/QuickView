@@ -5066,8 +5066,8 @@ HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ct
     // [v9.2] Use path-based detection directly (handles RAW extensions properly)
     std::wstring fmt = DetectFormatFromContent(filePath);
     
-    // Debug: Log detected format
-
+    // [Fix] Ensure Format is stored in metadata for extension mismatch detection (main.cpp)
+    result.metadata.Format = fmt;
 
     // 3. Dispatch
     
@@ -8789,6 +8789,10 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             // [v5.3 Fix] Ensure FileSize is populated for Info Panel "Disk" row
             if (pMetadata->FileSize == 0) {
                  PopulateFileStats(filePath, pMetadata);
+            }
+            // [Fix] Final Guarantee: Format must not be empty for extension mismatch check
+            if (pMetadata->Format.empty()) {
+                pMetadata->Format = DetectFormatFromContent(filePath);
             }
         }
         

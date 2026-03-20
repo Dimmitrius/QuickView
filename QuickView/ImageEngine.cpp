@@ -1105,14 +1105,13 @@ void ImageEngine::FastLane::QueueWorker() {
                 e.rawFrame = safeFrame;
                 
 
-                // [Fix] Unified Populate Metadata
-                // PeekHeader dimensions strictly untrusted for FastLane 
-                // RAW/TIFF formats with IFD thumbs may return incorrect info.width/height
                 e.metadata.Width = rawFrame.width;
                 e.metadata.Height = rawFrame.height;
+                e.metadata.Format = info.format; // [Scout] Direct from PeekHeader
 
                 // [v5.3] Metadata is now populated by LoadToFrame (Unified path)
-                // No need to call ReadMetadata separately or access global variables.
+                // We don't call LoadToFrame with pMetadata in FastLane currently, 
+                // but info.format from PeekHeader is sufficient for Scout mismatch check.
                 
                 // [Fix] Propagate EXIF Orientation from Decoder to Metadata (Critical for AutoRotate)
                 e.metadata.ExifOrientation = rawFrame.exifOrientation;
