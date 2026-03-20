@@ -3186,6 +3186,17 @@ HRESULT CImageLoader::LoadRaw(LPCWSTR filePath, IWICBitmap** ppBitmap, bool forc
     LibRaw RawProcessor;
     if (RawProcessor.open_buffer(rawBuf.data(), rawBuf.size()) != LIBRAW_SUCCESS) return E_FAIL;
 
+    // [Fix] Capture RAW orientation early (same mapping as LoadImageUnified RAW Codec)
+    int flip = RawProcessor.imgdata.sizes.flip;
+    int exifOrientation = 1;
+    if (flip == 3) exifOrientation = 3;      // 180
+    else if (flip == 6) exifOrientation = 6; // 90 CW
+    else if (flip == 5) exifOrientation = 8; // 90 CCW
+    else if (flip == 1) exifOrientation = 2; // Flip X
+    else if (flip == 2) exifOrientation = 4; // Flip Y
+    else if (flip == 4) exifOrientation = 5; // Transpose
+    else if (flip == 7) exifOrientation = 7; // Transverse
+
     // 1. Try Unpack Thumbnail (Embedded Preview) - FASTEST
     if (!forceFullDecode && RawProcessor.unpack_thumb() == LIBRAW_SUCCESS) {
         int err = 0;
@@ -3213,6 +3224,9 @@ HRESULT CImageLoader::LoadRaw(LPCWSTR filePath, IWICBitmap** ppBitmap, bool forc
                 }
                 
                 if (SUCCEEDED(hr)) {
+                    // [Fix] Embedded JPEG preview is pre-rotated by camera firmware.
+                    // Set orientation to 1 to prevent double-rotation in compare mode.
+                    g_lastExifOrientation = 1;
                     RawProcessor.dcraw_clear_mem(thumb);
                     return hr; // Success with JPEG Preview!
                 }
@@ -3224,6 +3238,9 @@ HRESULT CImageLoader::LoadRaw(LPCWSTR filePath, IWICBitmap** ppBitmap, bool forc
                     UINT stride = width * 3;
                     HRESULT hr = CreateWICBitmapFromMemory(width, height, GUID_WICPixelFormat24bppRGB, stride, thumb->data_size, thumb->data, ppBitmap);
                     if (SUCCEEDED(hr)) {
+                        // [Fix] Bitmap thumbnails may NOT be pre-rotated.
+                        // Preserve orientation so renderer can apply it.
+                        g_lastExifOrientation = exifOrientation;
                         RawProcessor.dcraw_clear_mem(thumb);
                         return hr; // Success with Bitmap Preview!
                     }
@@ -3238,6 +3255,10 @@ HRESULT CImageLoader::LoadRaw(LPCWSTR filePath, IWICBitmap** ppBitmap, bool forc
     RawProcessor.imgdata.params.use_camera_wb = 1;
     RawProcessor.imgdata.params.use_auto_wb = 0; // Speed up
     RawProcessor.imgdata.params.user_qual = 2;   // 0=Linear(fast), 2=AHD(good), 3=AHD+Interpolation
+    // [Fix] Disable auto-rotation so bitmap stays in sensor orientation.
+    // This matches LoadImageUnified RAW Codec behavior.
+    // Rotation is handled by the renderer using g_lastExifOrientation.
+    RawProcessor.imgdata.params.user_flip = 0;
     
     // If you want extreme speed at cost of resolution, uncomment:
     // RawProcessor.imgdata.params.half_size = 1; 
@@ -3259,6 +3280,11 @@ HRESULT CImageLoader::LoadRaw(LPCWSTR filePath, IWICBitmap** ppBitmap, bool forc
         }
     }
     
+    if (SUCCEEDED(hr)) {
+        // [Fix] Bitmap is un-rotated (user_flip=0). Store real orientation.
+        g_lastExifOrientation = exifOrientation;
+    }
+    
     RawProcessor.dcraw_clear_mem(image);
     return hr;
 }
@@ -3268,7 +3294,7 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
     
     // Clear previous state to avoid residue when switching formats
     g_lastFormatDetails.clear();
-    g_lastExifOrientation = 1; // Reset to default (Normal)
+    g_lastExifOrientation = 0; // Reset to 0 ("not set by decoder")
     
     std::wstring path = filePath;
     std::transform(path.begin(), path.end(), path.begin(), ::towlower);

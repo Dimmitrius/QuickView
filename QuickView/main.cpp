@@ -1354,14 +1354,26 @@ static bool LoadImageIntoCompareLeftSlot(HWND hwnd, const std::wstring& path) {
         g_compare.left.metadata.ExifOrientation = 1;
     }
 
-    // [Fix] Detect if Decoder already applied Exif Rotation (Pre-Rotation)
-    if (g_compare.left.metadata.ExifOrientation >= 5 && g_compare.left.metadata.ExifOrientation <= 8) {
-        int wDiff = (int)pixel.width - (int)g_compare.left.metadata.Height;
-        int hDiff = (int)pixel.height - (int)g_compare.left.metadata.Width;
-        if (wDiff < 0) wDiff = -wDiff;
-        if (hDiff < 0) hDiff = -hDiff;
-        if (wDiff < 5 && hDiff < 5) {
-            g_compare.left.metadata.ExifOrientation = 1;
+    // [Fix] Use g_lastExifOrientation from decoder when available.
+    // LoadRaw now sets this accurately:
+    //   - Embedded JPEG preview (pre-rotated by camera) → g_lastExifOrientation = 1
+    //   - Bitmap thumbnail (un-rotated) → g_lastExifOrientation = real orientation
+    //   - Full decode (user_flip=0, un-rotated) → g_lastExifOrientation = real orientation
+    // This is far more reliable than the old dimension-based heuristic which fails
+    // when preview resolution differs from sensor resolution.
+    extern int g_lastExifOrientation;
+    if (g_lastExifOrientation >= 1 && g_lastExifOrientation <= 8) {
+        g_compare.left.metadata.ExifOrientation = g_lastExifOrientation;
+    } else {
+        // Fallback: dimension-based pre-rotation detection (for non-RAW formats)
+        if (g_compare.left.metadata.ExifOrientation >= 5 && g_compare.left.metadata.ExifOrientation <= 8) {
+            int wDiff = (int)pixel.width - (int)g_compare.left.metadata.Height;
+            int hDiff = (int)pixel.height - (int)g_compare.left.metadata.Width;
+            if (wDiff < 0) wDiff = -wDiff;
+            if (hDiff < 0) hDiff = -hDiff;
+            if (wDiff < 5 && hDiff < 5) {
+                g_compare.left.metadata.ExifOrientation = 1;
+            }
         }
     }
 
