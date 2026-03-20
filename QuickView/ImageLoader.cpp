@@ -3568,7 +3568,7 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
         ppBitmap
     );
 
-    if (SUCCEEDED(hrBitmap) && pLoaderName && pLoaderName->find(L"WIC") != std::wstring::npos && !usedNativeScaling) {
+    if (SUCCEEDED(hrBitmap) && pLoaderName && pLoaderName->contains(L"WIC") && !usedNativeScaling) {
          UINT w = 0, h = 0;
          (*ppBitmap)->GetSize(&w, &h);
          wchar_t buf[32]; swprintf_s(buf, L" [%ux%u]", w, h);

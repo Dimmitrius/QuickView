@@ -3879,7 +3879,7 @@ static std::wstring_view GetPrimaryExtensionForFormat(std::wstring_view format) 
     std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::towlower);
     
     for (const auto& rule : g_formatRules) {
-        if (fmt == rule.format || fmt.find(rule.format) != std::wstring::npos) return rule.primary;
+        if (fmt == rule.format || fmt.contains(rule.format)) return rule.primary;
     }
     return {};
 }
@@ -3904,7 +3904,7 @@ bool CheckExtensionMismatch(std::wstring_view path, std::wstring_view format) {
     std::wstring_view ext = extStr;
     
     for (const auto& rule : g_formatRules) {
-        if (fmt == rule.format || fmt.find(rule.format) != std::wstring::npos) {
+        if (fmt == rule.format || fmt.contains(rule.format)) {
             if (ext == rule.primary) return false;
             if (!rule.alt1.empty() && ext == rule.alt1) return false;
             if (!rule.alt2.empty() && ext == rule.alt2) return false;
@@ -9839,7 +9839,7 @@ void OnPaint(HWND hwnd) {
                  // [No-DC JXL Guard] For fake/tiny placeholder bases, force tile scheduling immediately.
                  std::wstring fmtUpper = titanMeta.Format;
                  std::transform(fmtUpper.begin(), fmtUpper.end(), fmtUpper.begin(), ::towupper);
-                 bool isJxlLike = (fmtUpper.find(L"JXL") != std::wstring::npos || fmtUpper.find(L"JPEG XL") != std::wstring::npos);
+                 bool isJxlLike = (fmtUpper.contains(L"JXL") || fmtUpper.contains(L"JPEG XL"));
                  if (!isJxlLike && !g_imagePath.empty()) {
                      std::wstring pathLower = g_imagePath;
                      std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
@@ -9847,7 +9847,7 @@ void OnPaint(HWND hwnd) {
                  }
 
                  constexpr float kVirtualNoDcRatio = 0.125f; // 1:8
-                 bool fakeBase = (titanMeta.LoaderName.find(L"Fake Base") != std::wstring::npos);
+                 bool fakeBase = (titanMeta.LoaderName.contains(L"Fake Base"));
                  bool tinyPreview = (previewW <= 2.0f || previewH <= 2.0f);
                  bool weakPreview = (previewW <= 16.0f || previewH <= 16.0f); // Expanded threshold for 4x4 or 8x8
 

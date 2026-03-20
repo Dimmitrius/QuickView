@@ -252,7 +252,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
             
             // [v9.0] Smart RAW Quality Check
             // RAW files require strict quality matching (Preview vs Full) for A/B comparison
-            if (info.format.find(L"RAW") != std::wstring::npos) {
+            if (info.format.contains(L"RAW")) {
                   bool wantFull = m_config.ForceRawDecode;
                   bool hasFull = (cachedFrame->quality == QuickView::DecodeQuality::Full);
                   
@@ -336,7 +336,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
     // 2. Recursive RAW Check
     // If it's a RAW file with an embedded thumb, check the preview resolution.
     // "RAW" detection: check if string contains RAW or format check from loader
-    if (info.format.find(L"RAW") != std::wstring::npos) {
+    if (info.format.contains(L"RAW")) {
         // [v9.9] If ForceRawDecode is enabled, RAW Full Decode is computationally intensive.
         // Always route to HeavyLane to avoid blocking FastLane (UI thread responsiveness).
         // [Fix] Use member config!

@@ -13,10 +13,10 @@ using namespace QuickView;
 
 namespace {
 bool IsCopyOnlyLoaderName(const std::wstring& loaderName) {
-    return loaderName.find(L"LODCache Slice") != std::wstring::npos ||
-           loaderName.find(L"Zero-Copy") != std::wstring::npos ||
-           loaderName.find(L"RAM Copy") != std::wstring::npos ||
-           loaderName.find(L"MMF Copy") != std::wstring::npos;
+    return loaderName.contains(L"LODCache Slice") ||
+           loaderName.contains(L"Zero-Copy") ||
+           loaderName.contains(L"RAM Copy") ||
+           loaderName.contains(L"MMF Copy");
 }
 }
 
@@ -1276,7 +1276,7 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                        // [v8.4 Fix] If the Base Layer is a Fake 1x1, its real MP/s is 0.
                        // This would cause the auto-regulator to maliciously throttle the pool to < 3 threads, 
                        // crippling our N+1 Native Region Decoding. We simulate 100 MP/s to unlock full core usage!
-                       if (loaderName.find(L"Fake Base") != std::wstring::npos) {
+                        if (loaderName.contains(L"Fake Base")) {
                            OutputDebugStringW(L"[HeavyPool] Base Layer is Fake. Simulating 100.0 MP/s baseline to unlock Titan tiles.\n");
                            RecordBaselineSample(10000000.0, 100.0, srcWidth, srcHeight, isProgressiveJPEG);
                        } else {
@@ -1287,7 +1287,7 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                        // [JXL] Check if base layer is a true progressive DC preview.
                        // Do not treat "Fake Base Prog" as native-region capable.
                        if (m_titanFormat.load() == QuickView::TitanFormat::JXL) {
-                           if (loaderName.find(L"Prog DC") != std::wstring::npos) {
+                            if (loaderName.contains(L"Prog DC")) {
                                m_isProgressiveJXL = true;
                                OutputDebugStringW(L"[HeavyPool] Detected Progressive JXL. Enabling native Region Decoding!\n");
                            } else {
