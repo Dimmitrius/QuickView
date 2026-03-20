@@ -19,3 +19,11 @@ set(VCPKG_LINKER_FLAGS_RELEASE "/LTCG")
 # zlib-ng: Use ZLIB_COMPAT mode to replace zlib with faster zlib-ng
 # This makes zlib-ng output zlib-compatible library names and APIs
 set(ZLIB_COMPAT ON)
+
+# Library-specific optimizations via VCPKG_CMAKE_CONFIGURE_OPTIONS
+# libjxl: Disable encoder to reduce size (viewer only needs decoder)
+# libraw: Disable Jasper (JPEG-2000 for RAW) to reduce dependencies
+set(VCPKG_CMAKE_CONFIGURE_OPTIONS 
+    "-DJPEGXL_ENABLE_ENCODE=OFF"
+    "-DLIBRAW_NO_JASPER=ON"
+)

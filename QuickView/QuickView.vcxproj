@@ -99,7 +99,7 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>/Ob3 /sdl- /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Ob2 /sdl- /utf-8 /Gw /Zc:inline /GR- %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>vcpkg_installed\x64-windows-static-opt\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -109,7 +109,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>vcpkg_installed\x64-windows-static-opt\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>dav1d.lib;avif.lib;mimalloc.lib;brotlicommon.lib;brotlidec.lib;hwy.lib;jasper.lib;jpeg.lib;jxl_cms.lib;jxl_threads.lib;jxl.lib;lcms2.lib;libwebpdecoder.lib;libwebpdemux.lib;raw_r.lib;turbojpeg.lib;yuv.lib;zlibstatic.lib;dwrite.lib;windowscodecs.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dav1d.lib;avif.lib;mimalloc.lib;brotlicommon.lib;brotlidec.lib;hwy.lib;jasper.lib;jpeg.lib;jxl_cms.lib;jxl_threads.lib;jxl.lib;lcms2.lib;libwebpdecoder.lib;libwebpdemux.lib;raw_r.lib;turbojpeg.lib;yuv.lib;zlib.lib;dwrite.lib;windowscodecs.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>$(ProjectDir)QuickView.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
