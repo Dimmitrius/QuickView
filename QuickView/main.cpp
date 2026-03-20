@@ -3084,7 +3084,7 @@ static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = f
 
     // 0. [Logic] Magnetic Snap Time Lock (Moved here to use valid currentTotalScale)
     static DWORD s_lastSnapTime = 0;
-    if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 80)) {
+    if (g_config.EnableZoomSnapDamping && (GetTickCount() - s_lastSnapTime < 120)) {
          return currentTotalScale; 
     }
 
