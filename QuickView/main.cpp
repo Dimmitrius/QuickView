@@ -3831,30 +3831,46 @@ struct FormatExtRule {
     std::wstring_view alt1 = {};
     std::wstring_view alt2 = {};
     std::wstring_view alt3 = {};
+    std::wstring_view alt4 = {};
+    std::wstring_view alt5 = {};
 };
 
 static constexpr FormatExtRule g_formatRules[] = {
+    // Specific compound/derived names first to avoid prefix/substring matches
+    { L"wbmp", L".wbmp" },
+    { L"jpeg xl", L".jxl" },
+    { L"jxl",  L".jxl" },
+    { L"libavif", L".avif" },
+    { L"tinyexr", L".exr" },
+    { L"jpeg (mmf)", L".jpg", L".jpeg", L".jpe", L".jfif" },
+
+    // Core formats
     { L"jpeg", L".jpg", L".jpeg", L".jpe", L".jfif" },
     { L"png",  L".png" },
     { L"webp", L".webp" },
-    { L"avif", L".avif", L"libavif" },
+    { L"avif", L".avif" },
     { L"gif",  L".gif" },
     { L"bmp",  L".bmp", L".dib" },
     { L"tiff", L".tiff", L".tif" },
     { L"tif",  L".tiff", L".tif" },
     { L"heif", L".heic", L".heif" },
     { L"heic", L".heic", L".heif" },
-    { L"jxl",  L".jxl", L"jpeg xl" },
     { L"hdr",  L".hdr", L".pic" },
     { L"psd",  L".psd", L".psb" },
-    { L"exr",  L".exr", L"tinyexr" },
+    { L"exr",  L".exr" },
     { L"qoi",  L".qoi" },
-    { L"tga",  L".tga" },
+    { L"tga",  L".tga", L".icb", L".vda", L".vst" },
     { L"pcx",  L".pcx" },
     { L"svg",  L".svg" },
     { L"ico",  L".ico" },
-    { L"wbmp", L".wbmp" },
-    { L"pnm",  L".pnm", L".pgm", L".ppm" }
+    { L"pnm",  L".pnm", L".pgm", L".ppm", L".pbm" },
+    { L"pgm",  L".pgm", L".pnm", L".ppm", L".pbm" },
+    { L"ppm",  L".ppm", L".pnm", L".pgm", L".pbm" },
+    { L"pbm",  L".pbm", L".pnm", L".pgm", L".ppm" },
+    
+    // [v10.1] New: Support all RAW formats in extension check
+    { L"raw",  L".dng", L".arw", L".nef", L".cr2", L".cr3", L".raf" },
+    { L"dds",  L".dds" },
 };
 
 static std::wstring_view GetPrimaryExtensionForFormat(std::wstring_view format) {
@@ -3893,6 +3909,8 @@ bool CheckExtensionMismatch(std::wstring_view path, std::wstring_view format) {
             if (!rule.alt1.empty() && ext == rule.alt1) return false;
             if (!rule.alt2.empty() && ext == rule.alt2) return false;
             if (!rule.alt3.empty() && ext == rule.alt3) return false;
+            if (!rule.alt4.empty() && ext == rule.alt4) return false;
+            if (!rule.alt5.empty() && ext == rule.alt5) return false;
             return true;
         }
     }
@@ -8666,6 +8684,10 @@ void ProcessEngineEvents(HWND hwnd) {
                     g_toolbar.SetExtensionWarning(false);
                 }
                 
+                // Refresh Layout to recalculate Warning Icon bounds
+                RECT rc; GetClientRect(hwnd, &rc);
+                g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+
                 // [v5.3] Set EXIF Orientation based on AutoRotate config
                 if (g_config.AutoRotate) {
                      // Trust the metadata.
@@ -9817,7 +9839,7 @@ void OnPaint(HWND hwnd) {
                  // [No-DC JXL Guard] For fake/tiny placeholder bases, force tile scheduling immediately.
                  std::wstring fmtUpper = titanMeta.Format;
                  std::transform(fmtUpper.begin(), fmtUpper.end(), fmtUpper.begin(), ::towupper);
-                 bool isJxlLike = (fmtUpper.find(L"JXL") != std::wstring::npos || fmtUpper.find(L"JPEG XL") != std::wstring::npos);
+                 bool isJxlLike = (fmtUpper.contains(L"JXL") || fmtUpper.contains(L"JPEG XL"));
                  if (!isJxlLike && !g_imagePath.empty()) {
                      std::wstring pathLower = g_imagePath;
                      std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
@@ -9825,7 +9847,7 @@ void OnPaint(HWND hwnd) {
                  }
 
                  constexpr float kVirtualNoDcRatio = 0.125f; // 1:8
-                 bool fakeBase = (titanMeta.LoaderName.find(L"Fake Base") != std::wstring::npos);
+                 bool fakeBase = (titanMeta.LoaderName.contains(L"Fake Base"));
                  bool tinyPreview = (previewW <= 2.0f || previewH <= 2.0f);
                  bool weakPreview = (previewW <= 16.0f || previewH <= 16.0f); // Expanded threshold for 4x4 or 8x8
 

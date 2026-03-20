@@ -8,6 +8,8 @@
 #include "HelpOverlay.h"
 #include "EditState.h"
 #include <psapi.h>
+#include <algorithm>
+#include <ranges>
 
 #pragma comment(lib, "psapi.lib")
 
@@ -1599,7 +1601,7 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
     }
 
     // Extraction: Subsampling / Chroma
-    if (metadata.FormatDetails.find(L"4:") != std::wstring::npos) {
+    if (metadata.FormatDetails.contains(L"4:")) {
         size_t pos = metadata.FormatDetails.find(L"4:");
         std::wstring chroma = metadata.FormatDetails.substr(pos, 5);
         rows.push_back({ L"\U0001F3A8", L"Chroma", chroma, L"", L"", TruncateMode::None, false });
@@ -2179,7 +2181,7 @@ namespace {
         const std::wstring tokens[] = { L"4:4:4", L"4:2:2", L"4:2:0", L"4:0:0" };
         const int ranks[] = { 3, 2, 1, 0 };
         for (size_t i = 0; i < 4; ++i) {
-            if (details.find(tokens[i]) != std::wstring::npos) {
+            if (details.contains(tokens[i])) {
                 rank = ranks[i];
                 return tokens[i];
             }
@@ -2421,7 +2423,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     for (const auto& group : hudGroups) {
         bool hasData = false;
         for (const auto& l : group.labels) {
-            if (std::find(labels.begin(), labels.end(), l) != labels.end()) { 
+            if (std::ranges::contains(labels, l)) { 
                 
                 // In Lite(0) and Normal(1) mode, hide identical metrics (except File)
                 if (hudMode < 2 && l != L"File") {
@@ -2492,7 +2494,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         // Group visibility check taking identical hiding into account
         bool groupHasData = false;
         for (const auto& l : group.labels) {
-            if (std::find(labels.begin(), labels.end(), l) != labels.end()) {
+            if (std::ranges::contains(labels, l)) {
                 if (hudMode < 2 && l != L"File") {
                     const InfoRow* lRow = nullptr;
                     const InfoRow* rRow = nullptr;

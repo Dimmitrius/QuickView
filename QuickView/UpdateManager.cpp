@@ -74,7 +74,7 @@ void UpdateManager::CheckThread(int delaySeconds) {
         bool downloadSuccess = false;
 
         // Determine if ZIP or EXE
-        bool isZip = (m_remoteInfo.downloadUrl.find(".zip") != std::string::npos);
+        bool isZip = (m_remoteInfo.downloadUrl.contains(".zip"));
         
         // Adjust destination based on actual type (if url says .zip but we defaulted to .exe in dest)
         if (isZip) {
@@ -294,9 +294,9 @@ VersionInfo UpdateManager::ParseJson(const std::string& json) {
 
     if (v.is<picojson::object>()) {
         picojson::object& jsonObj = v.get<picojson::object>();
-        if (jsonObj.find("version") != jsonObj.end()) info.version = jsonObj.at("version").to_str();
-        if (jsonObj.find("url") != jsonObj.end()) info.downloadUrl = jsonObj.at("url").to_str();
-        if (jsonObj.find("changelog") != jsonObj.end()) info.changelog = jsonObj.at("changelog").to_str();
+        if (jsonObj.contains("version")) info.version = jsonObj.at("version").to_str();
+        if (jsonObj.contains("url")) info.downloadUrl = jsonObj.at("url").to_str();
+        if (jsonObj.contains("changelog")) info.changelog = jsonObj.at("changelog").to_str();
     }
     return info;
 }

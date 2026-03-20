@@ -252,7 +252,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
             
             // [v9.0] Smart RAW Quality Check
             // RAW files require strict quality matching (Preview vs Full) for A/B comparison
-            if (info.format.find(L"RAW") != std::wstring::npos) {
+            if (info.format.contains(L"RAW")) {
                   bool wantFull = m_config.ForceRawDecode;
                   bool hasFull = (cachedFrame->quality == QuickView::DecodeQuality::Full);
                   
@@ -336,7 +336,7 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
     // 2. Recursive RAW Check
     // If it's a RAW file with an embedded thumb, check the preview resolution.
     // "RAW" detection: check if string contains RAW or format check from loader
-    if (info.format.find(L"RAW") != std::wstring::npos) {
+    if (info.format.contains(L"RAW")) {
         // [v9.9] If ForceRawDecode is enabled, RAW Full Decode is computationally intensive.
         // Always route to HeavyLane to avoid blocking FastLane (UI thread responsiveness).
         // [Fix] Use member config!
@@ -1080,6 +1080,7 @@ void ImageEngine::FastLane::QueueWorker() {
                 auto safeFrame = std::make_shared<QuickView::RawImageFrame>();
                 if (rawFrame.IsSvg()) {
                     safeFrame->format = rawFrame.format;
+                    safeFrame->formatDetails = rawFrame.formatDetails;
                     safeFrame->width = rawFrame.width;
                     safeFrame->height = rawFrame.height;
                     safeFrame->svg = std::make_unique<QuickView::RawImageFrame::SvgData>();
@@ -1104,14 +1105,13 @@ void ImageEngine::FastLane::QueueWorker() {
                 e.rawFrame = safeFrame;
                 
 
-                // [Fix] Unified Populate Metadata
-                // PeekHeader dimensions strictly untrusted for FastLane 
-                // RAW/TIFF formats with IFD thumbs may return incorrect info.width/height
                 e.metadata.Width = rawFrame.width;
                 e.metadata.Height = rawFrame.height;
+                e.metadata.Format = info.format; // [Scout] Direct from PeekHeader
 
                 // [v5.3] Metadata is now populated by LoadToFrame (Unified path)
-                // No need to call ReadMetadata separately or access global variables.
+                // We don't call LoadToFrame with pMetadata in FastLane currently, 
+                // but info.format from PeekHeader is sufficient for Scout mismatch check.
                 
                 // [Fix] Propagate EXIF Orientation from Decoder to Metadata (Critical for AutoRotate)
                 e.metadata.ExifOrientation = rawFrame.exifOrientation;
@@ -1441,6 +1441,7 @@ void ImageEngine::AddToCache(int index, const std::wstring& path, std::shared_pt
         if (frame->IsSvg()) {
             // SVG: Copy the SVG data struct
             cachedFrame->format = frame->format;
+            cachedFrame->formatDetails = frame->formatDetails;
             cachedFrame->width = frame->width;
             cachedFrame->height = frame->height;
             cachedFrame->svg = std::make_unique<QuickView::RawImageFrame::SvgData>();
