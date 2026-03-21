@@ -461,6 +461,10 @@ static void ExitCompareMode(HWND hwnd);
 static void CaptureCurrentImageAsCompareLeft();
 static FireAndForget LoadImageIntoCompareLeftSlot(HWND hwnd, std::wstring path, std::function<void(bool)> callback = nullptr);
 static ComparePane HitTestComparePane(HWND hwnd, POINT ptClient);
+static D2D1_RECT_F GetCompareViewport(HWND hwnd, ComparePane pane);
+static void SetDialogCenter(float x, float y);
+static void ClearDialogCenter();
+bool IsCompareModeActive();
 bool IsRawFile(const std::wstring& path); // Forward declaration
 
 static void UpdateCompareRawButton() {
@@ -478,6 +482,40 @@ static void UpdateCompareRawButton() {
     }
 
     g_toolbar.SetCompareRawState(anyRaw, selectedIsRaw, isFullDecode);
+}
+
+static bool GetComparePaneRawState(ComparePane pane, bool& isRaw, bool& isFullDecode) {
+    if (!IsCompareModeActive()) {
+        isRaw = false;
+        isFullDecode = false;
+        return false;
+    }
+
+    if (pane == ComparePane::Left) {
+        isRaw = !g_compare.left.path.empty() && IsRawFile(g_compare.left.path);
+        isFullDecode = isRaw && g_compare.left.metadata.IsRawFullDecode;
+        return g_compare.left.valid;
+    }
+
+    isRaw = !g_imagePath.empty() && IsRawFile(g_imagePath);
+    isFullDecode = isRaw && g_currentMetadata.IsRawFullDecode;
+    return static_cast<bool>(g_imageResource);
+}
+
+static void RefreshCompareRawUI(HWND hwnd) {
+    if (!IsCompareModeActive()) return;
+
+    UpdateCompareRawButton();
+
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+}
+
+static void CenterDialogOnComparePaneIfNeeded(HWND hwnd, ComparePane pane) {
+    if (!IsCompareModeActive()) return;
+    const D2D1_RECT_F vp = GetCompareViewport(hwnd, pane);
+    SetDialogCenter((vp.left + vp.right) * 0.5f, (vp.top + vp.bottom) * 0.5f);
 }
 
 static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval);
@@ -1588,10 +1626,7 @@ static void EnterCompareMode(HWND hwnd) {
     g_toolbar.SetCompareSyncStates(g_compare.syncZoom, g_compare.syncPan);
     g_toolbar.SetCompareInfoState(g_runtime.ShowCompareInfo);
     // [Compare RAW] Initial state: right pane is selected by default
-    UpdateCompareRawButton();
-    RECT rc{};
-    GetClientRect(hwnd, &rc);
-    g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+    RefreshCompareRawUI(hwnd);
 
     g_compare.pendingSnap = true;
 
@@ -6744,12 +6779,7 @@ SKIP_EDGE_NAV:;
         if (IsCompareModeActive()) {
             g_compare.activePane = HitTestComparePane(hwnd, pt);
             g_compare.selectedPane = g_compare.activePane;
-            // [Compare RAW] Update button state when pane selection changes
-            UpdateCompareRawButton();
-            {
-                RECT trc; GetClientRect(hwnd, &trc);
-                g_toolbar.UpdateLayout((float)trc.right, (float)trc.bottom);
-            }
+            RefreshCompareRawUI(hwnd);
             MarkCompareDirty();
             RequestRepaint(PaintLayer::Image | PaintLayer::Static);
             if (IsNearCompareDivider(hwnd, pt)) {
@@ -6962,7 +6992,7 @@ SKIP_EDGE_NAV:;
                         MarkCompareDirty();
                         RequestRepaint(PaintLayer::Image | PaintLayer::Static);
                         // [Compare RAW] Refresh after swap
-                        UpdateCompareRawButton();
+                        RefreshCompareRawUI(hwnd);
                     }
                     break;
                 case ToolbarButtonID::CompareLayout:
@@ -6995,10 +7025,7 @@ SKIP_EDGE_NAV:;
                         // Point context to selected pane, then delegate to IDM_RENDER_RAW
                         g_compare.contextPane = g_compare.selectedPane;
                         SendMessage(hwnd, WM_COMMAND, IDM_RENDER_RAW, 0);
-                        // After reload, update compare RAW button state
-                        UpdateCompareRawButton();
-                        RECT rc; GetClientRect(hwnd, &rc);
-                        g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+                        RefreshCompareRawUI(hwnd);
                     }
                     break;
                 case ToolbarButtonID::CompareDelete:
@@ -7625,6 +7652,7 @@ SKIP_EDGE_NAV:;
         bool hasImage = g_imageResource;
         bool extensionFixNeeded = false;
         bool isRaw = false;
+        bool renderRaw = g_runtime.ForceRawDecode;
         std::wstring targetPath = g_imagePath;
         std::wstring targetFmt = g_currentMetadata.Format;
 
@@ -7634,13 +7662,21 @@ SKIP_EDGE_NAV:;
             targetFmt = g_compare.left.metadata.Format;
         }
 
+        if (IsCompareModeActive()) {
+            bool contextIsRaw = false;
+            bool contextIsFullDecode = false;
+            if (GetComparePaneRawState(g_compare.contextPane, contextIsRaw, contextIsFullDecode) && contextIsRaw) {
+                renderRaw = contextIsFullDecode;
+            }
+        }
+
         if (hasImage && !targetPath.empty()) {
              extensionFixNeeded = CheckExtensionMismatch(targetPath, targetFmt);
              isRaw = IsRawFile(targetPath);
         }
         
         bool isPixelArtMode = GetCurrentPixelArtState(hwnd);
-        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, g_runtime.ForceRawDecode, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode, IsCompareModeActive(), isPixelArtMode);
+        ShowContextMenu(hwnd, pt, hasImage, extensionFixNeeded, g_runtime.LockWindowSize, g_runtime.ShowInfoPanel, g_runtime.InfoPanelExpanded, g_config.AlwaysOnTop, renderRaw, isRaw, IsZoomed(hwnd) != 0, g_runtime.CrossMonitorMode, IsCompareModeActive(), isPixelArtMode);
         return 0;
     }
     
@@ -7894,7 +7930,9 @@ SKIP_EDGE_NAV:;
                     currentName = g_compare.left.path;
                 }
 
+                CenterDialogOnComparePaneIfNeeded(hwnd, ComparePane::Left);
                 std::wstring newName = ShowQuickViewInputDialog(hwnd, AppStrings::Context_Rename, L"Enter new filename:", currentName);
+                ClearDialogCenter();
                 if (!newName.empty()) {
                     bool newHasExt = (newName.find_last_of(L'.') != std::wstring::npos);
                     if (!newHasExt) {
@@ -7934,7 +7972,9 @@ SKIP_EDGE_NAV:;
                 }
                 
                 // Show Input Dialog
+                CenterDialogOnComparePaneIfNeeded(hwnd, ComparePane::Right);
                 std::wstring newName = ShowQuickViewInputDialog(hwnd, AppStrings::Context_Rename, L"Enter new filename:", currentName);
+                ClearDialogCenter();
                 
                 // [Feature] Auto-append extension if missing
                 if (!newName.empty()) {
@@ -7976,6 +8016,8 @@ SKIP_EDGE_NAV:;
                 std::wstring recycleTarget = g_compare.left.path;
                 size_t lastSlash = recycleTarget.find_last_of(L"\\/");
                 std::wstring filename = (lastSlash != std::wstring::npos) ? recycleTarget.substr(lastSlash + 1) : recycleTarget;
+                FileNavigator tempNav;
+                tempNav.Initialize(recycleTarget);
 
                 bool confirmed = true;
                 if (g_config.ConfirmDelete) {
@@ -8001,10 +8043,30 @@ SKIP_EDGE_NAV:;
                     op.pFrom = pathCopy.c_str();
                     op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
                     if (SHFileOperationW(&op) == 0) {
-                        g_compare.left.Reset();
                         g_osd.Show(hwnd, AppStrings::OSD_MovedToRecycleBin, false);
-                        ExitCompareMode(hwnd);
-                        RequestRepaint(PaintLayer::All);
+
+                        std::wstring nextPath = tempNav.PeekNext();
+                        if (nextPath == recycleTarget) nextPath = tempNav.PeekPrevious();
+
+                        if (!nextPath.empty()) {
+                            LoadImageIntoCompareLeftSlot(hwnd, nextPath, [hwnd](bool success) {
+                                if (success) {
+                                    g_compare.activePane = ComparePane::Left;
+                                    g_compare.contextPane = ComparePane::Left;
+                                    g_compare.selectedPane = ComparePane::Left;
+                                    MarkCompareDirty();
+                                    RequestRepaint(PaintLayer::Image | PaintLayer::Static | PaintLayer::Dynamic);
+                                } else {
+                                    g_compare.left.Reset();
+                                    ExitCompareMode(hwnd);
+                                    RequestRepaint(PaintLayer::All);
+                                }
+                            });
+                        } else {
+                            g_compare.left.Reset();
+                            ExitCompareMode(hwnd);
+                            RequestRepaint(PaintLayer::All);
+                        }
                     }
                 }
                 break;
@@ -9509,9 +9571,8 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
     // Update Toolbar State for RAW
     // [Fix] Ensure RAW button visibility is updated immediately on navigation
     g_toolbar.SetRawState(IsRawFile(path), g_runtime.ForceRawDecode);
-    // [Compare RAW] Sync compare button when right pane loads new image
-    if (IsCompareModeActive() && g_compare.selectedPane == ComparePane::Right) {
-        UpdateCompareRawButton();
+    if (IsCompareModeActive()) {
+        RefreshCompareRawUI(hwnd);
     }
     
     // Level 0 Feedback: Immediate OSD before any decode starts
@@ -9627,13 +9688,15 @@ static FireAndForget LoadImageIntoCompareLeftSlot(HWND hwnd, std::wstring path, 
         co_return;
     }
 
-    if (g_compare.left.path != localPath) {
-        g_runtime.ForceRawDecode = g_config.ForceRawDecode;
-    }
+    const bool previousRawDecodeState = g_runtime.ForceRawDecode;
+    const bool isSameImageReload = (g_compare.left.path == localPath);
+    const bool desiredRawDecode = isSameImageReload ? g_runtime.ForceRawDecode : g_config.ForceRawDecode;
+    g_runtime.ForceRawDecode = desiredRawDecode;
 
     // [UI Responsiveness] Apply "Heavy Lane" heuristic from ImageEngine
-    // Only show decode progress bar for heavy computations (RAW, Titan), keeping fast JPEGs seamless like the right pane
-    bool isHeavy = IsRawFile(localPath) || ShouldUsePhase2TitanDebounce(localPath, 0);
+    // Only show decode progress bar for genuinely slow work, matching the right pane:
+    // Titan scans and RAW full decode. Embedded preview reloads stay silent.
+    bool isHeavy = ShouldUsePhase2TitanDebounce(localPath, 0) || (IsRawFile(localPath) && desiredRawDecode);
     if (isHeavy) {
         g_isLeftPaneDecoding = true;
         RequestRepaint(PaintLayer::Dynamic);
@@ -9650,6 +9713,7 @@ static FireAndForget LoadImageIntoCompareLeftSlot(HWND hwnd, std::wstring path, 
     
     co_await ResumeMainThread(hwnd);
 
+    g_runtime.ForceRawDecode = previousRawDecodeState;
     g_isLeftPaneDecoding = false;
 
     if (FAILED(hr) || !frame.IsValid()) {
@@ -9687,9 +9751,7 @@ static FireAndForget LoadImageIntoCompareLeftSlot(HWND hwnd, std::wstring path, 
         UpdateCompareLeftHistogramAsync(hwnd, localPath);
     }
 
-    if (g_compare.selectedPane == ComparePane::Left) {
-        UpdateCompareRawButton();
-    }
+    RefreshCompareRawUI(hwnd);
 
     if (callback) callback(true);
 }
