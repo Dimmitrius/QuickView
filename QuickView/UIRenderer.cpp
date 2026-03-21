@@ -2013,9 +2013,10 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
     // Only draw for Arrow mode (0)
     if (g_config.NavIndicator != 0) return;
     const float s = m_uiScale;
-    float circleRadius = 20.0f * s;
-    float arrowSize = 10.0f * s;
-    float strokeWidth = 3.0f * s;
+    float circleRadius = 16.0f * s;
+    float arrowSize = 8.0f * s;
+    float strokeWidth = 2.0f * s;
+    float margin = 32.0f * s;
 
     ComPtr<ID2D1SolidColorBrush> brushCircle, brushArrow;
     dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.5f), &brushCircle);
@@ -2067,18 +2068,16 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
         bool drawn = false;
 
         if (g_viewState.EdgeHoverLeft != 0 && leftW > 1.0f) {
-            float zoneWidth = leftW * 0.15f;
             float arrowCenterX = (g_viewState.EdgeHoverLeft == -1)
-                ? (zoneWidth / 2.0f)
-                : (splitX - zoneWidth / 2.0f);
+                ? margin
+                : (splitX - margin);
             drawArrow(arrowCenterX, arrowCenterY, g_viewState.EdgeHoverLeft == -1);
             drawn = true;
         }
         if (g_viewState.EdgeHoverRight != 0 && rightW > 1.0f) {
-            float zoneWidth = rightW * 0.15f;
             float arrowCenterX = (g_viewState.EdgeHoverRight == -1)
-                ? (splitX + zoneWidth / 2.0f)
-                : (m_width - zoneWidth / 2.0f);
+                ? (splitX + margin)
+                : (m_width - margin);
             drawArrow(arrowCenterX, arrowCenterY, g_viewState.EdgeHoverRight == -1);
             drawn = true;
         }
@@ -2088,9 +2087,8 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
 
     if (!g_viewState.EdgeHoverState) return;
 
-    float zoneWidth = m_width * 0.15f;
     float arrowCenterY = m_height * 0.5f;
-    float arrowCenterX = (g_viewState.EdgeHoverState == -1) ? (zoneWidth / 2.0f) : (m_width - zoneWidth / 2.0f);
+    float arrowCenterX = (g_viewState.EdgeHoverState == -1) ? margin : (m_width - margin);
     drawArrow(arrowCenterX, arrowCenterY, g_viewState.EdgeHoverState == -1);
 }
 
