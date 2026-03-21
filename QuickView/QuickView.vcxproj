@@ -17,10 +17,9 @@
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <VcpkgTriplet Condition="'$(Platform)'=='x64'">x64-windows-static-opt</VcpkgTriplet>
     <VcpkgEnabled>true</VcpkgEnabled>
-    <VcpkgRoot>..\third_party\vcpkg</VcpkgRoot>
-    <VcpkgManifestInstall>true</VcpkgManifestInstall>
-    <VcpkgOverlayTriplets>..\custom-triplet</VcpkgOverlayTriplets>
-    <VcpkgOverlayPorts>..\custom-ports</VcpkgOverlayPorts>
+    <VcpkgRoot>$(MSBuildProjectDirectory)\..\third_party\vcpkg</VcpkgRoot>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgAdditionalInstallOptions>--overlay-triplets=..\custom-triplet --overlay-ports=..\custom-ports</VcpkgAdditionalInstallOptions>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -110,7 +109,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>vcpkg_installed\x64-windows-static-opt\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>dav1d.lib;avif.lib;mimalloc.lib;brotlicommon.lib;brotlidec.lib;hwy.lib;jpeg.lib;jxl_cms.lib;jxl_threads.lib;jxl.lib;lcms2.lib;libwebpdecoder.lib;libwebpdemux.lib;raw_r.lib;turbojpeg.lib;yuv.lib;zlib.lib;dwrite.lib;windowscodecs.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dav1d.lib;avif.lib;mimalloc.lib;brotlicommon.lib;brotlidec.lib;hwy.lib;jpeg.lib;jxl_cms.lib;jxl_threads.lib;jxl.lib;lcms2.lib;libwebpdecoder.lib;libwebpdemux.lib;raw_r.lib;turbojpeg.lib;yuv.lib;zlibstatic.lib;dwrite.lib;windowscodecs.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>$(ProjectDir)QuickView.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
