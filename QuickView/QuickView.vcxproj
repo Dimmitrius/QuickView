@@ -20,6 +20,7 @@
     <VcpkgRoot>..\third_party\vcpkg</VcpkgRoot>
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
     <VcpkgOverlayTriplets>..\custom-triplet</VcpkgOverlayTriplets>
+    <VcpkgOverlayPorts>..\custom-ports</VcpkgOverlayPorts>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
