@@ -30,7 +30,6 @@ using namespace QuickView;
 #include <immintrin.h> // SIMD
 #include "SIMDUtils.h"
 #include <thread>
-#include "PreviewExtractor.h"
 #include <shobjidl.h> // [Add] for IShellItemImageFactory
 #include "MappedFile.h" // [Opt]
 #if defined(__has_include)
@@ -173,83 +172,83 @@ namespace QuickView {
 static std::wstring DetectFormatFromContent(const uint8_t* magic, size_t size) {
     if (size < 4) return L"Unknown";
 
-    // Check JPEG: FF D8 FF
-    if (size >= 3 && magic[0] == 0xFF && magic[1] == 0xD8 && magic[2] == 0xFF) return L"JPEG";
-    
-    // Check PNG: 89 50 4E 47
-    if (size >= 4 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E && magic[3] == 0x47) return L"PNG";
-        
-    // Check WebP: RIFF ... WEBP
-    if (size >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
-             magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P') return L"WebP";
-        
-    // Check AVIF: ftypavif OR ftypavis (AVIF Sequence)
-    if (size >= 12 && magic[4] == 'f' && magic[5] == 't' && magic[6] == 'y' && magic[7] == 'p') {
-        bool isAvif = (magic[8] == 'a' && magic[9] == 'v' && magic[10] == 'i' && magic[11] == 'f');
-        bool isAvis = (magic[8] == 'a' && magic[9] == 'v' && magic[10] == 'i' && magic[11] == 's');
-        if (isAvif || isAvis) return L"AVIF";
-    }
+    struct MagicSignature {
+        const wchar_t* name;
+        size_t offset;
+        const uint8_t* signature;
+        size_t sig_len;
+    };
 
-    // Check HEIC/HEIF/CR3: ftyp + brand
-    if (size >= 12 && magic[4] == 'f' && magic[5] == 't' && magic[6] == 'y' && magic[7] == 'p') {
-        // Canon CR3 (Raw)
-        if (magic[8] == 'c' && magic[9] == 'r' && magic[10] == 'x') return L"RAW"; // crx
+    static const uint8_t sig_jpeg[] = {0xFF, 0xD8, 0xFF};
+    static const uint8_t sig_png[]  = {0x89, 0x50, 0x4E, 0x47};
+    static const uint8_t sig_webp[] = {'W', 'E', 'B', 'P'};
+    static const uint8_t sig_jxl1[] = {0xFF, 0x0A};
+    static const uint8_t sig_jxl2[] = {'J', 'X', 'L', ' '};
+    static const uint8_t sig_dds[]  = {'D', 'D', 'S', ' '};
+    static const uint8_t sig_bmp[]  = {'B', 'M'};
+    static const uint8_t sig_psd[]  = {'8', 'B', 'P', 'S'};
+    static const uint8_t sig_hdr[]  = {'#', '?'};
+    static const uint8_t sig_exr[]  = {0x76, 0x2F, 0x31, 0x01};
+    static const uint8_t sig_pic[]  = {0x53, 0x80, 0xF6, 0x34};
+    static const uint8_t sig_qoi[]  = {'q', 'o', 'i', 'f'};
+    static const uint8_t sig_pcx[]  = {0x0A};
+    static const uint8_t sig_ico[]  = {0x00, 0x00, 0x01, 0x00};
+    static const uint8_t sig_tif1[] = {0x49, 0x49, 0x2A, 0x00};
+    static const uint8_t sig_tif2[] = {0x4D, 0x4D, 0x00, 0x2A};
 
-        // Check brand at offset 8
-        if ((magic[8] == 'h' && magic[9] == 'e' && magic[10] == 'i' && (magic[11] == 'c' || magic[11] == 'x' || magic[11] == 's' || magic[11] == 'm')) || // heic, heix, heis, heim
-            (magic[8] == 'h' && magic[9] == 'e' && magic[10] == 'v' && (magic[11] == 'c' || magic[11] == 'm' || magic[11] == 's')) || // hevc, hevm, hevs
-            (magic[8] == 'm' && magic[9] == 'i' && magic[10] == 'f' && magic[11] == '1') || // mif1
-             (magic[8] == 'm' && magic[9] == 's' && magic[10] == 'f' && magic[11] == '1'))   // msf1
-        {
-             return L"HEIC"; // Unified as HEIC/HEIF
+    static const MagicSignature signatures[] = {
+        { L"JPEG", 0, sig_jpeg, sizeof(sig_jpeg) },
+        { L"PNG",  0, sig_png,  sizeof(sig_png) },
+        { L"WebP", 8, sig_webp, sizeof(sig_webp) },
+        { L"JXL",  0, sig_jxl1, sizeof(sig_jxl1) },
+        { L"JXL",  4, sig_jxl2, sizeof(sig_jxl2) },
+        { L"DDS",  0, sig_dds,  sizeof(sig_dds) },
+        { L"BMP",  0, sig_bmp,  sizeof(sig_bmp) },
+        { L"PSD",  0, sig_psd,  sizeof(sig_psd) },
+        { L"HDR",  0, sig_hdr,  sizeof(sig_hdr) },
+        { L"EXR",  0, sig_exr,  sizeof(sig_exr) },
+        { L"PIC",  0, sig_pic,  sizeof(sig_pic) },
+        { L"QOI",  0, sig_qoi,  sizeof(sig_qoi) },
+        { L"PCX",  0, sig_pcx,  sizeof(sig_pcx) },
+        { L"ICO",  0, sig_ico,  sizeof(sig_ico) },
+        { L"TIFF", 0, sig_tif1, sizeof(sig_tif1) },
+        { L"TIFF", 0, sig_tif2, sizeof(sig_tif2) }
+    };
+
+    for (const auto& sig : signatures) {
+        if (size >= sig.offset + sig.sig_len) {
+            bool match = true;
+            size_t i = 0;
+            for (size_t k = 0; k < sig.sig_len; ++k) {
+                uint8_t byte = sig.signature[k];
+                if (magic[sig.offset + i] != byte) {
+                    match = false;
+                    break;
+                }
+                i++;
+            }
+            // Additional context rules for WebP / JXL box
+            if (match) {
+                if (wcscmp(sig.name, L"WebP") == 0 && !(magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F')) match = false;
+                if (sig.offset == 4 && wcscmp(sig.name, L"JXL") == 0 && !(magic[0] == 0x00 && magic[1] == 0x00 && magic[2] == 0x00 && magic[3] == 0x0C)) match = false;
+            }
+            if (match) return sig.name;
         }
     }
-        
-    // Check JXL: FF 0A or 00 00 00 0C JXL 
-    if (size >= 2 && magic[0] == 0xFF && magic[1] == 0x0A) return L"JXL";
-    if (size >= 8 && magic[0] == 0x00 && magic[1] == 0x00 && magic[2] == 0x00 && magic[3] == 0x0C &&
-             magic[4] == 'J' && magic[5] == 'X' && magic[6] == 'L' && magic[7] == ' ') return L"JXL";
-        
-    // Check DDS: DDS\x20 (Magic Number: 0x20534444)
-    if (size >= 4 && magic[0] == 'D' && magic[1] == 'D' && magic[2] == 'S' && magic[3] == ' ') return L"DDS";
 
-    // Check GIF: GIF87a or GIF89a
-    if (size >= 6 && magic[0] == 'G' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == '8' &&
-             (magic[4] == '7' || magic[4] == '9') && magic[5] == 'a') return L"GIF";
+    // Complex / Heuristic checks
+    if (size >= 12 && magic[4] == 'f' && magic[5] == 't' && magic[6] == 'y' && magic[7] == 'p') {
+        if (magic[8] == 'a' && magic[9] == 'v' && magic[10] == 'i' && (magic[11] == 'f' || magic[11] == 's')) return L"AVIF";
+        if (magic[8] == 'c' && magic[9] == 'r' && magic[10] == 'x') return L"RAW";
+        if ((magic[8] == 'h' && magic[9] == 'e' && magic[10] == 'i' && (magic[11] == 'c' || magic[11] == 'x' || magic[11] == 's' || magic[11] == 'm')) ||
+            (magic[8] == 'h' && magic[9] == 'e' && magic[10] == 'v' && (magic[11] == 'c' || magic[11] == 'm' || magic[11] == 's')) ||
+            (magic[8] == 'm' && magic[9] == 'i' && magic[10] == 'f' && magic[11] == '1') ||
+            (magic[8] == 'm' && magic[9] == 's' && magic[10] == 'f' && magic[11] == '1')) return L"HEIC";
+    }
 
-    // Check BMP: BM
-    if (size >= 2 && magic[0] == 'B' && magic[1] == 'M') return L"BMP";
-
-    // Check PSD: 8BPS
-    if (size >= 4 && magic[0] == '8' && magic[1] == 'B' && magic[2] == 'P' && magic[3] == 'S') return L"PSD";
-
-    // Check HDR: #?RADIANCE or #?RGBE
-    if (size >= 2 && magic[0] == '#' && magic[1] == '?') return L"HDR";
-
-    // Check EXR: v/1\x01 (0x76 0x2f 0x31 0x01)
-    if (size >= 4 && magic[0] == 0x76 && magic[1] == 0x2F && magic[2] == 0x31 && magic[3] == 0x01) return L"EXR";
-        
-    // Check PIC: 0x53 0x80 ...
-    if (size >= 4 && magic[0] == 0x53 && magic[1] == 0x80 && magic[2] == 0xF6 && magic[3] == 0x34) return L"PIC";
-        
-    // Check PNM: P1-P7
+    if (size >= 6 && magic[0] == 'G' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == '8' && (magic[4] == '7' || magic[4] == '9') && magic[5] == 'a') return L"GIF";
     if (size >= 2 && magic[0] == 'P' && magic[1] >= '1' && magic[1] <= '7') return L"PNM";
-    
-    // Check QOI: qoif
-    if (size >= 4 && magic[0] == 'q' && magic[1] == 'o' && magic[2] == 'i' && magic[3] == 'f') return L"QOI";
-    
-    // Check PCX: 0x0A ...
-    if (size >= 1 && magic[0] == 0x0A) return L"PCX";
-    
-    // Check ICO: 00 00 01 00
-    if (size >= 4 && magic[0] == 0x00 && magic[1] == 0x00 && magic[2] == 0x01 && magic[3] == 0x00) return L"ICO";
 
-    // Check TIFF: II (49 49 2A 00) or MM (4D 4D 00 2A)
-    if (size >= 4 && magic[0] == 0x49 && magic[1] == 0x49 && magic[2] == 0x2A && magic[3] == 0x00) return L"TIFF";
-    if (size >= 4 && magic[0] == 0x4D && magic[1] == 0x4D && magic[2] == 0x00 && magic[3] == 0x2A) return L"TIFF";
-    
-    // [v6.9.7] PRIORITIZE TGA Check over WBMP (since TGA often starts with 00 00)
-    // Check TGA (Heuristic): ColorMapType(0/1) + ImageType(1/2/3/9/10/11) + PixelDepth(8/15/16/24/32) at offset 16
     if (size >= 18) {
         bool validColorMap = (magic[1] == 0 || magic[1] == 1);
         bool validType = (magic[2] == 1 || magic[2] == 2 || magic[2] == 3 || magic[2] == 9 || magic[2] == 10 || magic[2] == 11);
@@ -257,18 +256,11 @@ static std::wstring DetectFormatFromContent(const uint8_t* magic, size_t size) {
         if (validColorMap && validType && validBpp) return L"TGA";
     }
 
-    // [v6.9.6] Check WBMP: Type 0, Fixed Header 0
-    // [Fix] Must exclude ISOBMFF (ftyp) to avoid hijacking CR3/MP4 which start with size 00 00 ...
     if (size >= 2 && magic[0] == 0x00 && magic[1] == 0x00) {
-        // If it looks like ftyp, it's NOT WBMP
-        if (size >= 8 && magic[4] == 'f' && magic[5] == 't' && magic[6] == 'y' && magic[7] == 'p') {
-            // Check known brands like crx? Already handled above. 
-            // If we are here, it's an UNKNOWN ftyp. Return Unknown, not WBMP.
-            return L"Unknown"; 
-        }
+        if (size >= 8 && magic[4] == 'f' && magic[5] == 't' && magic[6] == 'y' && magic[7] == 'p') return L"Unknown";
         return L"WBMP";
     }
-    
+
     return L"Unknown";
 }
 
@@ -581,16 +573,10 @@ HRESULT CImageLoader::LoadFromFile(LPCWSTR filePath, IWICBitmapSource** bitmap) 
     return hr;
 }
 
-#include <turbojpeg.h>
 
 // High-Performance Library Includes
 
 #include <webp/decode.h>     // libwebp
-#include <webp/demux.h>
-#include <avif/avif.h>       // libavif
-#include <jxl/decode.h>      // libjxl
-#include <jxl/resizable_parallel_runner.h>
-#include <jxl/thread_parallel_runner.h>
 #include <libraw/libraw.h>   // libraw
 #include <wincodec.h>
 
@@ -600,13 +586,11 @@ HRESULT CImageLoader::LoadFromFile(LPCWSTR filePath, IWICBitmapSource** bitmap) 
 #include <sstream>
 #include <iomanip>
 #include "exif.h"
-#include <immintrin.h> // [AVX2]
  // [v6.0] EasyExif
 #include "ImageEngine.h"
 
 // Wuffs (Google's memory-safe decoder)
 // Implementation is in WuffsImpl.cpp with selective module loading
-#include "WuffsLoader.h"
 
 // [v5.3] Global storage - kept for internal decoder use, exposed via DecodeResult.metadata
 std::wstring g_lastFormatDetails;
@@ -7419,7 +7403,6 @@ void CImageLoader::ComputeHistogramFromFrame(const QuickView::RawImageFrame& fra
 // Phase 6: Surgical Format Optimizations
 // ============================================================================
 
-#include <webp/decode.h>
 
 
 
@@ -8727,7 +8710,6 @@ CImageLoader::ImageHeaderInfo CImageLoader::PeekHeader(LPCWSTR filePath) {
 // It decodes images directly to RawImageFrame, bypassing WIC where possible.
 // ============================================================================
 
-#include "MemoryArena.h"
 
 HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* outFrame,
                                    QuantumArena* arena,
