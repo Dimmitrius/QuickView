@@ -103,48 +103,12 @@ ComPtr<ID2D1Bitmap> ThumbnailManager::GetThumbnail(size_t imageId, LPCWSTR fileP
 }
 
 void ThumbnailManager::UpdateOptimizedPriority(int startIdx, int endIdx, int priorityCenter) {
-    std::lock_guard<std::mutex> lock(m_queueMutex);
-    
-    // Strategy: Clear queue to remove old far-away tasks?
-    // User requested: "Cancellation: If user scrolls fast... discard previous tasks".
-    // So yes, clearing is good.
-    // But don't clear tasks that are *inside* the new range?
-    // Just clear everything and re-add the new range. The overlap is fine to re-add (deduplication via m_pendingTasks needs check).
-    
-    // Note: clearing m_taskQueue is hard (no clear()). Assign new.
-    m_fastQueue = std::priority_queue<Task, std::vector<Task>, std::greater<Task>>();
-    m_slowQueue = std::priority_queue<Task, std::vector<Task>, std::greater<Task>>();
-    
-    // Also clear pending flags?
-    // If we clear queue, those tasks are gone. So we should clear pending flags for them.
-    // But we don't know which ones were in queue.
-    // Simpler: Clear m_pendingTasks map too.
-    // But wait, what if Worker is currently processing index X?
-    // Worker holds no lock during decode.
-    // If we clear pending map, and add X again, we might double process X.
-    // That's acceptable (waste of one decode) for simplicity.
-    m_pendingTasks.clear(); 
-    
-    // Add new detailed range
-    // Expand a bit? Start-5 to End+5 ?
-    int range = 10;
-    int realStart = std::max(0, startIdx - range);
-    int realEnd = endIdx + range; // Need max count check? Caller usually handles indices?
-    // We don't know Max count here unless passed. Assuming caller passes valid indices or we check inside loop?
-    // We'll trust caller (GalleryOverlay) to pass reasonable indices or we check against FileNavigator if we had access.
-    // We bind path in Task, so we need Path access.
-    // Wait, GetThumbnail passed Path. But UpdateOptimizedPriority doesn't.
-    // We need access to FileNavigator to get Path by Index!
-    // We don't have FileNavigator here directly.
-    // Solution: GetThumbnail calls are driven by Overlay iterating FileNavigator.
-    // But `UpdateOptimizedPriority` is the "Bulk Queue" function.
-    // We should pass a callback or have reference to FileNavigator?
-    // Or `GetThumbnail` queues it if missing?
-    
-    // Revised Plan Logic:
-    // GalleryOverlay calculates range.
-    // GalleryOverlay iterates range, calls `ThumbnailManager::EnsureQueued(index, path, priority)`.
-    // Creating `EnsureQueued` helper.
+    (void)startIdx;
+    (void)endIdx;
+    (void)priorityCenter;
+    // Queue requests are driven per-item by GalleryOverlay::Render.
+    // Clearing pending work here causes large images to be re-queued every frame
+    // while they are still decoding, which manifests as persistent flicker.
 }
 
 // Helper (Internal or Public?) - Let's make it Public for Overlay to use iteratively
@@ -174,12 +138,15 @@ void ThumbnailManager::EvictLRU() {
     }
 }
 
-void ThumbnailManager::AddToLRU(size_t imageId, size_t size) {
+void ThumbnailManager::AddToLRU(size_t imageId, size_t size, size_t previousSize) {
     // Remove if exists (re-add to front)
     if (m_lruMap.count(imageId)) {
         m_lruList.erase(m_lruMap[imageId]);
-        m_currentCacheSize -= size; // Size might satisfy if unchanged? Simpler to re-add.
-        // Actually size is stored in entry.
+        if (m_currentCacheSize >= previousSize) {
+            m_currentCacheSize -= previousSize;
+        } else {
+            m_currentCacheSize = 0;
+        }
     }
     
     m_lruList.push_front(imageId);
@@ -214,8 +181,6 @@ void ThumbnailManager::WorkerLoopFast() {
             task = m_fastQueue.top();
             m_fastQueue.pop();
             
-            auto it = m_pendingTasks.find(task.imageId);
-            if (it != m_pendingTasks.end()) m_pendingTasks.erase(it);
         }
         
         int targetSize = 300; 
@@ -224,10 +189,19 @@ void ThumbnailManager::WorkerLoopFast() {
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
                 size_t size = data.pixels.size();
+                size_t previousSize = 0;
+                auto existing = m_l1Cache.find(task.imageId);
+                if (existing != m_l1Cache.end()) {
+                    previousSize = existing->second.pixels.size();
+                }
                 m_l1Cache[task.imageId] = std::move(data);
-                AddToLRU(task.imageId, size);
+                AddToLRU(task.imageId, size, previousSize);
             }
             PostMessage(m_hwnd, WM_THUMB_KEY_READY, (WPARAM)task.imageId, 0);
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            m_pendingTasks.erase(task.imageId);
         }
     }
     
@@ -253,8 +227,6 @@ void ThumbnailManager::WorkerLoopSlow() {
             task = m_slowQueue.top();
             m_slowQueue.pop();
             
-            auto it = m_pendingTasks.find(task.imageId);
-            if (it != m_pendingTasks.end()) m_pendingTasks.erase(it);
         }
         
         int targetSize = 300; 
@@ -263,10 +235,19 @@ void ThumbnailManager::WorkerLoopSlow() {
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
                 size_t size = data.pixels.size();
+                size_t previousSize = 0;
+                auto existing = m_l1Cache.find(task.imageId);
+                if (existing != m_l1Cache.end()) {
+                    previousSize = existing->second.pixels.size();
+                }
                 m_l1Cache[task.imageId] = std::move(data);
-                AddToLRU(task.imageId, size);
+                AddToLRU(task.imageId, size, previousSize);
             }
             PostMessage(m_hwnd, WM_THUMB_KEY_READY, (WPARAM)task.imageId, 0);
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            m_pendingTasks.erase(task.imageId);
         }
     }
     
@@ -277,6 +258,13 @@ void ThumbnailManager::WorkerLoopSlow() {
 
 // Added to match planned API changes
 void ThumbnailManager::QueueRequest(size_t imageId, LPCWSTR path, int priority) {
+    {
+        std::lock_guard<std::mutex> cacheLock(m_cacheMutex);
+        if (m_l1Cache.count(imageId) || m_l2Cache.count(imageId)) {
+            return;
+        }
+    }
+
     std::lock_guard<std::mutex> lock(m_queueMutex);
     
     if (m_pendingTasks.count(imageId)) return; // Already queued

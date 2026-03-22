@@ -55,6 +55,35 @@ bool PreviewExtractor::ExtractFromRAW(const uint8_t* data, size_t size, Extracte
     return false;
 }
 
+bool PreviewExtractor::ExtractFromTIFF(const uint8_t* data, size_t size, ExtractedData& out) {
+    if (size < 16) return false;
+
+    bool isLE = false;
+    if (data[0] == 0x49 && data[1] == 0x49) isLE = true;
+    else if (data[0] == 0x4D && data[1] == 0x4D) isLE = false;
+    else return false;
+
+    uint16_t magic = isLE ? U16LE(data + 2) : U16BE(data + 2);
+    if (magic != 42 && magic != 43) return false;
+
+    uint32_t ifd0 = isLE ? U32LE(data + 4) : U32BE(data + 4);
+    if (ifd0 >= size) return false;
+
+    uint64_t jpgOff = 0;
+    uint64_t jpgSz = 0;
+    if (!ParseTiffIFD(data, size, ifd0, isLE, jpgOff, jpgSz)) {
+        return false;
+    }
+
+    if (jpgOff > 0 && jpgSz > 512 && jpgOff + jpgSz <= size) {
+        out.pData = data + jpgOff;
+        out.size = static_cast<size_t>(jpgSz);
+        return true;
+    }
+
+    return false;
+}
+
 bool PreviewExtractor::ParseTiffIFD(const uint8_t* data, size_t size, size_t offset, bool isLE, uint64_t& jpegOffset, uint64_t& jpegSize) {
     if (offset + 2 > size) return false;
     

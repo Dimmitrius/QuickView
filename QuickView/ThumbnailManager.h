@@ -116,6 +116,6 @@ private:
     void WorkerLoopSlow();
     
     void EvictLRU();
-    void AddToLRU(size_t imageId, size_t size);
+    void AddToLRU(size_t imageId, size_t size, size_t previousSize = 0);
     void TouchLRU(size_t imageId);
 };

@@ -20,6 +20,10 @@ public:
     // All usually Tiff-based.
     static bool ExtractFromRAW(const uint8_t* fileData, size_t fileSize, ExtractedData& out);
 
+    // TIFF / TIF
+    // Standard TIFF may embed a JPEG thumbnail in IFD0/IFD1.
+    static bool ExtractFromTIFF(const uint8_t* fileData, size_t fileSize, ExtractedData& out);
+
     // HEIC / HEIF / AVIF
     // ISOBMFF based.
     static bool ExtractFromHEIC(const uint8_t* fileData, size_t fileSize, ExtractedData& out);

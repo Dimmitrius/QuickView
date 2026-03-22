@@ -2257,13 +2257,532 @@ HRESULT CImageLoader::LoadThumbJPEG(LPCWSTR filePath, int targetSize, ThumbData*
     return LoadThumbJPEGFromMemory(jpegBuf.data(), jpegBuf.size(), targetSize, pData);
 }
 
+static void PopulateThumbOriginalInfo(const CImageLoader::ImageHeaderInfo& headerInfo,
+                                      uint64_t fallbackFileSize,
+                                      CImageLoader::ThumbData* pData) {
+    if (!pData) return;
+
+    if (headerInfo.width > 0 && headerInfo.height > 0) {
+        pData->origWidth = headerInfo.width;
+        pData->origHeight = headerInfo.height;
+    } else if (pData->origWidth <= 0 || pData->origHeight <= 0) {
+        pData->origWidth = pData->width;
+        pData->origHeight = pData->height;
+    }
+
+    if (headerInfo.fileSize > 0) {
+        pData->fileSize = static_cast<uint64_t>(headerInfo.fileSize);
+    } else if (pData->fileSize == 0) {
+        pData->fileSize = fallbackFileSize;
+    }
+}
+
+static HRESULT DownscaleThumbDataIfNeeded(CImageLoader::ThumbData* pData, int targetSize) {
+    if (!pData || !pData->isValid || targetSize <= 0) return S_OK;
+    if (pData->width <= targetSize && pData->height <= targetSize) return S_OK;
+
+    float scaleW = static_cast<float>(targetSize) / static_cast<float>(pData->width);
+    float scaleH = static_cast<float>(targetSize) / static_cast<float>(pData->height);
+    float scale = (std::min)(scaleW, scaleH);
+    if (scale >= 1.0f) return S_OK;
+
+    int finalW = (std::max)(1, static_cast<int>(pData->width * scale + 0.5f));
+    int finalH = (std::max)(1, static_cast<int>(pData->height * scale + 0.5f));
+    int finalStride = CalculateAlignedStride(finalW, 4);
+    std::vector<uint8_t> resized(static_cast<size_t>(finalStride) * finalH);
+
+    SIMDUtils::ResizeBilinear(
+        pData->pixels.data(),
+        pData->width,
+        pData->height,
+        pData->stride,
+        resized.data(),
+        finalW,
+        finalH,
+        finalStride);
+
+    pData->pixels = std::move(resized);
+    pData->width = finalW;
+    pData->height = finalH;
+    pData->stride = finalStride;
+    pData->isBlurry = true;
+    return S_OK;
+}
+
+static HRESULT CopyWicBitmapToThumbData(IWICBitmapSource* source, CImageLoader::ThumbData* pData) {
+    if (!source || !pData) return E_INVALIDARG;
+
+    UINT width = 0;
+    UINT height = 0;
+    HRESULT hr = source->GetSize(&width, &height);
+    if (FAILED(hr) || width == 0 || height == 0) return FAILED(hr) ? hr : E_FAIL;
+
+    pData->width = static_cast<int>(width);
+    pData->height = static_cast<int>(height);
+    pData->stride = static_cast<int>(width) * 4;
+    pData->pixels.resize(static_cast<size_t>(pData->stride) * height);
+
+    hr = source->CopyPixels(nullptr,
+                            static_cast<UINT>(pData->stride),
+                            static_cast<UINT>(pData->pixels.size()),
+                            pData->pixels.data());
+    if (FAILED(hr)) {
+        pData->pixels.clear();
+        return hr;
+    }
+
+    pData->isValid = true;
+    return S_OK;
+}
+
+struct JxlThumbSampleCtx {
+    CImageLoader::ThumbData* thumb = nullptr;
+    std::vector<int>* sampleX = nullptr;
+    std::unordered_map<int, std::vector<int>>* sampleRows = nullptr;
+    std::atomic<size_t>* touchedPixels = nullptr;
+};
+
+static void JxlThumbSampleCallback(void* opaque, size_t x, size_t y, size_t num_pixels, const void* pixels) {
+    auto* ctx = static_cast<JxlThumbSampleCtx*>(opaque);
+    if (!ctx || !ctx->thumb || !ctx->sampleX || !ctx->sampleRows) return;
+
+    auto rowIt = ctx->sampleRows->find(static_cast<int>(y));
+    if (rowIt == ctx->sampleRows->end()) return;
+
+    const uint8_t* src = static_cast<const uint8_t*>(pixels);
+    for (int dstY : rowIt->second) {
+        uint8_t* dstRow = ctx->thumb->pixels.data() + (size_t)dstY * ctx->thumb->stride;
+        for (int dstX = 0; dstX < ctx->thumb->width; ++dstX) {
+            int srcX = (*ctx->sampleX)[dstX];
+            if (srcX < (int)x || srcX >= (int)(x + num_pixels)) continue;
+
+            const uint8_t* s = src + (size_t)(srcX - (int)x) * 4;
+            uint8_t r = s[0];
+            uint8_t g = s[1];
+            uint8_t b = s[2];
+            uint8_t a = s[3];
+            if (a < 255) {
+                r = (uint8_t)((r * a) / 255);
+                g = (uint8_t)((g * a) / 255);
+                b = (uint8_t)((b * a) / 255);
+            }
+            uint8_t* d = dstRow + (size_t)dstX * 4;
+            d[0] = b;
+            d[1] = g;
+            d[2] = r;
+            d[3] = a;
+            if (ctx->touchedPixels) {
+                ctx->touchedPixels->fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+}
+
+static HRESULT LoadThumbJXL_Sampled(const uint8_t* pFile,
+                                    size_t fileSize,
+                                    int targetSize,
+                                    CImageLoader::ThumbData* pData,
+                                    CImageLoader::ImageMetadata* pMetadata) {
+    if (!pFile || fileSize == 0 || !pData) return E_INVALIDARG;
+
+    JxlDecoder* dec = JxlDecoderCreate(NULL);
+    if (!dec) return E_OUTOFMEMORY;
+
+    auto cleanup = [&](HRESULT hr) {
+        JxlDecoderDestroy(dec);
+        return hr;
+    };
+
+    void* runner = CImageLoader::GetJxlRunner();
+    if (!runner) return cleanup(E_OUTOFMEMORY);
+    if (JXL_DEC_SUCCESS != JxlDecoderSetParallelRunner(dec, JxlThreadParallelRunner, runner)) {
+        return cleanup(E_FAIL);
+    }
+
+    const int events = JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE | JXL_DEC_COLOR_ENCODING;
+    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec, events)) {
+        return cleanup(E_FAIL);
+    }
+
+    if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec, pFile, fileSize)) {
+        return cleanup(E_FAIL);
+    }
+    JxlDecoderCloseInput(dec);
+
+    JxlBasicInfo info = {};
+    JxlPixelFormat format = { 4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0 };
+    std::vector<int> sampleX;
+    std::unordered_map<int, std::vector<int>> sampleRows;
+    JxlThumbSampleCtx sampleCtx = {};
+    std::atomic<size_t> touchedPixels{ 0 };
+    bool callbackSet = false;
+
+    for (;;) {
+        JxlDecoderStatus status = JxlDecoderProcessInput(dec);
+        if (status == JXL_DEC_ERROR) return cleanup(E_FAIL);
+        if (status == JXL_DEC_SUCCESS) break;
+
+        if (status == JXL_DEC_BASIC_INFO) {
+            if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec, &info)) {
+                return cleanup(E_FAIL);
+            }
+
+            JxlColorEncoding colorEncoding = {};
+            colorEncoding.color_space = JXL_COLOR_SPACE_RGB;
+            colorEncoding.white_point = JXL_WHITE_POINT_D65;
+            colorEncoding.primaries = JXL_PRIMARIES_SRGB;
+            colorEncoding.transfer_function = JXL_TRANSFER_FUNCTION_SRGB;
+            colorEncoding.rendering_intent = JXL_RENDERING_INTENT_PERCEPTUAL;
+            JxlDecoderSetOutputColorProfile(dec, &colorEncoding, NULL, 0);
+
+            int origW = static_cast<int>(info.xsize);
+            int origH = static_cast<int>(info.ysize);
+            int dstW = origW;
+            int dstH = origH;
+            if (targetSize > 0 && (origW > targetSize || origH > targetSize)) {
+                float ratio = (origW >= origH) ? ((float)targetSize / (float)origW)
+                                               : ((float)targetSize / (float)origH);
+                dstW = (std::max)(1, (int)std::lround(origW * ratio));
+                dstH = (std::max)(1, (int)std::lround(origH * ratio));
+            }
+
+            pData->width = dstW;
+            pData->height = dstH;
+            pData->stride = CalculateAlignedStride(dstW, 4);
+            pData->origWidth = origW;
+            pData->origHeight = origH;
+            pData->pixels.assign((size_t)pData->stride * dstH, 0);
+            pData->isValid = false;
+            pData->isBlurry = (dstW != origW || dstH != origH);
+            pData->loaderName = L"libjxl (Sampled)";
+
+            sampleX.resize(dstW);
+            for (int dx = 0; dx < dstW; ++dx) {
+                sampleX[dx] = (std::min)(origW - 1, (int)(((double)dx + 0.5) * origW / dstW));
+            }
+            sampleRows.clear();
+            for (int dy = 0; dy < dstH; ++dy) {
+                int sy = (std::min)(origH - 1, (int)(((double)dy + 0.5) * origH / dstH));
+                sampleRows[sy].push_back(dy);
+            }
+
+            if (pMetadata) {
+                pMetadata->Width = origW;
+                pMetadata->Height = origH;
+            }
+
+            sampleCtx.thumb = pData;
+            sampleCtx.sampleX = &sampleX;
+            sampleCtx.sampleRows = &sampleRows;
+            sampleCtx.touchedPixels = &touchedPixels;
+            if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutCallback(dec, &format, JxlThumbSampleCallback, &sampleCtx)) {
+                return cleanup(E_FAIL);
+            }
+            callbackSet = true;
+        } else if (status == JXL_DEC_COLOR_ENCODING) {
+            if (pMetadata) {
+                size_t iccSize = 0;
+                if (JXL_DEC_SUCCESS == JxlDecoderGetICCProfileSize(dec, JXL_COLOR_PROFILE_TARGET_DATA, &iccSize) && iccSize > 0) {
+                    std::vector<uint8_t> icc(iccSize);
+                    if (JXL_DEC_SUCCESS == JxlDecoderGetColorAsICCProfile(dec, JXL_COLOR_PROFILE_TARGET_DATA, icc.data(), iccSize)) {
+                        std::wstring desc = CImageLoader::ParseICCProfileName(icc.data(), iccSize);
+                        if (!desc.empty()) pMetadata->ColorSpace = desc;
+                    }
+                }
+            }
+        } else if (status == JXL_DEC_FULL_IMAGE) {
+            break;
+        }
+    }
+
+    if (!callbackSet || touchedPixels.load(std::memory_order_relaxed) == 0 || pData->pixels.empty()) {
+        pData->isValid = false;
+        pData->pixels.clear();
+        return cleanup(E_FAIL);
+    }
+    pData->isValid = true;
+    return cleanup(S_OK);
+}
+
+static HRESULT RasterizeSvgThumbnail(const std::vector<uint8_t>& xmlData,
+                                     float viewBoxW,
+                                     float viewBoxH,
+                                     int targetSize,
+                                     CImageLoader::ThumbData* pData) {
+    if (!pData || xmlData.empty()) return E_INVALIDARG;
+
+    const float safeW = viewBoxW > 0.0f ? viewBoxW : 512.0f;
+    const float safeH = viewBoxH > 0.0f ? viewBoxH : 512.0f;
+    const int maxDim = targetSize > 0 ? targetSize : 512;
+    const float scale = (std::min)(1.0f, (float)maxDim / (std::max)(safeW, safeH));
+    const UINT outW = (UINT)(std::max)(1, (int)std::lround(safeW * scale));
+    const UINT outH = (UINT)(std::max)(1, (int)std::lround(safeH * scale));
+
+    UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
+    ComPtr<ID3D11Device> d3dDevice;
+    ComPtr<ID3D11DeviceContext> d3dContext;
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,
+        D3D_DRIVER_TYPE_WARP,
+        nullptr,
+        creationFlags,
+        &fl,
+        1,
+        D3D11_SDK_VERSION,
+        &d3dDevice,
+        nullptr,
+        &d3dContext);
+    if (FAILED(hr)) return hr;
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = outW;
+    texDesc.Height = outH;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+    ComPtr<ID3D11Texture2D> renderTex;
+    hr = d3dDevice->CreateTexture2D(&texDesc, nullptr, &renderTex);
+    if (FAILED(hr)) return hr;
+
+    ComPtr<IDXGISurface> dxgiSurface;
+    hr = renderTex.As(&dxgiSurface);
+    if (FAILED(hr)) return hr;
+
+    D2D1_FACTORY_OPTIONS options = {};
+    ComPtr<ID2D1Factory1> d2dFactory;
+    hr = D2D1CreateFactory(
+        D2D1_FACTORY_TYPE_SINGLE_THREADED,
+        __uuidof(ID2D1Factory1),
+        &options,
+        reinterpret_cast<void**>(d2dFactory.GetAddressOf()));
+    if (FAILED(hr)) return hr;
+
+    ComPtr<IDXGIDevice> dxgiDevice;
+    hr = d3dDevice.As(&dxgiDevice);
+    if (FAILED(hr)) return hr;
+
+    ComPtr<ID2D1Device> d2dDevice;
+    hr = d2dFactory->CreateDevice(dxgiDevice.Get(), &d2dDevice);
+    if (FAILED(hr)) return hr;
+
+    ComPtr<ID2D1DeviceContext> d2dContext;
+    hr = d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &d2dContext);
+    if (FAILED(hr)) return hr;
+
+    ComPtr<ID2D1DeviceContext5> d2dContext5;
+    hr = d2dContext.As(&d2dContext5);
+    if (FAILED(hr)) return hr;
+
+    D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+        96.0f,
+        96.0f);
+
+    ComPtr<ID2D1Bitmap1> targetBitmap;
+    hr = d2dContext5->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &targetProps, &targetBitmap);
+    if (FAILED(hr)) return hr;
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, xmlData.size());
+    if (!hMem) return E_OUTOFMEMORY;
+
+    ComPtr<IStream> stream;
+    void* mem = GlobalLock(hMem);
+    if (!mem) {
+        GlobalFree(hMem);
+        return E_OUTOFMEMORY;
+    }
+    memcpy(mem, xmlData.data(), xmlData.size());
+    GlobalUnlock(hMem);
+    hr = CreateStreamOnHGlobal(hMem, TRUE, &stream);
+    if (FAILED(hr)) {
+        GlobalFree(hMem);
+        return hr;
+    }
+
+    ComPtr<ID2D1SvgDocument> svgDoc;
+    hr = d2dContext5->CreateSvgDocument(stream.Get(), D2D1::SizeF(safeW, safeH), &svgDoc);
+    if (FAILED(hr)) return hr;
+
+    d2dContext5->SetTarget(targetBitmap.Get());
+    d2dContext5->BeginDraw();
+    d2dContext5->Clear(D2D1::ColorF(0, 0, 0, 0));
+    d2dContext5->SetTransform(D2D1::Matrix3x2F::Scale((float)outW / safeW, (float)outH / safeH));
+    d2dContext5->DrawSvgDocument(svgDoc.Get());
+    hr = d2dContext5->EndDraw();
+    if (FAILED(hr)) return hr;
+
+    D3D11_TEXTURE2D_DESC stagingDesc = texDesc;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.MiscFlags = 0;
+
+    ComPtr<ID3D11Texture2D> stagingTex;
+    hr = d3dDevice->CreateTexture2D(&stagingDesc, nullptr, &stagingTex);
+    if (FAILED(hr)) return hr;
+
+    d3dContext->CopyResource(stagingTex.Get(), renderTex.Get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    hr = d3dContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) return hr;
+
+    pData->width = (int)outW;
+    pData->height = (int)outH;
+    pData->stride = CalculateAlignedStride((int)outW, 4);
+    pData->pixels.resize((size_t)pData->stride * outH);
+
+    for (UINT y = 0; y < outH; ++y) {
+        memcpy(pData->pixels.data() + (size_t)y * pData->stride,
+               static_cast<const uint8_t*>(mapped.pData) + (size_t)y * mapped.RowPitch,
+               outW * 4);
+    }
+
+    d3dContext->Unmap(stagingTex.Get(), 0);
+    pData->isValid = true;
+    pData->isBlurry = false;
+    return S_OK;
+}
+
 HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData* pData, bool allowSlow) {
     if (!filePath || !pData) return E_INVALIDARG;
     pData->isValid = false;
+    pData->pixels.clear();
     
     // 0. Highest Priority: Windows Shell Thumbnail Cache (Insanely fast for pre-cached heavy RAWs)
     if (SUCCEEDED(LoadShellThumbnail(filePath, targetSize, pData))) {
         return S_OK;
+    }
+
+    const ImageHeaderInfo headerInfo = PeekHeader(filePath);
+    const uint64_t fallbackFileSize = static_cast<uint64_t>(headerInfo.fileSize);
+    std::wstring format = headerInfo.format.empty() ? DetectFormatFromContent(filePath) : headerInfo.format;
+    std::wstring pathLower = filePath;
+    std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
+
+    QuickView::MappedFile mapping(filePath);
+    const uint8_t* mappedData = mapping.IsValid() ? mapping.data() : nullptr;
+    size_t mappedSize = mapping.IsValid() ? mapping.size() : 0;
+
+    auto tryEmbeddedPreview = [&](const wchar_t* loaderName,
+                                  auto extractor) -> bool {
+        if (!mappedData || mappedSize == 0) return false;
+        PreviewExtractor::ExtractedData exData;
+        if (!extractor(mappedData, mappedSize, exData) || !exData.IsValid()) {
+            return false;
+        }
+        if (FAILED(LoadThumbJPEGFromMemory(exData.pData, exData.size, targetSize, pData)) || !pData->isValid) {
+            return false;
+        }
+        pData->loaderName = loaderName;
+        pData->isBlurry = false;
+        PopulateThumbOriginalInfo(headerInfo, static_cast<uint64_t>(mappedSize), pData);
+        return true;
+    };
+
+    if (format == L"RAW" && tryEmbeddedPreview(L"RAW Preview", PreviewExtractor::ExtractFromRAW)) {
+        return S_OK;
+    }
+    if (format == L"TIFF" && tryEmbeddedPreview(L"TIFF Preview", PreviewExtractor::ExtractFromTIFF)) {
+        return S_OK;
+    }
+    if ((format == L"HEIC" || pathLower.ends_with(L".heic") || pathLower.ends_with(L".heif")) &&
+        tryEmbeddedPreview(L"HEIC Preview", PreviewExtractor::ExtractFromHEIC)) {
+        return S_OK;
+    }
+    if ((format == L"PSD" || pathLower.ends_with(L".psb")) &&
+        tryEmbeddedPreview(L"PSD Preview", PreviewExtractor::ExtractFromPSD)) {
+        return S_OK;
+    }
+
+    if ((format == L"AVIF" || format == L"HEIC" ||
+         pathLower.ends_with(L".avif") || pathLower.ends_with(L".avifs") ||
+         pathLower.ends_with(L".heic") || pathLower.ends_with(L".heif")) &&
+        mappedData && mappedSize > 0) {
+        ImageMetadata meta;
+        HRESULT hr = LoadThumbAVIF_Proxy(mappedData, mappedSize, targetSize, pData, allowSlow, &meta);
+        if (SUCCEEDED(hr) && pData->isValid) {
+            DownscaleThumbDataIfNeeded(pData, targetSize);
+            if (meta.Width > 0 && meta.Height > 0) {
+                pData->origWidth = meta.Width;
+                pData->origHeight = meta.Height;
+            }
+            pData->fileSize = meta.FileSize > 0 ? meta.FileSize : static_cast<uint64_t>(mappedSize);
+            pData->loaderName = format == L"HEIC" ? L"libavif/HEIF" : L"libavif";
+            return S_OK;
+        }
+    }
+
+    if ((format == L"JXL" || pathLower.ends_with(L".jxl")) && mappedData && mappedSize > 0) {
+        ImageMetadata meta;
+        // Gallery thumbnails must never use Titan's transparent fake base.
+        // If a cheap real thumbnail is unavailable, we fall through to the
+        // normal decode path instead of returning an empty/transparent result.
+        HRESULT hr = LoadThumbJXL_DC(mappedData, mappedSize, pData, &meta, false, false);
+        if (SUCCEEDED(hr) && pData->isValid) {
+            const bool isFakeThumb =
+                pData->width <= 1 &&
+                pData->height <= 1 &&
+                pData->pixels.size() == 4 &&
+                std::all_of(pData->pixels.begin(), pData->pixels.end(), [](uint8_t v) { return v == 0; });
+            if (isFakeThumb || pData->loaderName.contains(L"Fake Base")) {
+                pData->isValid = false;
+                pData->pixels.clear();
+                hr = E_FAIL;
+            }
+        }
+        if (SUCCEEDED(hr) && pData->isValid) {
+            DownscaleThumbDataIfNeeded(pData, targetSize);
+            if (meta.Width > 0 && meta.Height > 0) {
+                pData->origWidth = meta.Width;
+                pData->origHeight = meta.Height;
+            }
+            PopulateThumbOriginalInfo(headerInfo, static_cast<uint64_t>(mappedSize), pData);
+            return S_OK;
+        }
+        if (allowSlow) {
+            pData->isValid = false;
+            pData->pixels.clear();
+            hr = LoadThumbJXL_Sampled(mappedData, mappedSize, targetSize, pData, &meta);
+            if (SUCCEEDED(hr) && pData->isValid) {
+                PopulateThumbOriginalInfo(headerInfo, static_cast<uint64_t>(mappedSize), pData);
+                return S_OK;
+            }
+        }
+        return E_FAIL;
+    }
+
+    if (format == L"SVG") {
+        using namespace QuickView;
+        RawImageFrame* pFrame = new RawImageFrame();
+        HRESULT hr = LoadToFrame(filePath, pFrame, nullptr, targetSize, targetSize, &pData->loaderName, nullptr, nullptr);
+        if (SUCCEEDED(hr) && pFrame->IsSvg() && pFrame->svg) {
+            hr = RasterizeSvgThumbnail(pFrame->svg->xmlData, pFrame->svg->viewBoxW, pFrame->svg->viewBoxH, targetSize, pData);
+        } else if (SUCCEEDED(hr) && pFrame->pixels && pFrame->width > 0 && pFrame->height > 0) {
+            pData->width = pFrame->width;
+            pData->height = pFrame->height;
+            pData->stride = pFrame->stride;
+            pData->pixels.resize(static_cast<size_t>(pFrame->stride) * pFrame->height);
+            memcpy(pData->pixels.data(), pFrame->pixels, pData->pixels.size());
+            pData->isValid = true;
+            pData->isBlurry = false;
+        }
+        if (SUCCEEDED(hr) && pData->isValid) {
+            PopulateThumbOriginalInfo(headerInfo, fallbackFileSize, pData);
+            pFrame->Release();
+            delete pFrame;
+            return S_OK;
+        }
+        if (pFrame) {
+            pFrame->Release();
+            delete pFrame;
+        }
     }
 
     // 1. Unified Codec Dispatch (Primary)
@@ -2302,52 +2821,26 @@ HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData*
                 pData->fileSize = (static_cast<uint64_t>(fad.nFileSizeHigh) << 32) | fad.nFileSizeLow;
             }
         }
+        DownscaleThumbDataIfNeeded(pData, targetSize);
+        PopulateThumbOriginalInfo(headerInfo, fallbackFileSize, pData);
         return S_OK;
     }
     
     if (hr == E_ABORT) return E_ABORT;
 
-    // 2. Legacy Fallback (PSD/HEIC/Special)
-    // Recalculate extension
-    std::wstring path = filePath;
-    size_t dot = path.find_last_of(L'.');
-    if (dot != std::wstring::npos) {
-        std::wstring ext = path.substr(dot);
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
-        
-        if (ext == L".psd" || ext == L".psb") {
-             std::vector<uint8_t> buf;
-             if (ReadFileToVector(filePath, buf)) {
-                 PreviewExtractor::ExtractedData exData;
-                 if (PreviewExtractor::ExtractFromPSD(buf.data(), buf.size(), exData) && exData.IsValid()) {
-                     if (SUCCEEDED(LoadThumbJPEGFromMemory(exData.pData, exData.size, targetSize, pData))) {
-                         pData->loaderName = L"PSD (Preview)";
-                         // [BugFix] Set file size for Gallery tooltip (origWidth/Height from embedded preview is acceptable)
-                         pData->fileSize = buf.size();
-                         return S_OK;
-                     }
-                 }
-             }
-        }
-    }
-
     if (!allowSlow) return E_FAIL; // Scout gives up
 
-    // 3. WIC Fallback
-    ComPtr<IWICBitmapSource> source;
-    if (SUCCEEDED(LoadFromFile(filePath, &source))) {
-        // Simple Scale
-        UINT w=0, h=0;
-        source->GetSize(&w, &h);
-        if (w > 0 && h > 0) {
-             // Calculate scale (Fit)
-             double scale = (double)targetSize / std::max(w, h);
-             if (scale > 1.0) scale = 1.0;
-             // ... Scale Logic Omitted for brevity, use LoadToMemory logic or Scaler ...
-             // For now, return E_FAIL to encourage Unified migration.
-             // Or verify if we really need WIC thumbnails? 
-             // Yes, for Tiff/ICO/etc.
-             // We can implement full decode + resize here if needed.
+    // 2. Full compatibility fallback through the main loader chain.
+    ComPtr<IWICBitmap> wicBitmap;
+    std::wstring wicLoader;
+    HRESULT wicHr = LoadToMemory(filePath, &wicBitmap, &wicLoader, false, nullptr, targetSize, targetSize);
+    if (SUCCEEDED(wicHr) && wicBitmap) {
+        HRESULT copyHr = CopyWicBitmapToThumbData(wicBitmap.Get(), pData);
+        if (SUCCEEDED(copyHr)) {
+            pData->loaderName = wicLoader.empty() ? L"WIC Thumbnail" : wicLoader;
+            PopulateThumbOriginalInfo(headerInfo, fallbackFileSize, pData);
+            pData->isBlurry = (pData->origWidth > pData->width || pData->origHeight > pData->height);
+            return S_OK;
         }
     }
 
@@ -7452,6 +7945,9 @@ HRESULT CImageLoader::LoadThumbAVIF_Proxy(const uint8_t* data, size_t size, int 
     // [v6.9.1] Maximize Tolerance
     decoder->ignoreXMP = AVIF_TRUE; 
     decoder->ignoreExif = AVIF_TRUE; // We extract Exif via EasyExif later anyway
+    decoder->maxThreads = (std::max)(1u, std::thread::hardware_concurrency());
+    decoder->imageSizeLimit = 32768ULL * 32768ULL;
+    decoder->imageDimensionLimit = 32768;
     
     // Force Primary Item (Single Image) decoding if possible to avoid complex sequence issues?
     // decoder->requestedSource = AVIF_DECODER_SOURCE_PRIMARY_ITEM; 
@@ -7522,7 +8018,7 @@ HRESULT CImageLoader::LoadThumbAVIF_Proxy(const uint8_t* data, size_t size, int 
     // Better to RETURN FAILURE (specifically S_FALSE for 'skipped') to let Heavy Lane start immediately.
     // 50MP = 50,000,000 pixels. 9449*9449 = 89MP.
     uint64_t pixelCount = (uint64_t)decoder->image->width * (uint64_t)decoder->image->height;
-    if (pixelCount > 40000000) { // > 40MP threshold
+    if (pixelCount > 40000000 && !allowSlow) { // > 40MP threshold
         avifDecoderDestroy(decoder);
         // Returning E_FAIL would trigger WIC (if we didn't block it in caller).
         // Returning S_OK with invalid pData?
@@ -7553,10 +8049,6 @@ HRESULT CImageLoader::LoadThumbAVIF_Proxy(const uint8_t* data, size_t size, int 
              avifDecoderDestroy(decoder);
              return E_ABORT; 
         }
-
-        // [Safety Limits]
-        decoder->imageSizeLimit = 16384 * 16384; 
-        decoder->imageDimensionLimit = 32768;
 
         result = avifDecoderNextImage(decoder);
         if (result != AVIF_RESULT_OK) {
@@ -8213,7 +8705,8 @@ HRESULT CImageLoader::LoadFastPass(LPCWSTR filePath, ThumbData* pData) {
          std::vector<uint8_t> buf;
          if (!ReadFileToVector(filePath, buf)) return E_FAIL;
          
-         HRESULT hr = LoadThumbJXL_DC(buf.data(), buf.size(), pData);
+         // FastPass is user-visible too, so do not allow Titan's fake base here.
+         HRESULT hr = LoadThumbJXL_DC(buf.data(), buf.size(), pData, nullptr, false, false);
          if (SUCCEEDED(hr)) {
              // pData->isBlurry and loaderName already set inside LoadThumbJXL_DC
              // isBlurry=true (DC), Name="libjxl (DC)"
