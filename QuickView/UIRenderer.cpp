@@ -377,7 +377,6 @@ RECT UIRenderer::CalculateOSDDirtyRect() {
     
     // Merge with previous frame rect (to clear old position)
     if (m_lastOSDRect.right > 0) {
-        x = std::min(x, m_lastOSDRect.left);
         y = std::min(y, m_lastOSDRect.top);
         right = std::max(right, m_lastOSDRect.right);
         bottom = std::max(bottom, m_lastOSDRect.bottom);
@@ -388,7 +387,6 @@ RECT UIRenderer::CalculateOSDDirtyRect() {
     
     return RECT{ (LONG)x, (LONG)y, (LONG)right, (LONG)bottom };
 }
-
 
 void UIRenderer::EnsureTextFormats() {
     if (!m_dwriteFactory) return;
@@ -401,7 +399,6 @@ void UIRenderer::EnsureTextFormats() {
             14.0f * s, L"en-us", &m_osdFormat
         );
         if (m_osdFormat) {
-            // Use LEADING alignment since we use DrawTextLayout with explicit origin
             m_osdFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             m_osdFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
@@ -411,21 +408,19 @@ void UIRenderer::EnsureTextFormats() {
         m_dwriteFactory->CreateTextFormat(
             L"Consolas", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            12.0f * s, L"en-us", &m_debugFormat
+            12.0f, L"en-us", &m_debugFormat
         );
     }
     
     if (!m_iconFormat) {
-        // [v9.98] Font Fallback: Fluent -> MDL2 -> Symbol
         const wchar_t* fontCandidates[] = { 
             L"Segoe Fluent Icons", 
             L"Segoe MDL2 Assets", 
             L"Segoe UI Symbol" 
         };
-        const wchar_t* selectedFont = L"Segoe UI Symbol"; // Ultimate fallback
+        const wchar_t* selectedFont = L"Segoe UI Symbol";
 
         ComPtr<IDWriteFontCollection> sysFonts;
-        // Check if font exists to prevent boxes
         if (SUCCEEDED(m_dwriteFactory->GetSystemFontCollection(&sysFonts, FALSE))) {
             for (const auto& name : fontCandidates) {
                 UINT32 index;
@@ -461,27 +456,21 @@ void UIRenderer::EnsureTextFormats() {
 }
 
 void UIRenderer::OnResize(UINT width, UINT height) {
-    // Early out if size hasn't changed
     if (width == m_width && height == m_height) return;
     
     m_width = width;
     m_height = height;
     
-    // CRITICAL: Resize DComp surfaces - without this, BeginLayerUpdate returns null!
     if (m_compEngine && width > 0 && height > 0) {
         m_compEngine->Resize(width, height);
     }
     
     g_toolbar.UpdateLayout((float)width, (float)height);
     
-    // 澶у皬鏀瑰彉鏃讹紝鎵€鏈夊眰閮介渶瑕侀噸缁?
     MarkStaticDirty();
     MarkDynamicDirty();
     MarkGalleryDirty();
 }
-
-
-
 // ============================================================================
 // Main Render Entry Point
 // ============================================================================
