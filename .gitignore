@@ -99,6 +99,7 @@ jpegview-static-post2024-vs2019-x64/
 # Helper scripts (not needed in repo)
 * .ps1
 *.bat
+*.py
 
 .agent/
 
