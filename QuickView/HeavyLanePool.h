@@ -166,7 +166,29 @@ private:
     int m_titanSrcW = 0, m_titanSrcH = 0; // Source image dimensions (set in SetTitanMode)
     std::atomic<QuickView::TitanFormat> m_titanFormat{QuickView::TitanFormat::Unknown}; // [P15] Thread-safe format enum
     std::counting_semaphore<std::numeric_limits<std::ptrdiff_t>::max()> m_ioSemaphore{ 0 }; // Initialized in constructor
-    int m_ioLimit = 0; // Dynamic limit based on HDD/SSD
+    std::atomic<int> m_ioLimit{ 0 }; // [Optimization] Atomic for lock-free fast check
+    std::mutex m_ioMutex; // [Fix Bug #85] Protects m_ioLimit and semaphore sync
+
+    // [Fix Bug #85] RAII-based IO permit management
+    // Ensures permit is always released even on cancellation, early return, or exception.
+    struct ScopedIOSlot {
+        std::counting_semaphore<std::numeric_limits<std::ptrdiff_t>::max()>& sem;
+        bool acquired = false;
+        explicit ScopedIOSlot(std::counting_semaphore<std::numeric_limits<std::ptrdiff_t>::max()>& s, bool shouldAcquire) 
+            : sem(s) 
+        {
+            if (shouldAcquire) {
+                sem.acquire();
+                acquired = true;
+            }
+        }
+        ~ScopedIOSlot() {
+            if (acquired) sem.release();
+        }
+        // Disable copy
+        ScopedIOSlot(const ScopedIOSlot&) = delete;
+        ScopedIOSlot& operator=(const ScopedIOSlot&) = delete;
+    };
 
     // [Titan] Generation ID for Lock-Free Invalidation
     std::atomic<uint32_t> m_generationID{ 0 };

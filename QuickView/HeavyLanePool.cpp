@@ -64,9 +64,14 @@ HeavyLanePool::HeavyLanePool(ImageEngine* parent, CImageLoader* loader,
 }
 // Helper to dynamically adjust semaphore limit
 void HeavyLanePool::UpdateIOLimit(int newLimit) {
-    if (newLimit == m_ioLimit) return;
+    // [Optimization] Lock-free check first to avoid contention during fast scrolling
+    if (newLimit == m_ioLimit.load(std::memory_order_relaxed)) return;
     
-    int delta = newLimit - m_ioLimit;
+    std::lock_guard lock(m_ioMutex); // [Fix Bug #85] Atomic limit update
+    int currentLimit = m_ioLimit.load(std::memory_order_relaxed);
+    if (newLimit == currentLimit) return;
+    
+    int delta = newLimit - currentLimit;
     if (delta > 0) {
         m_ioSemaphore.release(delta);
     } else {
@@ -77,12 +82,12 @@ void HeavyLanePool::UpdateIOLimit(int newLimit) {
             if (!m_ioSemaphore.try_acquire()) break;
             reduced++;
         }
-        newLimit = m_ioLimit - reduced;
+        newLimit = currentLimit - reduced;
     }
-    m_ioLimit = newLimit;
+    m_ioLimit.store(newLimit, std::memory_order_relaxed);
     
     wchar_t buf[128];
-    swprintf_s(buf, L"[HeavyPool] IO Limit set to %d (SSD=%s)\n", m_ioLimit, newLimit > 2 ? L"Yes" : L"No");
+    swprintf_s(buf, L"[HeavyPool] IO Limit set to %d (SSD=%s)\n", (int)m_ioLimit, newLimit > 2 ? L"Yes" : L"No");
     OutputDebugStringW(buf);
 }
 
@@ -580,9 +585,7 @@ void HeavyLanePool::SubmitTile(const std::wstring& path, ImageID imageId, std::s
 void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<TilePriorityRequest>& batch) {
     if (batch.empty()) return;
     
-    // Update Limit once per batch
-    bool isSSD = SystemInfo::IsSolidStateDrive(path);
-    UpdateIOLimit(isSSD ? m_cap : 2);
+    // [Optimization] IO Limit is already set in Submit() - skip per-batch probing.
     
     std::lock_guard lock(m_poolMutex);
     uint32_t currentGen = m_generationID.load();
@@ -625,9 +628,7 @@ void HeavyLanePool::SubmitPriorityTileBatch(const std::wstring& path, ImageID im
 void HeavyLanePool::SubmitTileBatch(const std::wstring& path, ImageID imageId, std::shared_ptr<QuickView::MappedFile> mmf, const std::vector<std::pair<QuickView::TileCoord, QuickView::RegionRequest>>& batch, int priority) {
     if (batch.empty()) return;
 
-    // Update Limit once per batch
-    bool isSSD = SystemInfo::IsSolidStateDrive(path);
-    UpdateIOLimit(isSSD ? m_cap : 2);
+    // [Optimization] IO Limit is already set in Submit() - skip per-batch probing.
 
     std::lock_guard lock(m_poolMutex);
     uint32_t currentGen = m_generationID.load();
@@ -852,14 +853,9 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         // Perform decode
         auto t0 = std::chrono::steady_clock::now();
         
-        // [IO Throttling] Acquire IO Budget
-        // [Perf] Titan Tiles use MMF (memory-mapped), skip IO throttling entirely.
-        // IO Semaphore is designed for HDD file reads — MMF accesses are page faults, not disk IO.
-        bool acquiredIO = false;
-        if (!m_isTitanMode) {
-            m_ioSemaphore.acquire();
-            acquiredIO = true;
-        }
+        // [Fix Bug #85] RAII-based IO permit management
+        // Ensures permit is always released even on cancellation, early return, or exception.
+        ScopedIOSlot ioSlot(m_ioSemaphore, !m_isTitanMode);
 
         // [Safety] Post-Acquire Check
         // We might have waited 1-2 seconds to get here. Check if still needed.
@@ -884,7 +880,6 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         }
 
         if (!stillValid) {
-            if (acquiredIO) m_ioSemaphore.release();
             m_busyCount.fetch_sub(1);
             m_activeTileJobs.fetch_sub(1); 
             { std::lock_guard dlock(m_poolMutex); m_inFlightTiles.erase(MakeTileHash(job.tileCoord.col, job.tileCoord.row, job.tileCoord.lod)); }
@@ -895,7 +890,7 @@ void HeavyLanePool::WorkerLoop(int workerId, std::stop_token st) {
         // Pass the whole job info
         PerformDecode(workerId, job, st, &self.loaderName);
         
-        if (acquiredIO) m_ioSemaphore.release();
+        // ioSlot released automatically here
 
         auto t1 = std::chrono::steady_clock::now();
         
