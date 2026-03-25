@@ -1996,9 +1996,10 @@ static D2D1_SIZE_U ComputeDesiredBitmapSurfaceSize(UINT winW, UINT winH, const I
         case 8: baseRot = 270; break;
         default: baseRot = 0;  break;
     }
-    int totalAngle = (baseRot + (int)g_editState.TotalRotation) % 360;
-    if (totalAngle < 0) totalAngle += 360;
-    if (totalAngle == 90 || totalAngle == 270) {
+    // The backing bitmap surface only bakes EXIF rotation. User rotation stays in
+    // the DComp transform layer, so including it here would make upgraded
+    // surfaces look pre-rotated to later layout code.
+    if (baseRot == 90 || baseRot == 270) {
         std::swap(originalW, originalH);
     }
 
