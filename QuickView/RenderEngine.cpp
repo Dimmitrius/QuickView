@@ -366,8 +366,30 @@ default:
         if (srcContext && dstContext) {
             ComPtr<ID2D1Effect> colorManagementEffect;
             if (SUCCEEDED(m_d2dContext->CreateEffect(CLSID_D2D1ColorManagement, &colorManagementEffect))) {
-                colorManagementEffect->SetInput(0, rawBitmap.Get());
-                colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_SOURCE_COLOR_CONTEXT, srcContext.Get());
+
+                ComPtr<ID2D1Image> currentInput = rawBitmap;
+
+                // [Soft Proofing] Dual-Node Setup
+                ComPtr<ID2D1ColorContext> proofContext;
+                ComPtr<ID2D1Effect> softProofEffect;
+
+                if (g_runtime.EnableSoftProofing && !g_runtime.SoftProofProfilePath.empty()) {
+                    if (SUCCEEDED(m_d2dContext->CreateColorContextFromFilename(g_runtime.SoftProofProfilePath.c_str(), &proofContext))) {
+                        if (SUCCEEDED(m_d2dContext->CreateEffect(CLSID_D2D1ColorManagement, &softProofEffect))) {
+                            // Node 1: Source -> Proof Profile (Simulate output on target device)
+                            softProofEffect->SetInput(0, currentInput.Get());
+                            softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_SOURCE_COLOR_CONTEXT, srcContext.Get());
+                            softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_COLOR_CONTEXT, proofContext.Get());
+                            softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_ALPHA_MODE, D2D1_COLORMANAGEMENT_ALPHA_MODE_STRAIGHT);
+
+                            softProofEffect->GetOutput(&currentInput);
+                        }
+                    }
+                }
+
+                // Final Node: Source (or Proof) -> Physical Monitor
+                colorManagementEffect->SetInput(0, currentInput.Get());
+                colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_SOURCE_COLOR_CONTEXT, proofContext ? proofContext.Get() : srcContext.Get());
                 colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_COLOR_CONTEXT, dstContext.Get());
                 
                 // [Fix] Handle Alpha Trap: Use STRAIGHT mode to avoid black border artifacts on transparent edges

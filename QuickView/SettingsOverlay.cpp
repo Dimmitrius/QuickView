@@ -1187,6 +1187,31 @@ void SettingsOverlay::BuildMenu() {
     };
     tabImage.items.push_back(itemCmsFallback);
     
+    SettingsItem itemCustomProof = { AppStrings::Settings_Label_CustomProof, OptionType::ActionButton };
+    itemCustomProof.buttonText = AppStrings::Context_SoftProofCustom;
+    if (!g_config.CustomSoftProofProfile.empty()) {
+        std::wstring filename = g_config.CustomSoftProofProfile.substr(g_config.CustomSoftProofProfile.find_last_of(L"/\\") + 1);
+        itemCustomProof.buttonText = filename.length() > 20 ? (filename.substr(0, 17) + L"...") : filename;
+    }
+    itemCustomProof.onChange = []() {
+        extern HWND g_hwnd;
+        wchar_t filename[MAX_PATH] = { 0 };
+        OPENFILENAMEW ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = g_hwnd;
+        ofn.lpstrFilter = L"ICC Profiles (*.icc;*.icm)\0*.icc;*.icm\0All Files (*.*)\0*.*\0";
+        ofn.lpstrFile = filename;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+        ofn.lpstrDefExt = L"icc";
+        if (GetOpenFileNameW(&ofn)) {
+            g_config.CustomSoftProofProfile = filename;
+            SaveConfig();
+        }
+    };
+    tabImage.items.push_back(itemCustomProof);
+
     SettingsItem itemRaw = { AppStrings::Settings_Label_ForceRaw, OptionType::Toggle, &g_config.ForceRawDecode };
     itemRaw.onChange = []() { g_runtime.ForceRawDecode = g_config.ForceRawDecode; };
     tabImage.items.push_back(itemRaw);
