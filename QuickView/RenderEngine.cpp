@@ -274,21 +274,41 @@ default:
     if (effectiveCmsMode != 0) { // All managed modes (Auto, sRGB, P3) require processing, even if untagged
         // Find best source context
         ComPtr<ID2D1ColorContext> srcContext;
-        if (!frame.iccProfile.empty()) {
-            ColorContextCacheKey key{ frame.iccProfile };
-            std::lock_guard<std::mutex> lock(m_cacheMutex);
-            auto it = m_colorContextCache.find(key);
-            if (it != m_colorContextCache.end()) {
-                srcContext = it->second;
-            } else {
-                if (SUCCEEDED(m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_CUSTOM, frame.iccProfile.data(), (UINT32)frame.iccProfile.size(), &srcContext))) {
-                    m_colorContextCache[key] = srcContext;
+
+        if (effectiveCmsMode == 1 || effectiveCmsMode == 5) { // Auto or Grayscale: use embedded profile or fallback to sRGB
+            if (!frame.iccProfile.empty()) {
+                ColorContextCacheKey key{ frame.iccProfile };
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                auto it = m_colorContextCache.find(key);
+                if (it != m_colorContextCache.end()) {
+                    srcContext = it->second;
+                } else {
+                    if (SUCCEEDED(m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_CUSTOM, frame.iccProfile.data(), (UINT32)frame.iccProfile.size(), &srcContext))) {
+                        m_colorContextCache[key] = srcContext;
+                    }
                 }
             }
+            if (!srcContext) {
+                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
+            }
         }
-        
-        if (!srcContext) {
+        else if (effectiveCmsMode == 2) { // sRGB
              m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
+        }
+        else if (effectiveCmsMode == 3) { // Display P3
+            if (!LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_P3, srcContext.GetAddressOf())) {
+                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
+            }
+        }
+        else if (effectiveCmsMode == 4) { // Adobe RGB (1998)
+            if (!LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_ADOBERGB, srcContext.GetAddressOf())) {
+                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
+            }
+        }
+        else if (effectiveCmsMode == 6) { // ProPhoto RGB (ROMM RGB)
+            if (!LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_PROPHOTO, srcContext.GetAddressOf())) {
+                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
+            }
         }
 
         // [Feature] Support per-pane CMS logic for Compare Mode
@@ -296,14 +316,15 @@ default:
         // Wait, D2D1 effect handles the entire surface rendering.
         // We will keep the effect standard for the texture upload.
 
-        // Find target context based on Mode
+        // Find target context based on Mode (Always monitor profile or scRGB)
         ComPtr<ID2D1ColorContext> dstContext;
         
-        if (m_isAdvancedColor && effectiveCmsMode != 0) {
+        if (m_isAdvancedColor) {
             // [Advanced Color Aware] Branch B: Map Everything to scRGB Linear Space
             m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SCRGB, nullptr, 0, &dstContext);
         }
-        else if (effectiveCmsMode == 1) { // Auto (System Monitor Profile)
+        else {
+            // Standard monitor profile logic
             HMONITOR hMon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST);
             MONITORINFOEXW mi;
             mi.cbSize = sizeof(mi);
@@ -323,27 +344,6 @@ default:
                 }
             }
             if (!dstContext) m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-        }
-        else if (effectiveCmsMode == 2) { // sRGB
-             m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-        }
-        else if (effectiveCmsMode == 3) { // Display P3
-            if (!LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_P3, dstContext.GetAddressOf())) {
-                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-            }
-        }
-        else if (effectiveCmsMode == 4) { // Adobe RGB (1998)
-            if (!LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_ADOBERGB, dstContext.GetAddressOf())) {
-                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-            }
-        }
-        else if (effectiveCmsMode == 5) { // Grayscale
-            m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-        }
-        else if (effectiveCmsMode == 6) { // ProPhoto RGB (ROMM RGB)
-            if (!LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_PROPHOTO, dstContext.GetAddressOf())) {
-                 m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-            }
         }
 
         if (srcContext && dstContext) {
