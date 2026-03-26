@@ -1,5 +1,4 @@
 #include "pch.h"
-#pragma execution_character_set("utf-8")
 #include "SettingsOverlay.h"
 #include "HelpOverlay.h"
 #include "AppStrings.h"
@@ -13,8 +12,9 @@
 #include <vector>
 #include <shellapi.h>
 #include <wincodec.h>
+
+// Windows headers
 #pragma comment(lib, "version.lib")
-#pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #include <dwmapi.h> // Required for DwmSetWindowAttribute
 #include "Toolbar.h" // [Fix] Required for g_toolbar extern
@@ -23,6 +23,8 @@
 extern ImageEngine* g_pImageEngine;
 extern AppConfig g_config;
 extern RuntimeConfig g_runtime;
+extern std::wstring g_imagePath;
+extern FileNavigator g_navigator;
 extern Toolbar g_toolbar; // [Fix] Allow Settings to update toolbar state directly
 extern HelpOverlay g_helpOverlay;
 
@@ -440,7 +442,7 @@ static ToastLayout GetToastLayout(float winW, float winH) {
 
 
 
-void SettingsOverlay::RenderUpdateToast(ID2D1RenderTarget* pRT, float hudX, float hudY, float hudW, float hudH) {
+void SettingsOverlay::RenderUpdateToast(ID2D1DeviceContext* pRT, float hudX, float hudY, float hudW, float hudH) {
     if (!m_showUpdateToast) return;
 
     ToastLayout l = GetToastLayout(m_windowWidth, m_windowHeight);
@@ -455,7 +457,6 @@ void SettingsOverlay::RenderUpdateToast(ID2D1RenderTarget* pRT, float hudX, floa
     pRT->FillRoundedRectangle(D2D1::RoundedRect(l.bg, 8.0f, 8.0f), m_brushControlBg.Get()); 
     pRT->DrawRoundedRectangle(D2D1::RoundedRect(l.bg, 8.0f, 8.0f), m_brushBorder.Get(), 1.0f); 
     
-    // 3. Header Text
     D2D1_RECT_F titleR = D2D1::RectF(l.bg.left + 20, l.bg.top + 15, l.bg.right - 30, l.bg.top + 45);
     m_textFormatHeader->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     m_textFormatHeader->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -586,7 +587,7 @@ void SettingsOverlay::RenderUpdateToast(ID2D1RenderTarget* pRT, float hudX, floa
     m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
-void SettingsOverlay::Init(ID2D1RenderTarget* pRT, HWND hwnd) {
+void SettingsOverlay::Init(ID2D1DeviceContext* pRT, HWND hwnd) {
     m_hwnd = hwnd;
     CreateResources(pRT);
     BuildMenu();
@@ -603,7 +604,7 @@ void SettingsOverlay::SetUIScale(float scale) {
     m_textFormatSymbol.Reset();
 }
 
-void SettingsOverlay::CreateResources(ID2D1RenderTarget* pRT) {
+void SettingsOverlay::CreateResources(ID2D1DeviceContext* pRT) {
     if (!m_brushBg) {
         pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f), m_hdrWhiteScale), &m_brushBg);        // Dimmer (40% opacity)
         pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f), m_hdrWhiteScale), &m_brushText);             // White
@@ -1188,10 +1189,23 @@ void SettingsOverlay::BuildMenu() {
     SettingsItem itemCmsToggle = { AppStrings::Settings_Label_CMS, OptionType::Toggle, &g_config.ColorManagement };
     itemCmsToggle.onChange = []() {
         SaveConfig();
+        g_pImageEngine->InvalidateCache(g_imagePath);
+        g_pImageEngine->NavigateTo(g_imagePath, g_navigator.GetFileSize(g_navigator.Index()), g_navigator.GetCurrentImageID());
         extern void RequestRepaint(QuickView::PaintLayer layerMask);
         RequestRepaint(QuickView::PaintLayer::All);
     };
     tabImage.items.push_back(itemCmsToggle);
+
+    SettingsItem itemCmsIntent = { AppStrings::Settings_Label_CmsIntent, OptionType::ComboBox, nullptr, nullptr, &g_config.CmsRenderingIntent, nullptr, 0, 0,
+        { AppStrings::Settings_Option_CmsIntentPerceptual, AppStrings::Settings_Option_CmsIntentRelative } };
+    itemCmsIntent.onChange = []() {
+        SaveConfig();
+        g_pImageEngine->InvalidateCache(g_imagePath);
+        g_pImageEngine->NavigateTo(g_imagePath, g_navigator.GetFileSize(g_navigator.Index()), g_navigator.GetCurrentImageID());
+        extern void RequestRepaint(QuickView::PaintLayer layerMask);
+        RequestRepaint(QuickView::PaintLayer::All);
+    };
+    tabImage.items.push_back(itemCmsIntent);
 
     SettingsItem itemAdvColor = { AppStrings::Settings_Label_AdvancedColor, OptionType::Toggle, &g_config.EnableAdvancedColor };
     itemAdvColor.onChange = []() {
@@ -1525,7 +1539,7 @@ void SettingsOverlay::SetVisible(bool visible) {
     }
 }
 
-void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
+void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
     if (!m_visible && !m_showUpdateToast) return;
     CreateResources(pRT);
     
@@ -1613,13 +1627,13 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
         m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         
         D2D1_RECT_F backIconRect = D2D1::RectF(hudX + 15.0f * s, hudY, hudX + 45.0f * s, hudY + 50.0f * s);
-        pRT->DrawTextW(L"\xE72B", 1, m_textFormatIcon.Get(), backIconRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+        pRT->DrawText(L"\xE72B", 1, m_textFormatIcon.Get(), backIconRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
         
         m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
         D2D1_RECT_F backTextRect = D2D1::RectF(hudX + 55.0f * s, hudY, hudX + sidebarW, hudY + 50.0f * s);
-        pRT->DrawTextW(L"Back", 4, m_textFormatItem.Get(), backTextRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+        pRT->DrawText(L"Back", 4, m_textFormatItem.Get(), backTextRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
         // Draw Tabs
         float tabY = hudY + 50.0f * s;
@@ -1642,12 +1656,12 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             D2D1_RECT_F iconRect = D2D1::RectF(hudX + 15.0f * s, tabY, hudX + 15.0f * s + 40.0f * s, tabY + 40.0f * s);
             m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             m_textFormatIcon->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            pRT->DrawTextW(tab.icon.c_str(), 1, m_textFormatIcon.Get(), iconRect, isActive ? m_brushAccent.Get() : m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+            pRT->DrawText(tab.icon.c_str(), 1, m_textFormatIcon.Get(), iconRect, isActive ? m_brushAccent.Get() : m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
             // Text
             D2D1_RECT_F textRect = D2D1::RectF(hudX + 65.0f * s, tabY, hudX + sidebarW - 10.0f * s, tabY + 40.0f * s);
             m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-            pRT->DrawTextW(tab.name.c_str(), (UINT32)tab.name.length(), m_textFormatItem.Get(), textRect, isActive ? m_brushText.Get() : m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+            pRT->DrawText(tab.name.c_str(), (UINT32)tab.name.length(), m_textFormatItem.Get(), textRect, isActive ? m_brushText.Get() : m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 
             tabY += 45.0f * s;
         }
@@ -1699,7 +1713,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 // Header text
                 D2D1_RECT_F headerRect = D2D1::RectF(contentX, contentY + 10, contentX + contentW, contentY + 40);
                 m_textFormatHeader->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-                pRT->DrawTextW(item.label.c_str(), (UINT32)item.label.length(), m_textFormatHeader.Get(), headerRect, m_brushText.Get());
+                pRT->DrawText(item.label.c_str(), (UINT32)item.label.length(), m_textFormatHeader.Get(), headerRect, m_brushText.Get());
                 contentY += 50.0f; // More spacing for header
                 
                 m_settingsContentHeight = (contentY - startContentY > m_settingsContentHeight) ? (contentY - startContentY) : m_settingsContentHeight;
@@ -1728,7 +1742,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      pRT->DrawBitmap(m_bitmapIcon.Get(), iconRect);
                 } else {
                      m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-                     pRT->DrawTextW(L"\xE706", 1, m_textFormatIcon.Get(), iconRect, m_brushAccent.Get());
+                     pRT->DrawText(L"\xE706", 1, m_textFormatIcon.Get(), iconRect, m_brushAccent.Get());
                 }
 
                 // Text Stack
@@ -1743,11 +1757,11 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 D2D1_RECT_F titleRect = D2D1::RectF(textX, contentY + 5, textX + maxTextW, contentY + 40);
                 m_textFormatHeader->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
                 m_textFormatHeader->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-                pRT->DrawTextW(item.label.c_str(), item.label.length(), m_textFormatHeader.Get(), titleRect, m_brushText.Get());
+                pRT->DrawText(item.label.c_str(), item.label.length(), m_textFormatHeader.Get(), titleRect, m_brushText.Get());
                 
                 // Version (Gray)
                 D2D1_RECT_F verRect = D2D1::RectF(textX, contentY + 40, textX + maxTextW, contentY + 70);
-                pRT->DrawTextW(item.disabledText.c_str(), item.disabledText.length(), m_textFormatItem.Get(), verRect, m_brushTextDim.Get());
+                pRT->DrawText(item.disabledText.c_str(), item.disabledText.length(), m_textFormatItem.Get(), verRect, m_brushTextDim.Get());
 
                 contentY += iconSize + 30.0f; // Padding below header
                 continue;
@@ -1775,7 +1789,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      brushBtnText = m_brushSuccess;
                 }
 
-                pRT->DrawTextW(text.c_str(), text.length(), m_textFormatItem.Get(), btnRect, brushBtnText.Get());
+                pRT->DrawText(text.c_str(), text.length(), m_textFormatItem.Get(), btnRect, brushBtnText.Get());
                 
                 m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING); // Reset
                 m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
@@ -1791,7 +1805,6 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 // We'll simplisticly check if ANY sub-rect contains mouse in OnMouseMove but here we just render.
                 // We need to know mouse pos to render hover effect.
                 // Hack: We don't have mouse pos here easily unless stored.
-                // Let's rely on g_mouseX/Y if available or assume no hover effect for now?
                 // User ASKED for hover effect. 
                 // We can cache sub-hover index in OnMouseMove in "m_hoverLinkIndex" member if we add it.
                 // Or easier: Just draw outlined always, good enough?
@@ -1884,7 +1897,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                 D2D1_RECT_F headerRect = D2D1::RectF(contentX, contentY, contentX + contentW, contentY + headerH);
                 m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                 m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                pRT->DrawTextW(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), headerRect, m_brushTextDim.Get());
+                pRT->DrawText(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), headerRect, m_brushTextDim.Get());
 
                 float badgeX = contentX;
                 float badgeY = contentY + headerH + 8.0f * s;
@@ -1923,7 +1936,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
                     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                     m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                    pRT->DrawTextW(opt.c_str(), (UINT32)opt.length(), m_textFormatItem.Get(), badgeRect, m_brushTextDim.Get());
+                    pRT->DrawText(opt.c_str(), (UINT32)opt.length(), m_textFormatItem.Get(), badgeRect, m_brushTextDim.Get());
 
                     badgeX += badgeW + badgeGapX;
                 }
@@ -1995,7 +2008,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             // Label
             float labelWidth = 270.0f * s; // Balanced with button space
             D2D1_RECT_F labelRect = D2D1::RectF(contentX, contentY, contentX + labelWidth, contentY + rowHeight);
-            pRT->DrawTextW(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), labelRect, m_brushTextDim.Get());
+            pRT->DrawText(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), labelRect, m_brushTextDim.Get());
 
             // Control Area
             float controlOffset = 280.0f * s; 
@@ -2019,7 +2032,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                         // Disabled text
                         if (!item.disabledText.empty()) {
                             D2D1_RECT_F textRect = D2D1::RectF(controlRect.left + 50, contentY, controlRect.right, contentY + rowHeight);
-                            pRT->DrawTextW(item.disabledText.c_str(), (UINT32)item.disabledText.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
+                            pRT->DrawText(item.disabledText.c_str(), (UINT32)item.disabledText.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
                         }
                     } else {
                         DrawToggle(pRT, controlRect, (item.pBoolVal ? *item.pBoolVal : false), isHovered);
@@ -2035,7 +2048,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                             ComPtr<ID2D1SolidColorBrush> statusBrush;
                             pRT->CreateSolidColorBrush(ScaleUiColor(item.statusColor, m_hdrWhiteScale), &statusBrush);
                             D2D1_RECT_F statusR = D2D1::RectF(controlX + 60, contentY, controlX + controlW, contentY + rowHeight);
-                            pRT->DrawTextW(item.statusText.c_str(), (UINT32)item.statusText.length(), m_textFormatItem.Get(), statusR, statusBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                            pRT->DrawText(item.statusText.c_str(), (UINT32)item.statusText.length(), m_textFormatItem.Get(), statusR, statusBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
                         }
                     }
                     break;
@@ -2089,13 +2102,13 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                          // Show disabled text on the left
                          if (!item.disabledText.empty()) {
                              D2D1_RECT_F statusRect = D2D1::RectF(controlX, contentY, btnX - 16, contentY + rowHeight);
-                             pRT->DrawTextW(item.disabledText.c_str(), (UINT32)item.disabledText.length(), m_textFormatItem.Get(), statusRect, m_brushTextDim.Get());
+                             pRT->DrawText(item.disabledText.c_str(), (UINT32)item.disabledText.length(), m_textFormatItem.Get(), statusRect, m_brushTextDim.Get());
                          }
                          
                          // Gray button text
                          m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                          m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                         pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(), btnRect, m_brushTextDim.Get());
+                         pRT->DrawText(btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(), btnRect, m_brushTextDim.Get());
                          m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                          m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                          break;
@@ -2145,13 +2158,13 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                          D2D1_RECT_F statusRect = D2D1::RectF(controlX, contentY, btnX - 16, contentY + rowHeight);
                          
                          // Ensure generic format (Left aligned)
-                         pRT->DrawTextW(statusToShow.c_str(), (UINT32)statusToShow.length(), m_textFormatItem.Get(), statusRect, statusBrush.Get());
+                         pRT->DrawText(statusToShow.c_str(), (UINT32)statusToShow.length(), m_textFormatItem.Get(), statusRect, statusBrush.Get());
                      }
                      
                      // Centered button text using scaled item font
                      m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                      m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                     pRT->DrawTextW(btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(), btnRect, m_brushText.Get());
+                     pRT->DrawText(btnText.c_str(), (UINT32)btnText.length(), m_textFormatItem.Get(), btnRect, m_brushText.Get());
                      m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                      m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                      break;
@@ -2169,7 +2182,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      
                      // Grid Label
                      D2D1_RECT_F gridLabelRect = D2D1::RectF(controlRect.left + toggleW + 10.0f, controlRect.top, controlRect.left + 200.0f, controlRect.bottom);
-                     pRT->DrawTextW(L"Show Grid", 9, m_textFormatItem.Get(), gridLabelRect, m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
+                     pRT->DrawText(L"Show Grid", 9, m_textFormatItem.Get(), gridLabelRect, m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
                      
                      // 2. Color Button (Right)
                      D2D1_RECT_F btnRect = D2D1::RectF(controlRect.left + 210.0f, controlRect.top, controlRect.right, controlRect.bottom);
@@ -2184,7 +2197,7 @@ void SettingsOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
                      
                      m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                      m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                     pRT->DrawTextW(L"Pick Color...", 13, m_textFormatItem.Get(), btnRect, textBrush); 
+                     pRT->DrawText(L"Pick Color...", 13, m_textFormatItem.Get(), btnRect, textBrush); 
                      m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                      m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                      break;
@@ -2269,7 +2282,7 @@ bool SettingsOverlay::OnMouseWheel(float delta) {
 // Widget Drawing Components
 // ----------------------------------------------------------------------------
 
-void SettingsOverlay::DrawToggle(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, bool isOn, bool isHovered) {
+void SettingsOverlay::DrawToggle(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, bool isOn, bool isHovered) {
     // Width 44, Height 22
     float w = 44.0f;
     float h = 22.0f;
@@ -2294,7 +2307,7 @@ void SettingsOverlay::DrawToggle(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect
     pRT->FillEllipse(knob, m_brushText.Get());
 }
 
-void SettingsOverlay::DrawSlider(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format) {
+void SettingsOverlay::DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format) {
     const float s = m_uiScale;
     // Width 150, Height 4 (Scaled)
     float w = 150.0f * s; 
@@ -2331,7 +2344,7 @@ void SettingsOverlay::DrawSlider(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect
     // Adjust right bounds based on format length to avoid clipping
     float leftBound = x - 80.0f * s;
     D2D1_RECT_F valRect = D2D1::RectF(leftBound, rect.top, x - 10.0f * s, rect.bottom);
-    pRT->DrawTextW(buf, (UINT32)wcslen(buf), m_textFormatItem.Get(), valRect, m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
+    pRT->DrawText(buf, (UINT32)wcslen(buf), m_textFormatItem.Get(), valRect, m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
     // ^ Note: using TextAlignment Leading in Init, so this might be left aligned.
     // Ideally right align this text. But OK for now.
 }
@@ -2381,7 +2394,7 @@ std::vector<float> SettingsOverlay::CalculateSegmentWidths(const std::vector<std
     return widths;
 }
 
-void SettingsOverlay::DrawSegment(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options) {
+void SettingsOverlay::DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options) {
     if (options.empty()) return;
 
     // Distribute remaining width
@@ -2413,7 +2426,7 @@ void SettingsOverlay::DrawSegment(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rec
         bool isSel = ((int)i == selectedIdx);
         // Draw Divider (if not first and not selected/adjacent) - simplified: just text
         
-        pRT->DrawTextW(options[i].c_str(), (UINT32)options[i].length(), m_textFormatItem.Get(), tRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
+        pRT->DrawText(options[i].c_str(), (UINT32)options[i].length(), m_textFormatItem.Get(), tRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
         currentX += itemWidths[i];
     }
     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING); // Restore Default
@@ -2656,6 +2669,7 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
                  if (m_pActiveCombo->pIntVal) {
                      if (*m_pActiveCombo->pIntVal != idx) {
                          *m_pActiveCombo->pIntVal = idx;
+                         int effectiveCmsMode = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
                          if (m_pActiveCombo->onChange) m_pActiveCombo->onChange();
                      }
                  }
@@ -2830,7 +2844,7 @@ void SettingsOverlay::OpenTab(int index) {
     }
 }
 
-void SettingsOverlay::DrawComboBox(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options, bool isOpen) {
+void SettingsOverlay::DrawComboBox(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options, bool isOpen) {
     float w = rect.right - rect.left;
     float h = rect.bottom - rect.top;
     
@@ -2850,7 +2864,7 @@ void SettingsOverlay::DrawComboBox(ID2D1RenderTarget* pRT, const D2D1_RECT_F& re
     
     D2D1_RECT_F textRect = D2D1::RectF(boxRect.left + 10, boxRect.top, boxRect.right - 30, boxRect.bottom);
     m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    pRT->DrawTextW(text.c_str(), (UINT32)text.length(), m_textFormatItem.Get(), textRect, m_brushText.Get());
+    pRT->DrawText(text.c_str(), (UINT32)text.length(), m_textFormatItem.Get(), textRect, m_brushText.Get());
     
     // Arrow
     D2D1_RECT_F arrowRect = D2D1::RectF(boxRect.right - 30, boxRect.top, boxRect.right, boxRect.bottom);
@@ -2858,13 +2872,13 @@ void SettingsOverlay::DrawComboBox(ID2D1RenderTarget* pRT, const D2D1_RECT_F& re
     m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     
     const wchar_t* arrow = isOpen ? L"\xE70E" : L"\xE70D"; // Up/Down
-    pRT->DrawTextW(arrow, 1, m_textFormatIcon.Get(), arrowRect, m_brushTextDim.Get());
+    pRT->DrawText(arrow, 1, m_textFormatIcon.Get(), arrowRect, m_brushTextDim.Get());
     
     // Restore
     m_textFormatIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 }
 
-void SettingsOverlay::DrawComboDropdown(ID2D1RenderTarget* pRT) {
+void SettingsOverlay::DrawComboDropdown(ID2D1DeviceContext* pRT) {
     if (!m_pActiveCombo) return;
     
     const float s = m_uiScale;
@@ -2912,7 +2926,7 @@ void SettingsOverlay::DrawComboDropdown(ID2D1RenderTarget* pRT) {
         // Text
         D2D1_RECT_F textRect = D2D1::RectF(itemRect.left + 10, itemRect.top, itemRect.right - 10, itemRect.bottom);
         m_textFormatItem->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        pRT->DrawTextW(m_pActiveCombo->options[idx].c_str(), (UINT32)m_pActiveCombo->options[idx].length(), 
+        pRT->DrawText(m_pActiveCombo->options[idx].c_str(), (UINT32)m_pActiveCombo->options[idx].length(), 
                        m_textFormatItem.Get(), textRect, m_brushText.Get());
     }
     

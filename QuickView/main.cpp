@@ -23,6 +23,7 @@
 #include <d2d1_1.h>
 #include <d3d11.h>
 #include <dxgi1_3.h>
+#include <d2d1_3.h>
 #include <dwrite.h>
 #include <wincodec.h>
 #include "OSDState.h"
@@ -236,7 +237,7 @@ AppConfig g_config;
 RuntimeConfig g_runtime;
 ViewState g_viewState;  // Non-static for extern access from UIRenderer
 static int g_renderExifOrientation = 1; // Exif orientation baked into the bitmap surface
-static FileNavigator g_navigator; // New Navigator
+FileNavigator g_navigator; // New Navigator (Non-static for extern access from SettingsOverlay)
 static ThumbnailManager g_thumbMgr;
 GalleryOverlay g_gallery;  // Non-static for extern access from UIRenderer
 Toolbar g_toolbar;  // Non-static for extern access from UIRenderer
@@ -4211,6 +4212,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"Image", L"ColorManagement", g_config.ColorManagement ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"EnableAdvancedColor", g_config.EnableAdvancedColor ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsDefaultFallback", std::to_wstring(g_config.CmsDefaultFallback).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"Image", L"CmsRenderingIntent", std::to_wstring(g_config.CmsRenderingIntent).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CustomSoftProofProfile", g_config.CustomSoftProofProfile.c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"ForceRawDecode", g_config.ForceRawDecode ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"AlwaysSaveLossless", g_config.AlwaysSaveLossless ? L"1" : L"0", iniPath.c_str());
@@ -4340,6 +4342,7 @@ void LoadConfig() {
     g_config.ColorManagement = GetPrivateProfileIntW(L"Image", L"ColorManagement", 1, iniPath.c_str()) != 0;
     g_config.EnableAdvancedColor = GetPrivateProfileIntW(L"Image", L"EnableAdvancedColor", 0, iniPath.c_str()) != 0;
     g_config.CmsDefaultFallback = GetPrivateProfileIntW(L"Image", L"CmsDefaultFallback", 0, iniPath.c_str());
+    g_config.CmsRenderingIntent = GetPrivateProfileIntW(L"Image", L"CmsRenderingIntent", 1, iniPath.c_str());
 
     wchar_t customProofPath[MAX_PATH];
     GetPrivateProfileStringW(L"Image", L"CustomSoftProofProfile", L"", customProofPath, MAX_PATH, iniPath.c_str());
@@ -5769,7 +5772,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // Trigger CMS update (All managed modes now depend on the current monitor profile)
             extern AppConfig g_config;
             extern RuntimeConfig g_runtime;
-            int effectiveCmsMode = g_runtime.GetEffectiveCmsMode();
+            int effectiveCmsMode = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
             bool applyCms = g_config.ColorManagement || (effectiveCmsMode != 0 && effectiveCmsMode != 1);
             if (applyCms && effectiveCmsMode != 0) {
                  RequestRepaint(PaintLayer::All);

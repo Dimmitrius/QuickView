@@ -1,9 +1,10 @@
 #include "pch.h"
 #include <initguid.h>
-#include <algorithm>
+#include <immintrin.h>
 #include <map>
 #include <mutex>
 #include <vector>
+#include <algorithm>
 #include "RenderEngine.h"
 #include "EditState.h"
 #include "ImageTypes.h" // [Direct D2D] RawImageFrame
@@ -39,17 +40,18 @@ bool LoadIccFromResource(T *d2dContext, int resourceId,
 }
 
 float ToneMapAces(float value) {
-  value = std::max(0.0f, value);
+  value = (value > 0.0f) ? value : 0.0f;
   const float numerator = value * (2.51f * value + 0.03f);
   const float denominator = value * (2.43f * value + 0.59f) + 0.14f;
   if (denominator <= 0.0f)
     return 0.0f;
-  return std::clamp(numerator / denominator, 0.0f, 1.0f);
+  float res = numerator / denominator;
+  return (res < 0.0f) ? 0.0f : (res > 1.0f ? 1.0f : res);
 }
 
 uint8_t EncodeLinearToSdr8(float value) {
-  value = powf(value, 1.0f / 2.2f);
-  value = std::clamp(value, 0.0f, 1.0f);
+  value = powf((value > 0.0f ? value : 0.0f), 1.0f / 2.2f);
+  value = (value < 0.0f) ? 0.0f : (value > 1.0f ? 1.0f : value);
   return static_cast<uint8_t>(value * 255.0f + 0.5f);
 }
 
@@ -70,7 +72,9 @@ float EstimateFramePeakScRgb(const QuickView::RawImageFrame &frame) {
       const float r = row[x * 4 + 0];
       const float g = row[x * 4 + 1];
       const float b = row[x * 4 + 2];
-      peak = (std::max)(peak, (std::max)(r, (std::max)(g, b)));
+      peak = (peak > r ? peak : r);
+      peak = (peak > g ? peak : g);
+      peak = (peak > b ? peak : b);
     }
   }
 
@@ -83,10 +87,10 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
   QuickView::ToneMapSettings settings = {};
 
   const float paperWhiteScRgb =
-      (std::max)(displayState.GetSdrWhiteScale(), 1.0f);
+      (displayState.GetSdrWhiteScale() > 1.0f ? displayState.GetSdrWhiteScale() : 1.0f);
   const float peakNits =
-      (std::max)(displayState.maxLuminanceNits, displayState.sdrWhiteLevelNits);
-  const float displayPeakScRgb = (std::max)(peakNits / 80.0f, 1.0f);
+      (displayState.maxLuminanceNits > displayState.sdrWhiteLevelNits ? displayState.maxLuminanceNits : displayState.sdrWhiteLevelNits);
+  const float displayPeakScRgb = (peakNits / 80.0f > 1.0f ? peakNits / 80.0f : 1.0f);
 
   float contentPeakScRgb = 1.0f;
   float contentAverageScRgb = 0.0f;
@@ -121,26 +125,24 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
     }
   }
 
-  settings.contentPeakScRgb = (std::max)(contentPeakScRgb, 1.0f);
+  settings.contentPeakScRgb = (contentPeakScRgb > 1.0f ? contentPeakScRgb : 1.0f);
   settings.displayPeakScRgb = displayPeakScRgb;
   settings.paperWhiteScRgb = paperWhiteScRgb;
 
   const float headroom = settings.displayPeakScRgb / settings.paperWhiteScRgb;
   const float highlightCompression = sqrtf(
-      (std::max)(settings.contentPeakScRgb / (std::max)(headroom, 1.0f), 1.0f));
+      (settings.contentPeakScRgb / (headroom > 1.0f ? headroom : 1.0f) > 1.0f ? settings.contentPeakScRgb / (headroom > 1.0f ? headroom : 1.0f) : 1.0f));
   float averageCompression = 1.0f;
   if (contentAverageScRgb > 0.0f) {
     const float displayAverageScRgb =
-        (std::max)(displayState.maxFullFrameLuminanceNits,
-                   displayState.sdrWhiteLevelNits) /
+        (displayState.maxFullFrameLuminanceNits > displayState.sdrWhiteLevelNits ? displayState.maxFullFrameLuminanceNits : displayState.sdrWhiteLevelNits) /
         80.0f;
     averageCompression = sqrtf(
-        (std::max)(contentAverageScRgb / (std::max)(displayAverageScRgb, 1.0f),
-                   1.0f));
+        (contentAverageScRgb / (displayAverageScRgb > 1.0f ? displayAverageScRgb : 1.0f) > 1.0f ? contentAverageScRgb / (displayAverageScRgb > 1.0f ? displayAverageScRgb : 1.0f) : 1.0f));
   }
 
   settings.exposure =
-      1.0f / (std::max)(highlightCompression * averageCompression, 1.0f);
+      1.0f / (highlightCompression * averageCompression > 1.0f ? highlightCompression * averageCompression : 1.0f);
   if (frame.hdrMetadata.hasGainMap && settings.exposure > 0.75f) {
     settings.exposure = 0.75f;
   }
@@ -155,7 +157,7 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
       } else if (displayHeadroom > appliedHeadroom + 0.25f &&
                  displayState.advancedColorActive) {
         const float recovery =
-            (std::min)(displayHeadroom - appliedHeadroom, 1.5f);
+            (displayHeadroom - appliedHeadroom < 1.5f ? displayHeadroom - appliedHeadroom : 1.5f);
         settings.exposure *= (1.0f + recovery * 0.08f);
       }
     }
@@ -169,7 +171,7 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
     }
   }
 
-  settings.exposure = (std::clamp)(settings.exposure, 0.18f, 1.0f);
+  settings.exposure = (settings.exposure < 0.18f) ? 0.18f : ((settings.exposure > 1.0f) ? 1.0f : settings.exposure);
 
   return settings;
 }
@@ -413,9 +415,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         BuildToneMapSettings(frame, m_displayColorState);
     const float sceneScale =
         toneMapSettings.exposure * toneMapSettings.paperWhiteScRgb /
-        sqrtf((std::max)(toneMapSettings.contentPeakScRgb /
-                             (std::max)(toneMapSettings.displayPeakScRgb, 1.0f),
-                         1.0f));
+        sqrtf((toneMapSettings.contentPeakScRgb / (toneMapSettings.displayPeakScRgb > 1.0f ? toneMapSettings.displayPeakScRgb : 1.0f) > 1.0f ? toneMapSettings.contentPeakScRgb / (toneMapSettings.displayPeakScRgb > 1.0f ? toneMapSettings.displayPeakScRgb : 1.0f) : 1.0f));
     for (int y = 0; y < frame.height; ++y) {
       const float *srcRow = reinterpret_cast<const float *>(
           frame.pixels + static_cast<size_t>(y) * frame.stride);
@@ -425,7 +425,8 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         const float r = srcRow[x * 4 + 0] * sceneScale;
         const float g = srcRow[x * 4 + 1] * sceneScale;
         const float b = srcRow[x * 4 + 2] * sceneScale;
-        const float a = (std::clamp)(srcRow[x * 4 + 3], 0.0f, 1.0f);
+        const float a_raw = srcRow[x * 4 + 3];
+        const float a = (a_raw < 0.0f) ? 0.0f : (a_raw > 1.0f ? 1.0f : a_raw);
 
         const float premulR = ToneMapAces(r) * a;
         const float premulG = ToneMapAces(g) * a;
@@ -470,7 +471,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
   // Step 1: Find best source context BEFORE creating the raw bitmap
   extern RuntimeConfig g_runtime;
   extern AppConfig g_config;
-  int effectiveCmsMode = g_runtime.GetEffectiveCmsMode();
+  int effectiveCmsMode = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
   ComPtr<ID2D1ColorContext> srcContext;
 
   // Master Switch Logic: 
@@ -603,8 +604,14 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
               softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_COLOR_CONTEXT, proofContext.Get());
               softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_ALPHA_MODE, D2D1_COLORMANAGEMENT_ALPHA_MODE_STRAIGHT);
               softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_QUALITY, D2D1_COLORMANAGEMENT_QUALITY_BEST);
-              softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_SOURCE_RENDERING_INTENT, D2D1_COLORMANAGEMENT_RENDERING_INTENT_RELATIVE_COLORIMETRIC);
-              softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_RENDERING_INTENT, D2D1_COLORMANAGEMENT_RENDERING_INTENT_RELATIVE_COLORIMETRIC);
+              
+              // [Requirement 2] Use User-defined Rendering Intent
+              const D2D1_COLORMANAGEMENT_RENDERING_INTENT intent = (g_config.CmsRenderingIntent == 0) ? 
+                  D2D1_COLORMANAGEMENT_RENDERING_INTENT_PERCEPTUAL : 
+                  D2D1_COLORMANAGEMENT_RENDERING_INTENT_RELATIVE_COLORIMETRIC;
+
+              softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_SOURCE_RENDERING_INTENT, intent);
+              softProofEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_RENDERING_INTENT, intent);
               softProofEffect->GetOutput(&currentInput);
               softProofSucceeded = true;
               OutputDebugStringW(L"[CMS] Chained Soft Proofing Node.\n");
@@ -617,6 +624,14 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_COLOR_CONTEXT, dstContext.Get());
         colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_ALPHA_MODE, D2D1_COLORMANAGEMENT_ALPHA_MODE_STRAIGHT);
         colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_QUALITY, D2D1_COLORMANAGEMENT_QUALITY_BEST);
+
+        // [Requirement 2] Main CMS Rendering Intent
+        const D2D1_COLORMANAGEMENT_RENDERING_INTENT intent = (g_config.CmsRenderingIntent == 0) ? 
+            D2D1_COLORMANAGEMENT_RENDERING_INTENT_PERCEPTUAL : 
+            D2D1_COLORMANAGEMENT_RENDERING_INTENT_RELATIVE_COLORIMETRIC;
+        colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_SOURCE_RENDERING_INTENT, intent);
+        colorManagementEffect->SetValue(D2D1_COLORMANAGEMENT_PROP_DESTINATION_RENDERING_INTENT, intent);
+
         OutputDebugStringW(L"[CMS] CMS Conversion Node Configured.\n");
 
         ComPtr<ID2D1Image> cmsOutput;

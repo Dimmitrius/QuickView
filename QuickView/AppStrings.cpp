@@ -245,6 +245,9 @@ const wchar_t *Settings_Option_CmsP3 = nullptr;
 const wchar_t *Settings_Option_CmsAdobeRGB = nullptr;
 const wchar_t *Settings_Option_CmsGray = nullptr;
 const wchar_t *Settings_Option_CmsProPhoto = nullptr;
+const wchar_t *Settings_Label_CmsIntent = nullptr;
+const wchar_t *Settings_Option_CmsIntentRelative = nullptr;
+const wchar_t *Settings_Option_CmsIntentPerceptual = nullptr;
 
 const wchar_t *Settings_Action_CheckUpdates = nullptr;
 const wchar_t *Settings_Action_ViewUpdate = nullptr;
@@ -650,6 +653,11 @@ struct EN {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"Grayscale (Tonal Check)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"Rendering Intent";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative =
+      L"Relative Colorimetric (Accuracy First)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual =
+      L"Perceptual (Perception First)";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates =
       L"Check for Updates";
@@ -952,6 +960,9 @@ struct CN {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"灰度模式 (影调检查)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意图";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相对色度 (准确优先)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意图 (感知优先)";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates = L"检查更新";
   static constexpr const wchar_t *Settings_Action_ViewUpdate = L"查看更新";
@@ -1474,6 +1485,9 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"灰度模式 (影調檢查)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意圖";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相對色度 (准确優先)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意圖 (感知優先)";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates = L"檢查更新";
   static constexpr const wchar_t *Settings_Action_ViewUpdate = L"檢視更新";
@@ -2005,6 +2019,9 @@ struct JA {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"グレースケール (トーン確認)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"レンダリングインテント";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相対的な色域を維持 (精度優先)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"知覚的 (知覚優先)";
   static constexpr const wchar_t *Dialog_UpdateLogHeader = L"更新内容:";
   static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
   static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
@@ -2470,6 +2487,9 @@ struct RU {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"Оттенки серого (Контроль тона)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"Рендеринг Intent";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"Относительный колориметрический";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"Перцепционный";
   static constexpr const wchar_t *Dialog_UpdateLogHeader = L"Что нового:";
   static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
   static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
@@ -2920,6 +2940,9 @@ struct DE {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"Graustufen (Tonwertkontrolle)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"Rendering-Intent";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"Relativ farbmetrisch";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"Perzeptiv";
   static constexpr const wchar_t *Dialog_UpdateLogHeader = L"Was ist neu:";
   static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
   static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
@@ -3386,6 +3409,9 @@ struct ES {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"Escala de grises (Control de tono)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"Intención de renderizado";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"Relativo colorimétrico";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"Perceptual";
   static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
   static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
   static constexpr const wchar_t *HUD_Group_Encoding = L"OPTICS & ENCODING";
@@ -3656,6 +3682,9 @@ template <typename T> void ApplyT() {
   Settings_Option_CmsAdobeRGB = T::Settings_Option_CmsAdobeRGB;
   Settings_Option_CmsGray = T::Settings_Option_CmsGray;
   Settings_Option_CmsProPhoto = T::Settings_Option_CmsProPhoto;
+  Settings_Label_CmsIntent = T::Settings_Label_CmsIntent;
+  Settings_Option_CmsIntentRelative = T::Settings_Option_CmsIntentRelative;
+  Settings_Option_CmsIntentPerceptual = T::Settings_Option_CmsIntentPerceptual;
 
   Settings_Action_CheckUpdates = T::Settings_Action_CheckUpdates;
   Settings_Action_ViewUpdate = T::Settings_Action_ViewUpdate;

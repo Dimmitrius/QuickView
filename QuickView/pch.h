@@ -5,6 +5,11 @@
 #define NOMINMAX
 #include <windows.h>
 #include <windowsx.h>
+#include <shlwapi.h>
+
+// [Critical] Resolve Windows macro interference BEFORE Direct2D/DirectWrite headers
+#undef DrawText
+#undef DrawTextW
 
 // Direct2D and DirectWrite
 #include <d2d1_3.h>
@@ -37,9 +42,6 @@ using Microsoft::WRL::ComPtr;
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "shlwapi.lib") // [SVG] For SHCreateMemStream
 #pragma comment(lib, "ole32.lib")   // [SVG] For CreateStreamOnHGlobal
-
-// Windows Headers
-#include <shlwapi.h>
 
 // Helper macro for HRESULT checking
 #ifndef THROW_IF_FAILED

@@ -142,6 +142,7 @@ struct AppConfig {
     bool AutoRotate = true;
     bool EnableSmoothScaling = false;    // New: Smooth Zoom toggle
     bool ColorManagement = true;         // Master toggle for Color Management System
+    int CmsRenderingIntent = 1;          // 0=Perceptual, 1=Relative Colorimetric
     bool EnableAdvancedColor = false;    // HDR / FP16 scRGB pipeline toggle
     int CmsDefaultFallback = 0;          // Fallback for untagged images: 0=sRGB, 1=P3, 2=AdobeRGB, 3=ProPhoto
     std::wstring CustomSoftProofProfile; // Path to user-selected ICC file for soft proofing
@@ -255,8 +256,9 @@ struct RuntimeConfig {
     bool CrossMonitorMode = false;
     
     // CMS Helper
-    int GetEffectiveCmsMode() const {
-        return (CmsModeOverride != -1) ? CmsModeOverride : 1; // Default to 1 (Auto) when no override
+    int GetEffectiveCmsMode(bool masterToggle) const {
+        if (CmsModeOverride != -1) return CmsModeOverride;
+        return masterToggle ? 1 : 0; // Default to Auto (1) if master is on, else Unmanaged (0)
     }
 
     // Sync Helper

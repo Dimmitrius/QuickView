@@ -203,7 +203,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     pRT->DrawRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBorder.Get(), 1.0f * s);
 
     // Header Title
-    pRT->DrawTextW(L"QuickView Help", 14, m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, y + 16.0f * s, x + panelW, y + 60.0f * s), m_brushText.Get());
+    pRT->DrawText(L"QuickView Help", 14, m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, y + 16.0f * s, x + panelW, y + 60.0f * s), m_brushText.Get());
     
     // Close Button [ X ]
     m_closeRect = D2D1::RectF(x + panelW - 40.0f * s, y + 12.0f * s, x + panelW - 12.0f * s, y + 40.0f * s);
@@ -218,7 +218,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     }
     
     // \xE8BB is Cancel/Clear in MDL2 Assets
-    pRT->DrawTextW(L"\xE8BB", 1, m_fmtIcon.Get(), m_closeRect, m_brushText.Get());
+    pRT->DrawText(L"\xE8BB", 1, m_fmtIcon.Get(), m_closeRect, m_brushText.Get());
     
     // Reset Header fmt (if we used it, but we used fmtIcon)
     m_fmtHeader->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -241,7 +241,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
     for (const auto& item : m_items) {
         if (item.isHeader) {
             contentY += 20;
-            pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, contentY, x + panelW - 24.0f * s, contentY + 30.0f * s), m_brushHeader.Get());
+            pRT->DrawText(item.key.c_str(), (UINT32)item.key.length(), m_fmtHeader.Get(), D2D1::RectF(x + 24.0f * s, contentY, x + panelW - 24.0f * s, contentY + 30.0f * s), m_brushHeader.Get());
             contentY += 28.0f * s;
         } 
         else if (item.desc.empty()) {
@@ -268,10 +268,10 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             float keyW = 180.0f * s;
             // Key (Right Aligned in Col 1)
             // Actually Left aligned is better for keys like "Ctrl + Shift + ..."
-            pRT->DrawTextW(item.key.c_str(), (UINT32)item.key.length(), m_fmtKey.Get(), D2D1::RectF(x + 40.0f * s, contentY, x + 40.0f * s + keyW, contentY + rowH), m_brushKey.Get());
+            pRT->DrawText(item.key.c_str(), (UINT32)item.key.length(), m_fmtKey.Get(), D2D1::RectF(x + 40.0f * s, contentY, x + 40.0f * s + keyW, contentY + rowH), m_brushKey.Get());
             
             // Value
-            pRT->DrawTextW(item.desc.c_str(), (UINT32)item.desc.length(), m_fmtDesc.Get(), D2D1::RectF(x + 50.0f * s + keyW, contentY, x + panelW - 24.0f * s, contentY + rowH), m_brushText.Get());
+            pRT->DrawText(item.desc.c_str(), (UINT32)item.desc.length(), m_fmtDesc.Get(), D2D1::RectF(x + 50.0f * s + keyW, contentY, x + panelW - 24.0f * s, contentY + rowH), m_brushText.Get());
             
             contentY += 24.0f * s;
         }

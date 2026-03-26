@@ -5,79 +5,74 @@
 #include <functional>
 #include <map>
 
-// Definition of specific color constants (or include theme header if exists)
-// Using standard D2D1 colors for now
+// [Fix] Resolve Windows macro interference
+#undef LoadIcon
+#undef LoadIconW
+#undef LoadImage
+#undef LoadImageW
 
 enum class SettingsAction {
     None,
-    RepaintStatic, // Only UI layer needs update (Tab switch, Hover)
-    RepaintAll,    // Config changed, partial or full image redraw might be needed
-    OpenHelp,      // Close Settings and Open Help Overlay (Handoff)
-    DragWindow     // Native window drag via HTCAPTION
+    RepaintStatic, 
+    RepaintAll,    
+    OpenHelp,      
+    DragWindow     
 };
 
 enum class OptionType {
     Toggle,
     Slider,
     Segment,
-    ComboBox, // Dropdown List
+    ComboBox, 
     ActionButton,
-    CustomColorRow, // Custom UI: Grid Checkbox + Color Preview Button
+    CustomColorRow, 
     Input,
-    Header, // Section Header
-    // About Tab Specialized Types
-    AboutHeader,      // Icon + AppName
-    AboutVersionCard, // Version + Update Button
-    AboutLinks,       // GitHub/Issues/Keys Buttons
-    AboutTechBadges,  // Tech Stack Badges
-    AboutSystemInfo,  // System Info + AVX2 Badge
-    InfoLabel,        // Restored: Small gray text
-    CopyrightLabel    // Exclusive for footer
+    Header, 
+    AboutHeader,      
+    AboutVersionCard, 
+    AboutLinks,       
+    AboutTechBadges,  
+    AboutSystemInfo,  
+    InfoLabel,        
+    CopyrightLabel    
 };
 
 struct SettingsItem {
     std::wstring label;
     OptionType type;
 
-    // Binding Pointers (Direct access to runtime config)
     bool* pBoolVal = nullptr;
     float* pFloatVal = nullptr;
     int* pIntVal = nullptr;
     std::wstring* pStrVal = nullptr;
 
-    // Constraints / Options
     float minVal = 0.0f;
     float maxVal = 100.0f;
-    std::vector<std::wstring> options; // For Segment
-    std::wstring displayFormat;        // E.g., L"%.0f px" for slider formatting
+    std::vector<std::wstring> options; 
+    std::wstring displayFormat;        
     
-    // Callback (optional)
     std::function<void()> onChange;
 
-    // Runtime Layout (Hit Testing)
     D2D1_RECT_F rect; 
     D2D1_RECT_F interactRect = {0};
     bool isHovered = false;
     
-    // Disabled State
     bool isDisabled = false;
-    std::wstring disabledText; // e.g. "Coming Soon"
+    std::wstring disabledText; 
     
-    // ActionButton specific
-    std::wstring buttonText = L"Select";  // Default button text
-    std::wstring buttonActivatedText;     // Text after action (e.g. "Added")
-    bool isActivated = false;             // Whether action has been performed
-    bool isDestructive = false;           // If true, button is rendered Red (e.g. Reset/Delete)
+    std::wstring buttonText = L"Select";  
+    std::wstring buttonActivatedText;     
+    bool isActivated = false;             
+    bool isDestructive = false;           
 
-    // Runtime Feedback (New)
     std::wstring statusText;
     D2D1::ColorF statusColor = D2D1::ColorF(D2D1::ColorF::White);
-    DWORD statusSetTime = 0; // For auto-hide logic
+    DWORD statusSetTime = 0; 
 };
 
 struct SettingsTab {
     std::wstring name;
-    std::wstring icon; // Unicode icon char
+    std::wstring icon; 
     std::vector<SettingsItem> items;
 };
 
@@ -86,78 +81,62 @@ public:
     SettingsOverlay();
     ~SettingsOverlay();
 
-    void Init(ID2D1RenderTarget* pRT, HWND hwnd);
-    void Render(ID2D1RenderTarget* pRT, float winW, float winH);
+    void Init(ID2D1DeviceContext* pRT, HWND hwnd);
+    void Render(ID2D1DeviceContext* pRT, float winW, float winH);
     void SetUIScale(float scale);
     void SetHdrWhiteScale(float scale) { m_hdrWhiteScale = scale; }
     
-    // Interaction
     SettingsAction OnMouseMove(float x, float y);
     SettingsAction OnLButtonDown(float x, float y);
     SettingsAction OnLButtonUp(float x, float y);
-    bool OnMouseWheel(float delta); // For scrolling functionality maybe?
+    bool OnMouseWheel(float delta); 
 
     void SetVisible(bool visible);
     bool IsVisible() const { return m_visible; }
     void Toggle() { SetVisible(!m_visible); }
 
-    // Configuration Binding
-    // We will have a method to    // Initialize Settings Tabs
-    void BuildMenu(); // Deprecated name? Keep for compatibility
-    void RebuildMenu(); // New: Reruns BuildMenu but with current strings
+    void BuildMenu(); 
+    void RebuildMenu(); 
     
-    // Status Feedback
-    // Status Feedback
     void SetItemStatus(const std::wstring& label, const std::wstring& status, D2D1::ColorF color); 
     void OpenTab(int index); 
     
-    // Update System UI
     void ShowUpdateToast(const std::wstring& version, const std::wstring& changelog);
     bool IsUpdateToastVisible() const { return m_showUpdateToast; } 
 
-    // File Associations
     static bool RegisterAssociations();
-    static void UnregisterAssociations(); // Clear registry entries (for portable mode)
+    static void UnregisterAssociations(); 
     static bool IsRegistrationNeeded();
 
 private:
-    void CreateResources(ID2D1RenderTarget* pRT);
+    void CreateResources(ID2D1DeviceContext* pRT);
     
-    // Draw Widgets
-    void DrawToggle(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, bool isOn, bool isHovered);
-    void DrawSlider(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format = L"");
+    void DrawToggle(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, bool isOn, bool isHovered);
+    void DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format = L"");
     std::vector<float> CalculateSegmentWidths(const std::vector<std::wstring>& options, float totalW);
-    void DrawSegment(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options);
-    void DrawComboBox(ID2D1RenderTarget* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options, bool isOpen);
-    void DrawComboDropdown(ID2D1RenderTarget* pRT); // Draws the floating list
-    void RenderUpdateToast(ID2D1RenderTarget* pRT, float hudX, float hudY, float hudW, float hudH);
+    void DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options);
+    void DrawComboBox(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options, bool isOpen);
+    void DrawComboDropdown(ID2D1DeviceContext* pRT); 
+    void RenderUpdateToast(ID2D1DeviceContext* pRT, float hudX, float hudY, float hudW, float hudH);
 
-
-
-
-    // State
     bool m_visible = false;
-    float m_opacity = 0.0f; // Animation
+    float m_opacity = 0.0f; 
     int m_activeTab = 0;
     
-    // Interaction State
-    SettingsItem* m_pActiveSlider = nullptr; // Item currently being dragged
+    SettingsItem* m_pActiveSlider = nullptr; 
     SettingsItem* m_pHoverItem = nullptr;
-    SettingsItem* m_pActiveCombo = nullptr; // Currently open dropdown
+    SettingsItem* m_pActiveCombo = nullptr; 
     int m_comboHoverIdx = -1;
     float m_scrollOffset = 0.0f;
     float m_settingsContentHeight = 0.0f;
 
-    
     std::vector<SettingsTab> m_tabs;
 
-    // Resources
-    ComPtr<ID2D1SolidColorBrush> m_brushBg;      // 0.9 Alpha Black
-    ComPtr<ID2D1SolidColorBrush> m_brushText;    // White
-    ComPtr<ID2D1SolidColorBrush> m_brushTextDim; // Gray
-    ComPtr<ID2D1SolidColorBrush> m_brushAccent;  // Blue/Orange
-    ComPtr<ID2D1SolidColorBrush> m_brushControlBg; // Dark Gray
-    // New Visuals
+    ComPtr<ID2D1SolidColorBrush> m_brushBg;      
+    ComPtr<ID2D1SolidColorBrush> m_brushText;    
+    ComPtr<ID2D1SolidColorBrush> m_brushTextDim; 
+    ComPtr<ID2D1SolidColorBrush> m_brushAccent;  
+    ComPtr<ID2D1SolidColorBrush> m_brushControlBg; 
     ComPtr<ID2D1SolidColorBrush> m_brushBorder;
     ComPtr<ID2D1SolidColorBrush> m_brushSuccess;
     ComPtr<ID2D1SolidColorBrush> m_brushError;
@@ -168,37 +147,30 @@ private:
     ComPtr<IDWriteTextFormat> m_textFormatItem;
     ComPtr<IDWriteTextFormat> m_textFormatIcon;
 
-    // Layout Constants
     const float SIDEBAR_WIDTH = 150.0f;
     const float ITEM_HEIGHT = 32.0f;
     const float PADDING = 16.0f;
     
-    std::wstring m_debugInfo; // Debugging Icon Loading
+    std::wstring m_debugInfo; 
     const float HUD_WIDTH = 680.0f;
     const float HUD_HEIGHT = 560.0f;
 
-    HWND m_hwnd = nullptr; // For Resize Logic
-    ComPtr<IDWriteTextFormat> m_textFormatSymbol; // Segoe MDL2 Assets
+    HWND m_hwnd = nullptr; 
+    ComPtr<IDWriteTextFormat> m_textFormatSymbol; 
     
-    // Interaction State for About Tab
-    int m_hoverLinkIndex = -1; // 0=GitHub, 1=Issues, 2=Keys
+    int m_hoverLinkIndex = -1; 
     bool m_isHoveringCopyright = false;
     
-    // Internal Helpers
-    // Internal Helpers
     std::wstring GetRealWindowsVersion();
 
-    // Update State
     bool m_showUpdateToast = false;
     std::wstring m_updateVersion;
     std::wstring m_updateLog;
-    std::wstring m_dismissedVersion; // Track dismissed notification
-    D2D1_RECT_F m_toastRect; // For hit testing
-    int m_toastHoverBtn = -1; // 0=Restart, 1=Later, 2=Close
-    // Scroll for Log in About Tab?
-    bool m_showFullLog = false; // Toggle inside About Tab?
+    std::wstring m_dismissedVersion; 
+    D2D1_RECT_F m_toastRect; 
+    int m_toastHoverBtn = -1; 
+    bool m_showFullLog = false; 
     
-    // Cached Layout for Input
     float m_hudX = 0.0f;
     float m_hudY = 0.0f;
     float m_windowWidth = 0.0f;
@@ -206,11 +178,9 @@ private:
     float m_uiScale = 1.0f;
     float m_hdrWhiteScale = 1.0f;
     
-    // Toast Scrolling
     float m_toastScrollY = 0.0f;
     float m_toastTotalHeight = 0.0f;
     
-    // Async Rebuild (Fix UAF on Reset)
     bool m_pendingRebuild = false;
     bool m_pendingResetFeedback = false; 
 };
