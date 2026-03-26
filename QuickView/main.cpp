@@ -2448,7 +2448,7 @@ using QuickView::PaintLayer;
 using QuickView::HasLayer;
 
 // Global window handle for RequestRepaint (set in wWinMain)
-static HWND g_mainHwnd = nullptr;
+HWND g_mainHwnd = nullptr;
 
 // 锟?缁熶竴閲嶇粯璇锋眰鍏ュ彛 - 鎵€鏈夊湴鏂瑰彧璋冭繖涓嚱锟?
 void RequestRepaint(PaintLayer layer) {

@@ -1194,12 +1194,12 @@ void SettingsOverlay::BuildMenu() {
         itemCustomProof.buttonText = filename.length() > 20 ? (filename.substr(0, 17) + L"...") : filename;
     }
     itemCustomProof.onChange = []() {
-        extern HWND g_mainWindow;
+        extern HWND g_mainHwnd;
         wchar_t filename[MAX_PATH] = { 0 };
         OPENFILENAMEW ofn;
         ZeroMemory(&ofn, sizeof(ofn));
         ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner = g_mainWindow;
+        ofn.hwndOwner = g_mainHwnd;
         ofn.lpstrFilter = L"ICC Profiles (*.icc;*.icm)\0*.icc;*.icm\0All Files (*.*)\0*.*\0";
         ofn.lpstrFile = filename;
         ofn.nMaxFile = MAX_PATH;
