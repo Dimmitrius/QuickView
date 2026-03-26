@@ -1105,9 +1105,17 @@ void ImageEngine::FastLane::QueueWorker() {
                     safeFrame->stride = rawFrame.stride;
                     safeFrame->format = rawFrame.format;
                     safeFrame->formatDetails = rawFrame.formatDetails;
-                    safeFrame->quality = QuickView::DecodeQuality::Preview; // [v9.0] FastLane is always Preview
+                    safeFrame->quality = QuickView::DecodeQuality::Preview; 
                     safeFrame->exifOrientation = rawFrame.exifOrientation;
                     safeFrame->memoryDeleter = [](uint8_t* p) { delete[] p; };
+                    
+                    // [CMS] Propagate color profile and HDR metadata
+                    safeFrame->iccProfile = std::move(rawFrame.iccProfile);
+                    safeFrame->is_sRGB = rawFrame.is_sRGB;
+                    safeFrame->is_Linear_sRGB = rawFrame.is_Linear_sRGB;
+                    safeFrame->hdrMetadata = rawFrame.hdrMetadata;
+                    safeFrame->srcWidth = rawFrame.srcWidth;
+                    safeFrame->srcHeight = rawFrame.srcHeight;
                 }
                 e.rawFrame = safeFrame;
                 
@@ -1460,6 +1468,12 @@ void ImageEngine::AddToCache(int index, const std::wstring& path, std::shared_pt
             cachedFrame->svg->viewBoxH = frame->svg->viewBoxH;
             cachedFrame->srcWidth = frame->srcWidth;
             cachedFrame->srcHeight = frame->srcHeight;
+            
+            // [CMS] Propagate color profile and HDR metadata
+            cachedFrame->iccProfile = frame->iccProfile;
+            cachedFrame->is_sRGB = frame->is_sRGB;
+            cachedFrame->is_Linear_sRGB = frame->is_Linear_sRGB;
+            cachedFrame->hdrMetadata = frame->hdrMetadata;
         } else {
             // Raster: Deep copy pixels to heap
             size_t bufferSize = frame->GetBufferSize();
@@ -1471,12 +1485,18 @@ void ImageEngine::AddToCache(int index, const std::wstring& path, std::shared_pt
             cachedFrame->height = frame->height;
             cachedFrame->stride = frame->stride;
             cachedFrame->format = frame->format;
-            cachedFrame->quality = frame->quality; // [v9.0] Copy Quality
+            cachedFrame->quality = frame->quality;
             cachedFrame->formatDetails = frame->formatDetails;
             cachedFrame->exifOrientation = frame->exifOrientation;
             cachedFrame->srcWidth = frame->srcWidth;
             cachedFrame->srcHeight = frame->srcHeight;
             cachedFrame->memoryDeleter = [](uint8_t* p) { delete[] p; }; // Heap cleanup
+            
+            // [CMS] Propagate color profile and HDR metadata
+            cachedFrame->iccProfile = frame->iccProfile;
+            cachedFrame->is_sRGB = frame->is_sRGB;
+            cachedFrame->is_Linear_sRGB = frame->is_Linear_sRGB;
+            cachedFrame->hdrMetadata = frame->hdrMetadata;
         }
         
         CacheEntry entry;

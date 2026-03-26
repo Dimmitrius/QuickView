@@ -96,18 +96,17 @@ struct RawImageFrame {
     // [v8.7] EXIF Orientation (1-8)
     int exifOrientation = 1; /* 1 = Normal */
 
+    std::vector<uint8_t> iccProfile;
+    bool is_sRGB = false;        // [CMS] 标记为标准 sRGB
+    bool is_Linear_sRGB = false; // [CMS] 标记为线性 sRGB (HDR)
+    HdrStaticMetadata hdrMetadata;
+
     // [v10.1] Original source dimensions (for Titan scaled base layers)
     // When width/height hold the scaled preview size (e.g. 3840x2160),
     // srcWidth/srcHeight preserve the true source resolution (e.g. 1080x9123).
     // Zero means width/height ARE the original dimensions (no scaling).
     int srcWidth = 0;
     int srcHeight = 0;
-
-    // [v10.2] Embedded ICC Profile Payload
-    std::vector<uint8_t> iccProfile;
-    bool is_sRGB = false;        // [CMS] 标记为标准 sRGB
-    bool is_Linear_sRGB = false; // [CMS] 标记为线性 sRGB (HDR)
-    HdrStaticMetadata hdrMetadata;
 
     // [D2D Native] SVG Specific Data (Used only when format == SVG_XML)
     // Use unique_ptr to ensure zero overhead for non-SVG paths
@@ -195,6 +194,7 @@ struct RawImageFrame {
         stride = 0;
         memoryDeleter = nullptr;
         svg.reset(); // [D2D Native] Release SVG data
+        iccProfile.clear(); // Ensure it is cleared on reset
     }
     
     /// Detach pointer without calling deleter (transfers ownership out)
@@ -215,12 +215,12 @@ private:
         // [v5.6 Fix] Move formatDetails!
         formatDetails = std::move(other.formatDetails);
         exifOrientation = other.exifOrientation;
-        srcWidth = other.srcWidth;
-        srcHeight = other.srcHeight;
         iccProfile = std::move(other.iccProfile);
         is_sRGB = other.is_sRGB;
         is_Linear_sRGB = other.is_Linear_sRGB;
         hdrMetadata = other.hdrMetadata;
+        srcWidth = other.srcWidth;
+        srcHeight = other.srcHeight;
         memoryDeleter = std::move(other.memoryDeleter);
         
         // [D2D Native] Move SVG Data
@@ -234,7 +234,7 @@ private:
         other.srcWidth = 0;
         other.srcHeight = 0;
         // other.formatDetails is moved (empty)
-        // other.iccProfile is moved (empty)
+        other.iccProfile.clear(); // Clear source vector after move
         other.is_sRGB = false;
         other.is_Linear_sRGB = false;
         other.hdrMetadata = {};

@@ -443,6 +443,13 @@ HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size,
         size_t iccSize = 0;
         if (tj3GetICCProfile(handle, &iccBuf, &iccSize) == 0 && iccSize > 0) {
             outFrame->iccProfile.assign(iccBuf, iccBuf + iccSize);
+            
+            // [v10.1] Sync back to metadata for unified Info Panel & CMS check
+            if (pMetadata) {
+                pMetadata->iccProfileData.assign(iccBuf, iccBuf + iccSize);
+                pMetadata->HasEmbeddedColorProfile = true;
+            }
+            
             tj3Free(iccBuf);
         }
 
@@ -3244,24 +3251,16 @@ static void PopulateMetadataFromEasyExif(const easyexif::EXIFInfo& exif, CImageL
             static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result) {
                 if (!data || size == 0) return E_FAIL;
 
-                // [v6.0] WebP Exif Extraction using WebPDemux
+                // [v6.0] WebP Metadata Extraction using WebPDemux (Exif + ICC)
                 {
                     WebPData webpData = { data, size };
                     WebPDemuxer* demux = WebPDemux(&webpData);
                     if (demux) {
+                        // 1. EXIF
                         WebPChunkIterator chunk;
                         if (WebPDemuxGetChunk(demux, "EXIF", 1, &chunk)) {
                              easyexif::EXIFInfo exif;
-                             // Note: WebP EXIF chunk usually contains "Exif\0\0" header? Or raw TIFF?
-                             // EasyExif handles raw TIFF if we skip "Exif\0\0" check?
-                             // parseFromEXIFSegment expects "Exif\0\0" at start usually.
-                             // WebP spec: "The payload of the 'EXIF' chunk consists of the Exif metadata... conforming to the TIFF specification."
-                             // It usually starts directly with TIFF header (II/MM).
-                             // Make wrapper:
                              if (exif.parseFromEXIFSegment(chunk.chunk.bytes, static_cast<unsigned>(chunk.chunk.size)) != 0) {
-                                 // Try parsing as raw TIFF (prepend "Exif\0\0" dummy?)
-                                 // EasyExif::parseFromEXIFSegment *checks* for "Exif\0\0".
-                                 // We might need to construct a temp buffer.
                                  std::vector<unsigned char> tempBuf(chunk.chunk.size + 6);
                                  memcpy(tempBuf.data(), "Exif\0\0", 6);
                                  memcpy(tempBuf.data() + 6, chunk.chunk.bytes, chunk.chunk.size);
@@ -3273,6 +3272,14 @@ static void PopulateMetadataFromEasyExif(const easyexif::EXIFInfo& exif, CImageL
                              }
                              WebPDemuxReleaseChunkIterator(&chunk);
                         }
+                        
+                        // 2. ICCP (CMS)
+                        if (WebPDemuxGetChunk(demux, "ICCP", 1, &chunk)) {
+                            result.metadata.iccProfileData.assign(chunk.chunk.bytes, chunk.chunk.bytes + chunk.chunk.size);
+                            result.metadata.HasEmbeddedColorProfile = true;
+                            WebPDemuxReleaseChunkIterator(&chunk);
+                        }
+                        
                         WebPDemuxDelete(demux);
                     }
                 }
@@ -4304,10 +4311,68 @@ namespace QuickView {
 
                 // [v6.0] Exif Marker Persistence for EasyExif
                 jpeg_save_markers(&cinfo, JPEG_APP0 + 1, 0xFFFF);
+                
+                // [CMS] Save APP2 markers for ICC Profile extraction
+                jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 0xFFFF);
 
                 if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
                     jpeg_destroy_decompress(&cinfo);
                     return E_FAIL;
+                }
+                
+                // [CMS] Extract and Merge Multi-segment ICC Profile from APP2 markers
+                {
+                    size_t iccTotalSize = 0;
+                    int iccNumMarkers = 0;
+                    
+                    // First pass: identify markers and calculate size
+                    for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next) {
+                        if (marker->marker == 0xE2 && marker->data_length >= 14) {
+                             if (memcmp(marker->data, "ICC_PROFILE", 11) == 0) {
+                                 iccTotalSize += (marker->data_length - 14);
+                                 iccNumMarkers++;
+                             }
+                        }
+                    }
+                    
+                    {
+                        wchar_t logBuf[128];
+                        swprintf_s(logBuf, L"[Loader] JPEG Markers Check: Found %d ICC segments. Total size: %zu\n", iccNumMarkers, iccTotalSize);
+                        OutputDebugStringW(logBuf);
+                    }
+                    
+                    if (iccNumMarkers > 0) {
+                        result.metadata.iccProfileData.resize(iccTotalSize);
+                        uint8_t* pIcc = result.metadata.iccProfileData.data();
+                        size_t currentOffset = 0;
+                        int markersmerged = 0;
+                        
+                        // Second pass: Merge segments in correct sequence
+                        for (int seq = 1; seq <= 255; ++seq) {
+                             bool found = false;
+                             for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next) {
+                                 if (marker->marker == JPEG_APP0 + 2 && marker->data_length >= 14 && memcmp(marker->data, "ICC_PROFILE\0", 12) == 0) {
+                                      if (marker->data[12] == seq) {
+                                           size_t partLen = marker->data_length - 14;
+                                           if (currentOffset + partLen <= iccTotalSize) {
+                                               memcpy(pIcc + currentOffset, marker->data + 14, partLen);
+                                               currentOffset += partLen;
+                                               markersmerged++;
+                                           }
+                                           found = true;
+                                           break;
+                                      }
+                                 }
+                             }
+                             if (!found) break; // Finished or missing segment
+                        }
+                        
+                        if (markersmerged > 0) {
+                            result.metadata.HasEmbeddedColorProfile = true;
+                        } else {
+                            result.metadata.iccProfileData.clear();
+                        }
+                    }
                 }
                 
                 // [v6.0] Parse EXIF Marker (Native)
@@ -4540,6 +4605,13 @@ namespace QuickView {
                 result.metadata.FormatDetails = details;
                 result.metadata.Width = w;
                 result.metadata.Height = h;
+                
+                // [CMS] Extract ICC Profile from Wuffs result
+                if (!info.iccProfile.empty()) {
+                    result.metadata.iccProfileData = std::move(info.iccProfile);
+                    result.metadata.HasEmbeddedColorProfile = true;
+                }
+                
                 return S_OK;
             }
 
@@ -9804,6 +9876,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
         outFrame->formatDetails = res.metadata.FormatDetails;
         outFrame->exifOrientation = res.metadata.ExifOrientation; // [v8.7] Propagate Orientation
         outFrame->iccProfile.assign(res.metadata.iccProfileData.begin(), res.metadata.iccProfileData.end());
+
         outFrame->is_sRGB = res.metadata.is_sRGB;
         outFrame->is_Linear_sRGB = res.metadata.is_Linear_sRGB;
         outFrame->hdrMetadata = res.metadata.hdrMetadata;

@@ -1645,6 +1645,12 @@ tile_decode_done: ; // [P14] Jump target for fast path (skip legacy TJ decode)
                     safeFrame->srcHeight = rawFrame.srcHeight;
                     safeFrame->exifOrientation = rawFrame.exifOrientation; // [Fix] Propagate Orientation to cache
                     safeFrame->memoryDeleter = [](uint8_t* p) { delete[] p; };
+
+                    // [CMS] Propagate color profile and HDR metadata
+                    safeFrame->iccProfile = std::move(rawFrame.iccProfile);
+                    safeFrame->is_sRGB = rawFrame.is_sRGB;
+                    safeFrame->is_Linear_sRGB = rawFrame.is_Linear_sRGB;
+                    safeFrame->hdrMetadata = rawFrame.hdrMetadata;
                 }
                 
                 evt.rawFrame = safeFrame;
