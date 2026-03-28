@@ -655,9 +655,9 @@ struct EN {
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
   static constexpr const wchar_t *Settings_Label_CmsIntent = L"Rendering Intent";
   static constexpr const wchar_t *Settings_Option_CmsIntentRelative =
-      L"Relative Colorimetric (Accuracy First)";
+      L"Relative Colorimetric";
   static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual =
-      L"Perceptual (Perception First)";
+      L"Perceptual";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates =
       L"Check for Updates";
@@ -961,8 +961,8 @@ struct CN {
   static constexpr const wchar_t *Settings_Option_CmsGray = L"灰度模式 (影调检查)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
   static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意图";
-  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相对色度 (准确优先)";
-  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意图 (感知优先)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相对色度";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意图";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates = L"检查更新";
   static constexpr const wchar_t *Settings_Action_ViewUpdate = L"查看更新";
@@ -1486,8 +1486,8 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_CmsGray = L"灰度模式 (影調檢查)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
   static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意圖";
-  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相對色度 (准确優先)";
-  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意圖 (感知優先)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相對色度";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意圖";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates = L"檢查更新";
   static constexpr const wchar_t *Settings_Action_ViewUpdate = L"檢視更新";
@@ -2020,8 +2020,8 @@ struct JA {
   static constexpr const wchar_t *Settings_Option_CmsGray = L"グレースケール (トーン確認)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
   static constexpr const wchar_t *Settings_Label_CmsIntent = L"レンダリングインテント";
-  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相対的な色域を維持 (精度優先)";
-  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"知覚的 (知覚優先)";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相対的な色域を維持";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"知覚的";
   static constexpr const wchar_t *Dialog_UpdateLogHeader = L"更新内容:";
   static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
   static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
