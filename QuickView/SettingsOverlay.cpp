@@ -367,13 +367,8 @@ void SettingsOverlay::ShowUpdateToast(const std::wstring& version, const std::ws
     m_toastScrollY = 0.0f; // Reset scroll
     
     // Auto-resize window if too small for toast
-    RECT rc; 
-    GetClientRect(m_hwnd, &rc);
-    int w = rc.right - rc.left;
-    int h = rc.bottom - rc.top;
-    if (w < 520 || h < 320) {
-        SetWindowPos(m_hwnd, NULL, 0, 0, std::max(w, 520), std::max(h, 320), SWP_NOMOVE | SWP_NOZORDER);
-    }
+    extern void AdjustWindowForOverlay(HWND hwnd, bool isClosed);
+    AdjustWindowForOverlay(m_hwnd, false);
     
     BuildMenu(); // Refresh About tab state
 }
@@ -1524,19 +1519,15 @@ void SettingsOverlay::SetVisible(bool visible) {
         
         // Auto-Resize if window is too small
         if (m_hwnd) {
-             RECT rc; GetClientRect(m_hwnd, &rc);
-             int w = rc.right - rc.left;
-             int h = rc.bottom - rc.top;
-             
-             int minW = (int)(HUD_WIDTH * m_uiScale + 50.0f * m_uiScale); // Padding
-             int minH = (int)(HUD_HEIGHT * m_uiScale + 50.0f * m_uiScale);
-             
-             if (w < minW || h < minH) {
-                 SetWindowPos(m_hwnd, NULL, 0, 0, std::max(w, minW), std::max(h, minH), SWP_NOMOVE | SWP_NOZORDER);
-             }
+             extern void AdjustWindowForOverlay(HWND hwnd, bool isClosed);
+             AdjustWindowForOverlay(m_hwnd, false);
         }
     } else {
         // ... (Cleanup if needed)
+        if (m_hwnd) {
+             extern void AdjustWindowForOverlay(HWND hwnd, bool isClosed);
+             if (!m_showUpdateToast) AdjustWindowForOverlay(m_hwnd, true);
+        }
     }
 }
 
