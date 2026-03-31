@@ -249,11 +249,70 @@ static float g_uiScale = 1.0f;
 
 static float GetMinWindowWidth() {
     float defaultMinW = 4.0f * 38.0f * g_uiScale; // window controls
-    if (g_config.WindowMinSize < defaultMinW) {
-        return defaultMinW;
+    if (g_config.WindowMinSize > defaultMinW) {
+        defaultMinW = g_config.WindowMinSize;
     }
-    return g_config.WindowMinSize;
+
+    if (g_settingsOverlay.IsVisible()) {
+        defaultMinW = std::max(defaultMinW, 680.0f * g_uiScale + 50.0f * g_uiScale);
+    }
+    if (g_helpOverlay.IsVisible()) {
+        defaultMinW = std::max(defaultMinW, 500.0f * g_uiScale + 50.0f * g_uiScale);
+    }
+    if (g_dialog.IsVisible) {
+        defaultMinW = std::max(defaultMinW, 420.0f * g_uiScale + 24.0f * g_uiScale);
+    }
+    if (g_runtime.ShowInfoPanel && g_uiRenderer) {
+        D2D1_SIZE_F reqSize = g_uiRenderer->GetRequiredInfoPanelSize();
+        if (reqSize.width > 0.0f) {
+            defaultMinW = std::max(defaultMinW, reqSize.width);
+        }
+    }
+
+    return defaultMinW;
 }
+
+static float GetMinWindowHeight() {
+    float defaultMinH = 4.0f * 38.0f * g_uiScale; // window controls
+    if (g_config.WindowMinSize > defaultMinH) {
+        defaultMinH = g_config.WindowMinSize;
+    }
+
+    if (g_settingsOverlay.IsVisible()) {
+        defaultMinH = std::max(defaultMinH, 560.0f * g_uiScale + 50.0f * g_uiScale);
+    }
+    if (g_helpOverlay.IsVisible()) {
+        defaultMinH = std::max(defaultMinH, 600.0f * g_uiScale + 50.0f * g_uiScale);
+    }
+    if (g_dialog.IsVisible) {
+        float titleHeight = 35.0f;
+        float messageHeight = 25.0f;
+        int titleLines = (int)(g_dialog.Title.length() / 22) + 1;
+        if (titleLines > 3) titleLines = 3;
+        float contentHeight = (titleLines * titleHeight) + (1 * messageHeight);
+        float qualityHeight = !g_dialog.QualityText.empty() ? 30.0f : 0.0f;
+        float inputHeight = g_dialog.HasInput ? 50.0f : 0.0f;
+        float checkboxHeight = g_dialog.HasCheckbox ? 45.0f : 0.0f;
+        float buttonsHeight = 55.0f;
+        float padding = 45.0f;
+
+        float dlgH = padding + contentHeight + qualityHeight + inputHeight + checkboxHeight + buttonsHeight + 30.0f;
+        if (dlgH < 200.0f) dlgH = 200.0f;
+        if (dlgH > 400.0f) dlgH = 400.0f;
+
+        defaultMinH = std::max(defaultMinH, dlgH * g_uiScale + 24.0f * g_uiScale);
+    }
+    if (g_runtime.ShowInfoPanel && g_uiRenderer) {
+        D2D1_SIZE_F reqSize = g_uiRenderer->GetRequiredInfoPanelSize();
+        if (reqSize.height > 0.0f) {
+            defaultMinH = std::max(defaultMinH, reqSize.height);
+        }
+    }
+
+    return defaultMinH;
+}
+
+void AdjustWindowForOverlay(HWND hwnd, bool isClosed);
 
 int g_galleryContextMenuIndex = -1;
 // [Fix] Track long operations in the compare left pane
@@ -928,95 +987,6 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
 void DiscardChanges();
 std::wstring ShowRenameDialog(HWND hParent, const std::wstring& oldName);
 static void RestoreCurrentExifOrientation();
-static void CheckAndExpandWindowForInfoPanel(HWND hwnd);
-
-static void CheckAndExpandWindowForInfoPanel(HWND hwnd) {
-    if (!g_uiRenderer || !g_runtime.ShowInfoPanel) return;
-    if (g_isFullScreen || IsZoomed(hwnd)) return; // Don't resize if maximized/fullscreen
-    if (!g_imageResource) return; // Keep it simple
-    if (g_compare.mode != ViewMode::Single) return;
-
-    D2D1_SIZE_F reqSize = g_uiRenderer->GetRequiredInfoPanelSize();
-    if (reqSize.width <= 0 || reqSize.height <= 0) return;
-
-    RECT rcClient;
-    GetClientRect(hwnd, &rcClient);
-    float curW = (float)rcClient.right;
-    float curH = (float)rcClient.bottom;
-
-    if (curW >= reqSize.width && curH >= reqSize.height) return;
-
-    // We need to expand
-    float newW = std::max(curW, reqSize.width);
-    float newH = std::max(curH, reqSize.height);
-
-    // Get current absolute zoom factor to keep the visual size unchanged
-    D2D1_SIZE_F logicSize = GetLogicalImageSize();
-    float imgW = logicSize.width;
-    float imgH = logicSize.height;
-    if (imgW <= 0 || imgH <= 0) return;
-
-    float curBaseFit = std::min(curW / imgW, curH / imgH);
-    if (imgW < 200.0f && imgH < 200.0f && !g_imageResource.isSvg) {
-        if (curBaseFit > 1.0f) curBaseFit = 1.0f;
-    }
-    float absoluteZoom = g_viewState.Zoom * curBaseFit;
-
-    // Calculate new window size
-    RECT rcWin;
-    GetWindowRect(hwnd, &rcWin);
-    int borderW = (rcWin.right - rcWin.left) - rcClient.right;
-    int borderH = (rcWin.bottom - rcWin.top) - rcClient.bottom;
-
-    int finalWinW = (int)newW + borderW;
-    int finalWinH = (int)newH + borderH;
-
-    // Adjust for monitor bounds
-    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
-    if (GetMonitorInfo(hMon, &mi)) {
-        int maxW = mi.rcWork.right - mi.rcWork.left;
-        int maxH = mi.rcWork.bottom - mi.rcWork.top;
-        if (finalWinW > maxW) finalWinW = maxW;
-        if (finalWinH > maxH) finalWinH = maxH;
-    }
-
-    float finalClientW = (float)(finalWinW - borderW);
-    float finalClientH = (float)(finalWinH - borderH);
-
-    float newBaseFit = std::min(finalClientW / imgW, finalClientH / imgH);
-    if (imgW < 200.0f && imgH < 200.0f && !g_imageResource.isSvg) {
-        if (newBaseFit > 1.0f) newBaseFit = 1.0f;
-    }
-
-    g_programmaticResize = true;
-
-    int cx = rcWin.left + (rcWin.right - rcWin.left) / 2;
-    int cy = rcWin.top + (rcWin.bottom - rcWin.top) / 2;
-
-    int newX = cx - finalWinW / 2;
-    int newY = cy - finalWinH / 2;
-
-    // Clamp to monitor bounds to prevent window from going off-screen
-    if (GetMonitorInfo(hMon, &mi)) {
-        if (newX < mi.rcWork.left) newX = mi.rcWork.left;
-        if (newY < mi.rcWork.top) newY = mi.rcWork.top;
-        if (newX + finalWinW > mi.rcWork.right) newX = mi.rcWork.right - finalWinW;
-        if (newY + finalWinH > mi.rcWork.bottom) newY = mi.rcWork.bottom - finalWinH;
-    }
-
-    SetWindowPos(hwnd, nullptr, newX, newY, finalWinW, finalWinH,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
-
-    if (newBaseFit > 0.0001f) {
-        g_viewState.Zoom = absoluteZoom / newBaseFit;
-    }
-
-    SyncDCompState(hwnd, finalClientW, finalClientH);
-    if (g_compEngine) g_compEngine->Commit();
-
-    g_programmaticResize = false;
-}
 
 bool IsCompareModeActive() {
     return g_compare.mode != ViewMode::Single;
@@ -3714,17 +3684,7 @@ static void ClearDialogCenter() {
 }
 
 static void EnsureWindowSizeForDialog(HWND hwnd) {
-    RECT clientRect; GetClientRect(hwnd, &clientRect);
-    float currentW = (float)(clientRect.right - clientRect.left);
-    float currentH = (float)(clientRect.bottom - clientRect.top);
-    DialogLayout layout = CalculateDialogLayout(D2D1::SizeF(2000, 2000));
-    float dlgW = layout.Box.right - layout.Box.left;
-    float dlgH = layout.Box.bottom - layout.Box.top;
-    float requiredW = dlgW + 60.0f;
-    float requiredH = dlgH + 60.0f;
-    if (currentW < requiredW || currentH < requiredH) {
-        SetWindowPos(hwnd, NULL, 0, 0, (int)std::max(currentW, requiredW), (int)std::max(currentH, requiredH), SWP_NOMOVE | SWP_NOZORDER);
-    }
+    AdjustWindowForOverlay(hwnd, false);
 }
 
 DialogResult ShowQuickViewDialog(HWND hwnd, const std::wstring& title, const std::wstring& messageContent, 
@@ -3813,6 +3773,7 @@ DialogResult ShowQuickViewDialog(HWND hwnd, const std::wstring& title, const std
     }
     
     RequestRepaint(PaintLayer::Dynamic);
+    AdjustWindowForOverlay(hwnd, true);
     return g_dialog.FinalResult;
 }
 
@@ -3917,6 +3878,7 @@ std::wstring ShowQuickViewInputDialog(HWND hwnd, const std::wstring& title, cons
     
     DestroyDialogInput();
     RequestRepaint(PaintLayer::Dynamic);
+    AdjustWindowForOverlay(hwnd, true);
     
     if (g_dialog.FinalResult == DialogResult::Yes) {
         return g_dialog.InputText;
@@ -4589,6 +4551,108 @@ int GetCurrentZoomPercent() {
     return (int)(std::round(totalScale * 100.0f));
 }
 
+void AdjustWindowForOverlay(HWND hwnd, bool isClosed) {
+    if (g_isFullScreen || IsZoomed(hwnd)) return;
+    if (g_runtime.LockWindowSize) return;
+
+    int minW = (int)GetMinWindowWidth();
+    int minH = (int)GetMinWindowHeight();
+
+    RECT rcWin; GetWindowRect(hwnd, &rcWin);
+    int currentW = rcWin.right - rcWin.left;
+    int currentH = rcWin.bottom - rcWin.top;
+
+    int targetW = currentW;
+    int targetH = currentH;
+
+    D2D1_SIZE_F logicSize = GetLogicalImageSize();
+    float imgW = logicSize.width;
+    float imgH = logicSize.height;
+    if (imgW <= 0 || imgH <= 0) return;
+
+    RECT rcClient; GetClientRect(hwnd, &rcClient);
+    float curClientW = (float)rcClient.right;
+    float curClientH = (float)rcClient.bottom;
+    int borderW = currentW - (int)curClientW;
+    int borderH = currentH - (int)curClientH;
+
+    float curBaseFit = std::min(curClientW / imgW, curClientH / imgH);
+    if (imgW < 200.0f && imgH < 200.0f && !g_imageResource.isSvg) {
+        if (curBaseFit > 1.0f) curBaseFit = 1.0f;
+    }
+    float absoluteZoom = g_viewState.Zoom * curBaseFit;
+
+    if (!isClosed) {
+        if (currentW < minW || currentH < minH) {
+            targetW = std::max(currentW, minW);
+            targetH = std::max(currentH, minH);
+        } else {
+            return;
+        }
+    } else {
+        if (!g_imageResource) return;
+
+        int targetClientW = static_cast<int>(std::round(imgW * absoluteZoom));
+        int targetClientH = static_cast<int>(std::round(imgH * absoluteZoom));
+
+        targetW = targetClientW + borderW;
+        targetH = targetClientH + borderH;
+
+        const RECT bounds = GetWindowExpansionBounds(hwnd);
+        float maxSizePercent = g_config.WindowMaxSizePercent / 100.0f;
+        const int maxWinW = (int)((bounds.right - bounds.left) * maxSizePercent);
+        const int maxWinH = (int)((bounds.bottom - bounds.top) * maxSizePercent);
+
+        if (targetW > maxWinW || targetH > maxWinH) {
+            float ratio = std::min((float)maxWinW / targetW, (float)maxWinH / targetH);
+            targetW = (int)(targetW * ratio);
+            targetH = (int)(targetH * ratio);
+        }
+
+        if (targetW < minW) targetW = minW; 
+        if (targetH < minH) targetH = minH;
+        
+        if (targetW == currentW && targetH == currentH) return;
+    }
+
+    float finalClientW = (float)(targetW - borderW);
+    float finalClientH = (float)(targetH - borderH);
+
+    float newBaseFit = std::min(finalClientW / imgW, finalClientH / imgH);
+    if (imgW < 200.0f && imgH < 200.0f && !g_imageResource.isSvg) {
+        if (newBaseFit > 1.0f) newBaseFit = 1.0f;
+    }
+
+    g_programmaticResize = true;
+
+    int cx = rcWin.left + currentW / 2;
+    int cy = rcWin.top + currentH / 2;
+
+    int newX = cx - targetW / 2;
+    int newY = cy - targetH / 2;
+
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetMonitorInfo(hMon, &mi)) {
+        if (newX < mi.rcWork.left) newX = mi.rcWork.left;
+        if (newY < mi.rcWork.top) newY = mi.rcWork.top;
+        if (newX + targetW > mi.rcWork.right) newX = mi.rcWork.right - targetW;
+        if (newY + targetH > mi.rcWork.bottom) newY = mi.rcWork.bottom - targetH;
+    }
+
+    SetWindowPos(hwnd, nullptr, newX, newY, targetW, targetH,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+
+    if (newBaseFit > 0.0001f) {
+        g_viewState.Zoom = absoluteZoom / newBaseFit;
+    }
+
+    SyncDCompState(hwnd, finalClientW, finalClientH);
+    if (g_compEngine) g_compEngine->Commit();
+
+    g_programmaticResize = false;
+}
+
 void AdjustWindowToImage(HWND hwnd) {
     if (!g_imageResource) return;
     if (g_runtime.LockWindowSize) return;  // Don't auto-resize when locked
@@ -4659,7 +4723,7 @@ void AdjustWindowToImage(HWND hwnd) {
     // [Phase 3] User Requested: Min 100x100. Small images stay at 100% inside this.
     // If Settings is visible, we might want larger, but AdjustWindowToImage returns early if Settings visible.
     int minW = (int)GetMinWindowWidth();
-    int minH = (int)GetMinWindowWidth();
+    int minH = (int)GetMinWindowHeight();
     
     // [Phase 3] Special handling for small images
     if (imgWidth < minW && imgHeight < minH) {
@@ -6015,7 +6079,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         
         // [Phase 3] Default minimum window size
         pMMI->ptMinTrackSize.x = (int)GetMinWindowWidth();
-        pMMI->ptMinTrackSize.y = (int)GetMinWindowWidth();
+        pMMI->ptMinTrackSize.y = (int)GetMinWindowHeight();
         
         // [Fix] For borderless/custom title bar windows, correctly position maximized window.
         // Without this, maximized window extends beyond screen edges (to hide resize borders),
@@ -6986,7 +7050,11 @@ SKIP_EDGE_NAV:;
                      if (g_runtime.InfoPanelExpanded && g_currentMetadata.HistR.empty() && !g_imagePath.empty()) {
                          UpdateHistogramAsync(hwnd, g_imagePath);
                      }
-                     CheckAndExpandWindowForInfoPanel(hwnd);
+                     if (g_runtime.ShowInfoPanel) {
+                AdjustWindowForOverlay(hwnd, false);
+            } else {
+                AdjustWindowForOverlay(hwnd, true);
+            }
                      RequestRepaint(PaintLayer::All);
                      return 0;
                      
@@ -6997,6 +7065,12 @@ SKIP_EDGE_NAV:;
                       } else {
                           g_runtime.ShowInfoPanel = false;
                           g_toolbar.SetExifState(false);
+                      }
+                      
+                      if (g_runtime.ShowInfoPanel) {
+                          AdjustWindowForOverlay(hwnd, false);
+                      } else {
+                          AdjustWindowForOverlay(hwnd, true);
                       }
 
                       RequestRepaint(PaintLayer::All);
@@ -7788,7 +7862,11 @@ SKIP_EDGE_NAV:;
                     g_runtime.ShowInfoPanel = false;
                     g_toolbar.SetExifState(false);
                 }
-                CheckAndExpandWindowForInfoPanel(hwnd);
+                if (g_runtime.ShowInfoPanel) {
+                AdjustWindowForOverlay(hwnd, false);
+            } else {
+                AdjustWindowForOverlay(hwnd, true);
+            }
                 RequestRepaint(PaintLayer::Static);
             }
             break;
@@ -7813,7 +7891,11 @@ SKIP_EDGE_NAV:;
                     g_runtime.ShowInfoPanel = false;
                     g_toolbar.SetExifState(false);
                 }
-                CheckAndExpandWindowForInfoPanel(hwnd);
+                if (g_runtime.ShowInfoPanel) {
+                AdjustWindowForOverlay(hwnd, false);
+            } else {
+                AdjustWindowForOverlay(hwnd, true);
+            }
                 RequestRepaint(PaintLayer::Static);
             }
             break;
@@ -8493,7 +8575,11 @@ SKIP_EDGE_NAV:;
             }
  
             g_toolbar.SetExifState(g_runtime.ShowInfoPanel);
-            CheckAndExpandWindowForInfoPanel(hwnd);
+            if (g_runtime.ShowInfoPanel) {
+                AdjustWindowForOverlay(hwnd, false);
+            } else {
+                AdjustWindowForOverlay(hwnd, true);
+            }
             RequestRepaint(PaintLayer::Static);
             break;
         }
@@ -8539,7 +8625,11 @@ SKIP_EDGE_NAV:;
              g_runtime.ShowInfoPanel = true;
              g_runtime.InfoPanelExpanded = false; // Lite = not expanded
              g_toolbar.SetExifState(true);
-             CheckAndExpandWindowForInfoPanel(hwnd);
+             if (g_runtime.ShowInfoPanel) {
+                AdjustWindowForOverlay(hwnd, false);
+            } else {
+                AdjustWindowForOverlay(hwnd, true);
+            }
              RequestRepaint(PaintLayer::Static);
              break;
 
@@ -8550,7 +8640,11 @@ SKIP_EDGE_NAV:;
                  UpdateHistogramAsync(hwnd, g_imagePath);
              }
              g_toolbar.SetExifState(true);
-             CheckAndExpandWindowForInfoPanel(hwnd);
+             if (g_runtime.ShowInfoPanel) {
+                AdjustWindowForOverlay(hwnd, false);
+            } else {
+                AdjustWindowForOverlay(hwnd, true);
+            }
              RequestRepaint(PaintLayer::Static);
              break;
 

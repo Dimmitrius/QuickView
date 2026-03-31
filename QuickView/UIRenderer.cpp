@@ -255,7 +255,7 @@ HitTestResult UIRenderer::HitTest(float x, float y) {
 // Text Measurement Helpers
 // ============================================================================
 
-float UIRenderer::MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format) {
+float UIRenderer::MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format) const {
     IDWriteTextFormat* useFormat = format ? format : m_panelFormat.Get();
     if (text.empty() || !useFormat || !m_dwriteFactory) return 0.0f;
     
@@ -1530,6 +1530,19 @@ void UIRenderer::DrawDebugHUD(ID2D1DeviceContext* dc) {
     dc->DrawText(buf, wcslen(buf), m_debugFormat.Get(), D2D1::RectF(px, py-2, px+barW, py+16), whiteBrush.Get()); // Text
 }
 
+namespace {
+    static std::wstring ExtractQualityEstimate(const std::wstring& details);
+    static std::wstring ExtractBitDepth(const std::wstring& details);
+    static std::wstring ExtractChroma(const std::wstring& details, int& rank);
+    static std::wstring BuildFormatFlagsSummary(const std::wstring& details);
+    static std::wstring StripQualityFromFormatDetails(const std::wstring& details);
+    static void AppendFormatToken(std::wstring& target, const std::wstring& token);
+    static std::wstring FormatHdrNits(float nits);
+    static std::wstring FormatHdrStops(float stops);
+    static std::wstring BuildHdrSummary(const QuickView::HdrStaticMetadata& hdr);
+    static std::wstring BuildHdrDetail(const QuickView::HdrStaticMetadata& hdr);
+}
+
 // ============================================================================
 // Info Panel Functions (Migrated from main.cpp)
 // ============================================================================
@@ -1547,12 +1560,29 @@ D2D1_SIZE_F UIRenderer::GetRequiredInfoPanelSize() const {
 
         // Return required total window space
         // startX = 16 * s, startY = 32 * s
-        // Add 32 padding for right/bottom margin
-        return D2D1::SizeF(16.0f * s + width + 32.0f * s, 32.0f * s + height + 32.0f * s);
+        // Add 32 padding for right/bottom margin + 152 to avoid window controls
+        return D2D1::SizeF(16.0f * s + width + 32.0f * s + 152.0f * s, 32.0f * s + height + 32.0f * s);
     } else if (g_runtime.ShowInfoPanel && !g_runtime.InfoPanelExpanded) {
-        // Compact info is just text
-        // For simplicity, request at least 400x100
-        return D2D1::SizeF(400.0f * s, 100.0f * s);
+        std::wstring info = g_imagePath.substr(g_imagePath.find_last_of(L"\\/") + 1);
+        if (g_currentMetadata.Width > 0) {
+            wchar_t sz[64]; swprintf_s(sz, L"   %u x %u", g_currentMetadata.Width, g_currentMetadata.Height);
+            info += sz;
+            if (g_currentMetadata.FileSize > 0) {
+                double mb = g_currentMetadata.FileSize / (1024.0 * 1024.0);
+                swprintf_s(sz, L"   %.2f MB", mb);
+                info += sz;
+            }
+        }
+        std::wstring meta = g_currentMetadata.GetCompactString();
+        if (!meta.empty()) info += L"   " + meta;
+        if (!g_currentMetadata.FormatDetails.empty()) {
+            std::wstring compactDetails = StripQualityFromFormatDetails(g_currentMetadata.FormatDetails);
+            if (!compactDetails.empty()) info += L"   [" + compactDetails + L"]";
+        }
+        float textW = m_panelFormat ? MeasureTextWidth(info) : 400.0f;
+        // Padding(16) + text + Gap(6) + ExpandBtn(24) + Gap(4) + CloseBtn(24) + RightPad(32) + WindowControls(152)
+        float totalW = textW + 106.0f * s + 152.0f * s;
+        return D2D1::SizeF(totalW, 45.0f * s);
     }
 
     return D2D1::SizeF(0, 0);
@@ -1571,19 +1601,7 @@ static std::wstring FormatBytesWithCommas(UINT64 bytes) {
     return result + L" B";
 }
 
-namespace {
-    static std::wstring ExtractQualityEstimate(const std::wstring& details);
-    static std::wstring ExtractBitDepth(const std::wstring& details);
-    static std::wstring ExtractChroma(const std::wstring& details, int& rank);
-    static std::wstring BuildFormatFlagsSummary(const std::wstring& details);
-    static std::wstring StripQualityFromFormatDetails(const std::wstring& details);
-    static void AppendFormatToken(std::wstring& target, const std::wstring& token);
-    static std::wstring FormatHdrNits(float nits);
-    static std::wstring FormatHdrStops(float stops);
-    static std::wstring BuildHdrSummary(const QuickView::HdrStaticMetadata& hdr);
-    static std::wstring BuildHdrDetail(const QuickView::HdrStaticMetadata& hdr);
-}
-
+ 
 UIRenderer::TooltipInfo UIRenderer::GetTooltipInfo(const std::wstring& label) const {
     if (label == L"Sharp") return { AppStrings::HUD_Tip_Sharp_Desc, AppStrings::HUD_Tip_Sharp_High, AppStrings::HUD_Tip_Sharp_Low, AppStrings::HUD_Tip_Sharp_Ref };
     if (label == L"Ent") return { AppStrings::HUD_Tip_Ent_Desc, AppStrings::HUD_Tip_Ent_High, AppStrings::HUD_Tip_Ent_Low, AppStrings::HUD_Tip_Ent_Ref };

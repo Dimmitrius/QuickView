@@ -92,7 +92,7 @@ public:
     bool OnMouseWheel(float delta); 
 
     void SetVisible(bool visible);
-    bool IsVisible() const { return m_visible; }
+    bool IsVisible() const { return m_visible || m_showUpdateToast; }
     void Toggle() { SetVisible(!m_visible); }
 
     void BuildMenu(); 

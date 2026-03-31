@@ -158,22 +158,20 @@ void HelpOverlay::RebuildList() {
 
 void HelpOverlay::SetVisible(bool visible) {
     if (visible != m_visible) {
+        m_visible = visible;
         if (visible) {
             RebuildList(); // Refresh text in case language changed
             m_scrollOffset = 0;
             if (m_hwnd) {
-                // Auto-Expand Window if too small
-                RECT rc; GetClientRect(m_hwnd, &rc);
-                int curW = rc.right - rc.left;
-                int curH = rc.bottom - rc.top;
-                int minW = (int)(WIDTH * m_uiScale + 50.0f * m_uiScale);
-                int minH = (int)(MAX_HEIGHT * m_uiScale + 50.0f * m_uiScale);
-                if (curW < minW || curH < minH) {
-                     SetWindowPos(m_hwnd, nullptr, 0, 0, std::max(curW, minW), std::max(curH, minH), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                }
+                extern void AdjustWindowForOverlay(HWND hwnd, bool isClosed);
+                AdjustWindowForOverlay(m_hwnd, false);
+            }
+        } else {
+            if (m_hwnd) {
+                extern void AdjustWindowForOverlay(HWND hwnd, bool isClosed);
+                AdjustWindowForOverlay(m_hwnd, true);
             }
         }
-        m_visible = visible;
     }
 }
 

@@ -172,7 +172,7 @@ private:
     
 public:
     // ===== Text Measurement Helpers =====
-    float MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format = nullptr);
+    float MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format = nullptr) const;
     float MeasureTextHeight(const std::wstring& text, IDWriteTextFormat* format = nullptr, float maxWidth = 2000.0f);
     std::wstring MakeMiddleEllipsis(float maxWidth, const std::wstring& text, IDWriteTextFormat* format = nullptr);
     std::wstring MakeEndEllipsis(float maxWidth, const std::wstring& text, IDWriteTextFormat* format = nullptr);
