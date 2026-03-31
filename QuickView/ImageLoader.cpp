@@ -53,6 +53,8 @@ using namespace QuickView;
 
 // Forward declaration
 static bool ReadFileToVector(LPCWSTR filePath, std::vector<uint8_t>& buffer);
+static std::string_view GetSvgRootTag(std::string_view xml);
+static std::string GetSvgRootAttrVal(const std::string& xml, const char* attr);
 
 // [CMS/PMR] Forward declaration
 static bool ReadFileToPMR(LPCWSTR filePath, std::pmr::vector<uint8_t>& buffer, std::pmr::memory_resource* mr = nullptr);
@@ -7263,6 +7265,71 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
     }
 
     // --- [Module B] SVG Detection & Dimensions ---
+    auto TryParseSvgLength = [](const std::string& raw, float& out) -> bool {
+        std::string s = raw;
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") == std::string::npos ? 0 : s.find_last_not_of(" \t\r\n") + 1);
+        if (s.empty()) return false;
+
+        char* endptr = nullptr;
+        const float value = strtof(s.c_str(), &endptr);
+        if (!endptr || endptr == s.c_str() || !std::isfinite(value)) return false;
+
+        while (*endptr && isspace((unsigned char)*endptr)) ++endptr;
+        std::string unit(endptr);
+        std::transform(unit.begin(), unit.end(), unit.begin(),
+                       [](unsigned char ch) { return (char)std::tolower(ch); });
+
+        constexpr float kDipPerInch = 96.0f;
+        if (unit.empty() || unit == "px") {
+            out = value;
+            return true;
+        }
+        if (unit == "mm") {
+            out = value * (kDipPerInch / 25.4f);
+            return true;
+        }
+        if (unit == "cm") {
+            out = value * (kDipPerInch / 2.54f);
+            return true;
+        }
+        if (unit == "in") {
+            out = value * kDipPerInch;
+            return true;
+        }
+        if (unit == "pt") {
+            out = value * (kDipPerInch / 72.0f);
+            return true;
+        }
+        if (unit == "pc") {
+            out = value * (kDipPerInch / 6.0f);
+            return true;
+        }
+        if (unit == "q") {
+            out = value * (kDipPerInch / 101.6f);
+            return true;
+        }
+        return false;
+    };
+
+    auto TryParseSvgViewBoxSize = [&](const std::string& vbStr, float& outW, float& outH) -> bool {
+        if (vbStr.empty()) return false;
+        float values[4] = {};
+        const char* cursor = vbStr.c_str();
+        char* endptr = nullptr;
+        for (int i = 0; i < 4; ++i) {
+            while (*cursor && (isspace((unsigned char)*cursor) || *cursor == ',')) ++cursor;
+            if (!*cursor) return false;
+            values[i] = strtof(cursor, &endptr);
+            if (!endptr || endptr == cursor || !std::isfinite(values[i])) return false;
+            cursor = endptr;
+        }
+        if (values[2] <= 0.0f || values[3] <= 0.0f) return false;
+        outW = values[2];
+        outH = values[3];
+        return true;
+    };
+
     bool isSvgExt = false;
     std::wstring pathStr = filePath;
     if (pathStr.length() > 4) {
@@ -7282,49 +7349,22 @@ HRESULT CImageLoader::GetImageInfoFast(LPCWSTR filePath, ImageInfo* pInfo) {
         std::string xml(data, data + size);
         
         try {
-            auto GetAttrVal = [](const std::string& s, const char* attr) -> std::string {
-                std::string key = attr;
-                key += "=\"";
-                size_t pos = s.find(key);
-                if (pos == std::string::npos) return "";
-                pos += key.length();
-                size_t end = s.find("\"", pos);
-                if (end == std::string::npos) return "";
-                return s.substr(pos, end - pos);
-            };
-
             float pw = 0, ph = 0;
-            std::string wStr = GetAttrVal(xml, "width");
-            std::string hStr = GetAttrVal(xml, "height");
-            if (!wStr.empty()) try { pw = std::stof(wStr); } catch (...) {}
-            if (!hStr.empty()) try { ph = std::stof(hStr); } catch (...) {}
+            std::string wStr = GetSvgRootAttrVal(xml, "width");
+            std::string hStr = GetSvgRootAttrVal(xml, "height");
+            const bool hasLengthW = TryParseSvgLength(wStr, pw);
+            const bool hasLengthH = TryParseSvgLength(hStr, ph);
 
-            if (pw > 0 && ph > 0) {
+            if (hasLengthW && hasLengthH && pw > 0.0f && ph > 0.0f) {
                 pInfo->width = (int)std::lround(pw);
                 pInfo->height = (int)std::lround(ph);
                 return S_OK;
             } else {
-                std::string vbStr = GetAttrVal(xml, "viewBox");
-                if (!vbStr.empty()) {
-                    size_t p = 0;
-                    int skipped = 0;
-                    while (skipped < 2 && p < vbStr.length()) {
-                        if (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',') {
-                            while (p < vbStr.length() && (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',')) p++;
-                            skipped++;
-                        } else p++;
-                    }
-                    if (p < vbStr.length()) {
-                        char* endptr = nullptr;
-                        float vw = strtof(vbStr.c_str() + p, &endptr);
-                        if (endptr && endptr > vbStr.c_str() + p) {
-                            float vh = strtof(endptr, nullptr);
-                            if (vw > 0 && vh > 0) {
-                                pInfo->width = (int)std::lround(vw);
-                                pInfo->height = (int)std::lround(vh);
-                            }
-                        }
-                    }
+                std::string vbStr = GetSvgRootAttrVal(xml, "viewBox");
+                float vbW = 0.0f, vbH = 0.0f;
+                if (TryParseSvgViewBoxSize(vbStr, vbW, vbH)) {
+                    pInfo->width = (int)std::lround(vbW);
+                    pInfo->height = (int)std::lround(vbH);
                 }
             }
         } catch (...) {}
@@ -9756,6 +9796,119 @@ static void MultiReplace(std::string& str, const Container& replacements) {
     }
 }
 
+static std::string_view GetSvgRootTag(std::string_view xml) {
+    const size_t svgPos = xml.find("<svg");
+    if (svgPos == std::string_view::npos) return {};
+
+    size_t pos = svgPos + 4;
+    bool inQuote = false;
+    char quote = '\0';
+    while (pos < xml.size()) {
+        const char ch = xml[pos];
+        if (inQuote) {
+            if (ch == quote) {
+                inQuote = false;
+            }
+        } else {
+            if (ch == '"' || ch == '\'') {
+                inQuote = true;
+                quote = ch;
+            } else if (ch == '>') {
+                return xml.substr(svgPos, pos - svgPos + 1);
+            }
+        }
+        ++pos;
+    }
+
+    return {};
+}
+
+static std::string GetSvgAttrVal(const std::string& s, const char* attr) {
+    std::string key = attr;
+    key += "=\"";
+    size_t pos = s.find(key);
+    if (pos == std::string::npos) return "";
+    pos += key.length();
+    size_t end = s.find("\"", pos);
+    if (end == std::string::npos) return "";
+    return s.substr(pos, end - pos);
+}
+
+static std::string GetSvgRootAttrVal(const std::string& xml, const char* attr) {
+    const std::string_view rootTag = GetSvgRootTag(xml);
+    if (rootTag.empty()) return "";
+    return GetSvgAttrVal(std::string(rootTag), attr);
+}
+
+static bool TryParseSvgLengthToDip(const std::string& raw, float* out) {
+    if (!out) return false;
+
+    std::string s = raw;
+    s.erase(0, s.find_first_not_of(" \t\r\n"));
+    s.erase(s.find_last_not_of(" \t\r\n") == std::string::npos ? 0 : s.find_last_not_of(" \t\r\n") + 1);
+    if (s.empty()) return false;
+
+    char* endptr = nullptr;
+    const float value = strtof(s.c_str(), &endptr);
+    if (!endptr || endptr == s.c_str() || !std::isfinite(value)) return false;
+
+    while (*endptr && isspace((unsigned char)*endptr)) ++endptr;
+    std::string unit(endptr);
+    std::transform(unit.begin(), unit.end(), unit.begin(),
+                   [](unsigned char ch) { return (char)std::tolower(ch); });
+
+    constexpr float kDipPerInch = 96.0f;
+    if (unit.empty() || unit == "px") {
+        *out = value;
+        return true;
+    }
+    if (unit == "mm") {
+        *out = value * (kDipPerInch / 25.4f);
+        return true;
+    }
+    if (unit == "cm") {
+        *out = value * (kDipPerInch / 2.54f);
+        return true;
+    }
+    if (unit == "in") {
+        *out = value * kDipPerInch;
+        return true;
+    }
+    if (unit == "pt") {
+        *out = value * (kDipPerInch / 72.0f);
+        return true;
+    }
+    if (unit == "pc") {
+        *out = value * (kDipPerInch / 6.0f);
+        return true;
+    }
+    if (unit == "q") {
+        *out = value * (kDipPerInch / 101.6f);
+        return true;
+    }
+    return false;
+}
+
+static bool TryParseSvgViewBoxSize(const std::string& vbStr, float* outW, float* outH) {
+    if (!outW || !outH || vbStr.empty()) return false;
+
+    float values[4] = {};
+    const char* cursor = vbStr.c_str();
+    char* endptr = nullptr;
+    for (int i = 0; i < 4; ++i) {
+        while (*cursor && (isspace((unsigned char)*cursor) || *cursor == ',')) ++cursor;
+        if (!*cursor) return false;
+        values[i] = strtof(cursor, &endptr);
+        if (!endptr || endptr == cursor || !std::isfinite(values[i])) return false;
+        cursor = endptr;
+    }
+
+    if (values[2] <= 0.0f || values[3] <= 0.0f) return false;
+    *outW = values[2];
+    *outH = values[3];
+    return true;
+}
+
 // Helper: Parse SVG dimensions using Regex (Header only)
 static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height) {
     if (!width || !height) return false;
@@ -9773,52 +9926,24 @@ static bool GetSvgDimensions(LPCWSTR filePath, uint32_t* width, uint32_t* height
     
     std::string header(buffer, bytesRead);
     
-    // 1. Try width="..." height="..."
-    auto GetAttrVal = [](const std::string& s, const char* attr) -> std::string {
-        std::string key = attr;
-        key += "=\"";
-        size_t pos = s.find(key);
-        if (pos == std::string::npos) return "";
-        pos += key.length();
-        size_t end = s.find("\"", pos);
-        if (end == std::string::npos) return "";
-        return s.substr(pos, end - pos);
-    };
-
     float w = 0, h = 0;
-    std::string wStr = GetAttrVal(header, "width");
-    std::string hStr = GetAttrVal(header, "height");
-    if (!wStr.empty()) try { w = std::stof(wStr); } catch (...) {}
-    if (!hStr.empty()) try { h = std::stof(hStr); } catch (...) {}
+    std::string wStr = GetSvgRootAttrVal(header, "width");
+    std::string hStr = GetSvgRootAttrVal(header, "height");
+    const bool hasW = TryParseSvgLengthToDip(wStr, &w);
+    const bool hasH = TryParseSvgLengthToDip(hStr, &h);
 
-    if (w > 0 && h > 0) {
+    if (hasW && hasH && w > 0.0f && h > 0.0f) {
         *width = (uint32_t)std::lround(w);
         *height = (uint32_t)std::lround(h);
         return true;
     }
 
-    std::string vbStr = GetAttrVal(header, "viewBox");
-    if (!vbStr.empty()) {
-        size_t p = 0;
-        int skipped = 0;
-        while (skipped < 2 && p < vbStr.length()) {
-            if (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',') {
-                while (p < vbStr.length() && (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',')) p++;
-                skipped++;
-            } else p++;
-        }
-        if (p < vbStr.length()) {
-            char* endptr = nullptr;
-            float vw = strtof(vbStr.c_str() + p, &endptr);
-            if (endptr && endptr > vbStr.c_str() + p) {
-                float vh = strtof(endptr, nullptr);
-                if (vw > 0 && vh > 0) {
-                    *width = (uint32_t)std::lround(vw);
-                    *height = (uint32_t)std::lround(vh);
-                    return true;
-                }
-            }
-        }
+    std::string vbStr = GetSvgRootAttrVal(header, "viewBox");
+    float vbW = 0.0f, vbH = 0.0f;
+    if (TryParseSvgViewBoxSize(vbStr, &vbW, &vbH)) {
+        *width = (uint32_t)std::lround(vbW);
+        *height = (uint32_t)std::lround(vbH);
+        return true;
     }
     
     return false;
@@ -10636,48 +10761,21 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             std::string svgContent(fileData.begin(), fileData.end());
 
             try {
-                auto GetAttrVal = [](const std::string& s, const char* attr) -> std::string {
-                    std::string key = attr;
-                    key += "=\"";
-                    size_t pos = s.find(key);
-                    if (pos == std::string::npos) return "";
-                    pos += key.length();
-                    size_t end = s.find("\"", pos);
-                    if (end == std::string::npos) return "";
-                    return s.substr(pos, end - pos);
-                };
-
                 float pw = 0, ph = 0;
-                std::string wStr = GetAttrVal(svgContent, "width");
-                std::string hStr = GetAttrVal(svgContent, "height");
-                if (!wStr.empty()) try { pw = std::stof(wStr); } catch (...) {}
-                if (!hStr.empty()) try { ph = std::stof(hStr); } catch (...) {}
+                std::string wStr = GetSvgRootAttrVal(svgContent, "width");
+                std::string hStr = GetSvgRootAttrVal(svgContent, "height");
+                const bool hasW = TryParseSvgLengthToDip(wStr, &pw);
+                const bool hasH = TryParseSvgLengthToDip(hStr, &ph);
                 
-                if (pw > 0 && ph > 0) {
+                if (hasW && hasH && pw > 0.0f && ph > 0.0f) {
                     svgW = pw;
                     svgH = ph;
                 } else {
-                    std::string vbStr = GetAttrVal(svgContent, "viewBox");
-                    if (!vbStr.empty()) {
-                        // viewBox="x y w h" - need w and h (3rd and 4th)
-                        size_t p = 0;
-                        int skipped = 0;
-                        while (skipped < 2 && p < vbStr.length()) {
-                            if (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',') {
-                                while (p < vbStr.length() && (isspace((unsigned char)vbStr[p]) || vbStr[p] == ',')) p++;
-                                skipped++;
-                            } else p++;
-                        }
-                        if (p < vbStr.length()) {
-                            char* endptr = nullptr;
-                            float vw = strtof(vbStr.c_str() + p, &endptr);
-                            if (endptr && endptr > vbStr.c_str() + p) {
-                                float vh = strtof(endptr, nullptr);
-                                if (vw > 0 && vh > 0) {
-                                    svgW = vw; svgH = vh;
-                                }
-                            }
-                        }
+                    std::string vbStr = GetSvgRootAttrVal(svgContent, "viewBox");
+                    float vbW = 0.0f, vbH = 0.0f;
+                    if (TryParseSvgViewBoxSize(vbStr, &vbW, &vbH)) {
+                        svgW = vbW;
+                        svgH = vbH;
                     }
                 }
             } catch (...) {
