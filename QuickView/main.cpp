@@ -9208,19 +9208,25 @@ void ProcessEngineEvents(HWND hwnd) {
                         g_viewState.ExifOrientation = 1;
                     }
                     
-                    // [Fix] Update Window Size AFTER RenderImageToDComp
-                    // This ensures g_lastSurfaceSize is updated with the NEW image dimensions.
-                    // If we are preserving view state (e.g., Color Space switch), we DO NOT resize the window
-                    // and we bypass the Fullscreen zoom mode reset, ensuring exact visual continuity.
+                    // [Strategy] Visual Continuity for Soft-Refresh (e.g. Color Space/RAW Switch)
+                    // When the user toggles a rendering parameter, we want the image to appear to 
+                    // stay exactly where it was. AdjustWindowToImage() would reset the window 
+                    // size and trigger a 'Fit' zoom, which is counter-productive here.
                     if (g_preserveViewStateOnNextLoad) {
+                        // Restore exact zoom and pan values before SyncDCompState() calculates the final matrix
                         g_viewState.Zoom = g_preservedViewState.Zoom;
                         g_viewState.PanX = g_preservedViewState.PanX;
                         g_viewState.PanY = g_preservedViewState.PanY;
-                        g_preserveViewStateOnNextLoad = false; // Consume it
+                        
+                        // [Fix] Ensure any other interaction flags that might have been reset are also restored
+                        g_viewState.ExifOrientation = g_preservedViewState.ExifOrientation;
+
+                        g_preserveViewStateOnNextLoad = false; // One-time consume
                     } else {
+                        // Standard Loading Path: Auto-size window to image and apply default zoom policies
                         AdjustWindowToImage(hwnd);
 
-                        // [Feature] Apply Fullscreen Zoom Mode if active
+                        // [Feature] Apply Fullscreen Zoom Mode if active (usually resets to 1.0 or Fit)
                         if (g_isFullScreen || IsZoomed(hwnd)) {
                             ApplyFullScreenZoomMode(hwnd);
                         }
