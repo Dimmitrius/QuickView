@@ -236,6 +236,8 @@ static EditState g_editState;
 AppConfig g_config;
 RuntimeConfig g_runtime;
 ViewState g_viewState;  // Non-static for extern access from UIRenderer
+bool g_preserveViewStateOnNextLoad = false;
+ViewState g_preservedViewState;
 static int g_renderExifOrientation = 1; // Exif orientation baked into the bitmap surface
 FileNavigator g_navigator; // New Navigator (Non-static for extern access from SettingsOverlay)
 static ThumbnailManager g_thumbMgr;
@@ -8680,6 +8682,8 @@ SKIP_EDGE_NAV:;
                          g_imageEngine->UpdateConfig(g_runtime); // [Fix] Push config to engine
                          g_imageEngine->SetForceRefresh(true);
                      }
+                     g_preservedViewState = g_viewState;
+                     g_preserveViewStateOnNextLoad = true;
                      ReleaseImageResources();
                      LoadImageAsync(hwnd, contextPath.c_str()); 
                  }
@@ -8707,6 +8711,8 @@ SKIP_EDGE_NAV:;
                      g_imageEngine->UpdateConfig(g_runtime);
                      g_imageEngine->SetForceRefresh(true);
                  }
+                 g_preservedViewState = g_viewState;
+                 g_preserveViewStateOnNextLoad = true;
                  ReleaseImageResources();
                  LoadImageAsync(hwnd, g_imagePath, false, QuickView::BrowseDirection::IDLE);
              }
@@ -9296,13 +9302,28 @@ void ProcessEngineEvents(HWND hwnd) {
                         g_viewState.ExifOrientation = 1;
                     }
                     
-                    // [Fix] Update Window Size AFTER RenderImageToDComp
-                    // This ensures g_lastSurfaceSize is updated with the NEW image dimensions.
-                    AdjustWindowToImage(hwnd);
-                    
-                    // [Feature] Apply Fullscreen Zoom Mode if active
-                    if (g_isFullScreen || IsZoomed(hwnd)) {
-                        ApplyFullScreenZoomMode(hwnd);
+                    // [Strategy] Visual Continuity for Soft-Refresh (e.g. Color Space/RAW Switch)
+                    // When the user toggles a rendering parameter, we want the image to appear to 
+                    // stay exactly where it was. AdjustWindowToImage() would reset the window 
+                    // size and trigger a 'Fit' zoom, which is counter-productive here.
+                    if (g_preserveViewStateOnNextLoad) {
+                        // Restore exact zoom and pan values before SyncDCompState() calculates the final matrix
+                        g_viewState.Zoom = g_preservedViewState.Zoom;
+                        g_viewState.PanX = g_preservedViewState.PanX;
+                        g_viewState.PanY = g_preservedViewState.PanY;
+                        
+                        // [Fix] Ensure any other interaction flags that might have been reset are also restored
+                        g_viewState.ExifOrientation = g_preservedViewState.ExifOrientation;
+
+                        g_preserveViewStateOnNextLoad = false; // One-time consume
+                    } else {
+                        // Standard Loading Path: Auto-size window to image and apply default zoom policies
+                        AdjustWindowToImage(hwnd);
+
+                        // [Feature] Apply Fullscreen Zoom Mode if active (usually resets to 1.0 or Fit)
+                        if (g_isFullScreen || IsZoomed(hwnd)) {
+                            ApplyFullScreenZoomMode(hwnd);
+                        }
                     }
 
                     // [Fix] Explicitly Sync DComp State immediately after Window Adjustment
