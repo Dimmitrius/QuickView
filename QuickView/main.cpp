@@ -8182,10 +8182,27 @@ SKIP_EDGE_NAV:;
             if (!CheckUnsavedChanges(hwnd)) break;
             // Open with default editor (use "edit" verb, fallback to mspaint)
             if (!contextPath.empty()) {
-                HINSTANCE result = ShellExecuteW(hwnd, L"edit", contextPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                if ((intptr_t)result <= 32) {
-                    // No editor registered, try mspaint
-                    ShellExecuteW(hwnd, nullptr, L"mspaint.exe", contextPath.c_str(), nullptr, SW_SHOWNORMAL);
+                bool customEditorFailed = false;
+                if (!g_config.CustomEditorPath.empty()) {
+                    // Try to launch the custom editor
+                    std::wstring args = L"\"" + contextPath + L"\"";
+                    HINSTANCE result = ShellExecuteW(hwnd, L"open", g_config.CustomEditorPath.c_str(), args.c_str(), nullptr, SW_SHOWNORMAL);
+                    if ((intptr_t)result <= 32) {
+                        customEditorFailed = true;
+                        g_config.CustomEditorPath = L"";
+                        SaveConfig();
+                        extern SettingsOverlay g_settingsOverlay;
+                        g_settingsOverlay.RebuildMenu();
+                        ShowOSD(AppStrings::OSD_EditorLaunchFailed);
+                    }
+                }
+
+                if (g_config.CustomEditorPath.empty() && !customEditorFailed) {
+                    HINSTANCE result = ShellExecuteW(hwnd, L"edit", contextPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                    if ((intptr_t)result <= 32) {
+                        // No editor registered, try mspaint
+                        ShellExecuteW(hwnd, nullptr, L"mspaint.exe", contextPath.c_str(), nullptr, SW_SHOWNORMAL);
+                    }
                 }
             }
             break;
