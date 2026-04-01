@@ -9623,9 +9623,6 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
     // [Fix] Ensure RAW button visibility is updated immediately on navigation
     g_toolbar.SetRawState(IsRawFile(path), g_runtime.ForceRawDecode);
     
-    // Level 0 Feedback: Immediate OSD before any decode starts
-    // Level 0 Feedback: Immediate OSD removed as per user request
-    // if (showOSD) { ... }
     PostMessage(hwnd, WM_SETCURSOR, (WPARAM)hwnd, MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
     
 // Phase 2 Kick: queue-drop debounce (Titan only)
