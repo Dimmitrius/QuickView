@@ -1216,6 +1216,17 @@ void SettingsOverlay::BuildMenu() {
     };
     tabImage.items.push_back(itemAdvColor);
 
+    SettingsItem itemHdrToneMapping = { AppStrings::Settings_Label_HdrToneMapping, OptionType::ComboBox, nullptr, nullptr, &g_config.HdrToneMappingMode, nullptr, 0, 0,
+        { AppStrings::Settings_Option_HdrPerceptual, AppStrings::Settings_Option_HdrColorimetric } };
+    itemHdrToneMapping.onChange = []() {
+        SaveConfig();
+        g_pImageEngine->InvalidateCache(g_imagePath);
+        g_pImageEngine->NavigateTo(g_imagePath, g_navigator.GetFileSize(g_navigator.Index()), g_navigator.GetCurrentImageID());
+        extern void RequestRepaint(QuickView::PaintLayer layerMask);
+        RequestRepaint(QuickView::PaintLayer::All);
+    };
+    tabImage.items.push_back(itemHdrToneMapping);
+
     SettingsItem itemCmsFallback = { AppStrings::Settings_Label_CmsFallback, OptionType::ComboBox, nullptr, nullptr, BindEnum(&g_config.CmsDefaultFallback), nullptr, 0, 0, {AppStrings::Settings_Option_CmssRGB, AppStrings::Settings_Option_CmsP3, AppStrings::Settings_Option_CmsAdobeRGB, AppStrings::Settings_Option_CmsProPhoto} };
     itemCmsFallback.onChange = []() {
         SaveConfig();

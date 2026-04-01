@@ -243,6 +243,7 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
   settings.contentPeakScRgb = (contentPeakScRgb > 1.0f ? contentPeakScRgb : 1.0f);
   settings.displayPeakScRgb = displayPeakScRgb;
   settings.paperWhiteScRgb = paperWhiteScRgb;
+  settings.toneMappingMode = g_config.HdrToneMappingMode;
 
   const float headroom = settings.displayPeakScRgb / settings.paperWhiteScRgb;
   settings.exposure = 1.0f;
@@ -793,9 +794,18 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         const float a_raw = srcRow[x * 4 + 3];
         const float a = (a_raw < 0.0f) ? 0.0f : (a_raw > 1.0f ? 1.0f : a_raw);
 
-        const float premulR = ToneMapAces(r) * a;
-        const float premulG = ToneMapAces(g) * a;
-        const float premulB = ToneMapAces(b) * a;
+        float premulR = 0.0f, premulG = 0.0f, premulB = 0.0f;
+        if (toneMapSettings.toneMappingMode == 1) {
+             // Colorimetric Mode: Hard clip
+             premulR = (r > 1.0f ? 1.0f : r) * a;
+             premulG = (g > 1.0f ? 1.0f : g) * a;
+             premulB = (b > 1.0f ? 1.0f : b) * a;
+        } else {
+             // Perceptual Mode: ACES
+             premulR = ToneMapAces(r) * a;
+             premulG = ToneMapAces(g) * a;
+             premulB = ToneMapAces(b) * a;
+        }
 
         dstRow[x * 4 + 0] = EncodeLinearToSdr8(premulB);
         dstRow[x * 4 + 1] = EncodeLinearToSdr8(premulG);

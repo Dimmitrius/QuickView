@@ -143,6 +143,7 @@ struct AppConfig {
     bool EnableSmoothScaling = false;    // New: Smooth Zoom toggle
     bool ColorManagement = true;         // Master toggle for Color Management System
     int CmsRenderingIntent = 1;          // 0=Perceptual, 1=Relative Colorimetric
+    int HdrToneMappingMode = 0;          // 0=Perceptual, 1=Colorimetric
     bool EnableAdvancedColor = false;    // HDR / FP16 scRGB pipeline toggle
     int CmsDefaultFallback = 0;          // Fallback for untagged images: 0=sRGB, 1=P3, 2=AdobeRGB, 3=ProPhoto
     std::wstring CustomSoftProofProfile; // Path to user-selected ICC file for soft proofing

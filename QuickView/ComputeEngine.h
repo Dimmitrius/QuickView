@@ -15,6 +15,7 @@ struct ToneMapSettings {
     float displayPeakScRgb = 1.0f;
     float paperWhiteScRgb = 1.0f;
     float exposure = 1.0f;
+    int toneMappingMode = 0;
 };
 
 // ============================================================================

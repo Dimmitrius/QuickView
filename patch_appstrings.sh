@@ -1,0 +1,1 @@
+sed -i '/Settings_Label_CmsFallback;/a\    extern const wchar_t* Settings_Label_HdrToneMapping;\n    extern const wchar_t* Settings_Option_HdrPerceptual;\n    extern const wchar_t* Settings_Option_HdrColorimetric;' QuickView/AppStrings.h
