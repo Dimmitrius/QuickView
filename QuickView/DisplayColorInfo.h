@@ -25,6 +25,41 @@ enum class ColorPrimaries : uint8_t {
     ACES
 };
 
+enum class PixelDataSpace : uint8_t {
+    Unknown = 0,
+    EncodedSdr,
+    EncodedHdr,
+    SceneLinear,
+    SceneLinearScRgb
+};
+
+struct PixelColorInfo {
+    PixelDataSpace dataSpace = PixelDataSpace::Unknown;
+    TransferFunction transfer = TransferFunction::Unknown;
+    ColorPrimaries primaries = ColorPrimaries::Unknown;
+    uint8_t nominalBitDepth = 0;
+    bool hasEmbeddedIcc = false;
+
+    bool IsSdrEncoded() const {
+        return dataSpace == PixelDataSpace::EncodedSdr;
+    }
+
+    bool IsSceneLinear() const {
+        return dataSpace == PixelDataSpace::SceneLinear ||
+               dataSpace == PixelDataSpace::SceneLinearScRgb;
+    }
+
+    bool IsScRgb() const {
+        return dataSpace == PixelDataSpace::SceneLinearScRgb;
+    }
+
+    bool IsSrgb() const {
+        return primaries == ColorPrimaries::SRGB &&
+               (transfer == TransferFunction::SRGB || transfer == TransferFunction::Rec709 ||
+                dataSpace == PixelDataSpace::EncodedSdr);
+    }
+};
+
 struct HdrStaticMetadata {
     bool isValid = false;
     bool isHdr = false;

@@ -83,6 +83,12 @@ public:
 
 private:
     HRESULT CreateDeviceResources();
+    HRESULT ResolveSourceColorContext(const QuickView::RawImageFrame& frame,
+                                      int effectiveCmsMode,
+                                      ID2D1ColorContext** outContext);
+    HRESULT ResolveDestinationColorContext(ID2D1ColorContext** outContext) const;
+    HRESULT LoadColorContextForPrimaries(QuickView::ColorPrimaries primaries,
+                                         ID2D1ColorContext** outContext) const;
 
     HWND m_hwnd = nullptr;
     bool m_isAdvancedColor = false;

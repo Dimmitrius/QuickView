@@ -19,11 +19,8 @@ RWTexture2D<float4> DstTex : register(u0);
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     float4 color = SrcTex[id.xy];
-    // RGBA -> BGRA conversion (D2D Native)
-    float4 result = color;
-    result.r = color.b;
-    result.b = color.r;
-    DstTex[id.xy] = result;
+    // Direct passthrough — D3D11 R8G8B8A8 UAV uses direct byte mapping
+    DstTex[id.xy] = color;
 }
 )";
 
@@ -95,7 +92,7 @@ void CSToneMap(uint3 id : SV_DispatchThreadID)
     float3 mapped = ToneMapAces(color.rgb * sceneScale);
     float3 encoded = LinearToSrgb(mapped) * color.a;
 
-    DstTex[id.xy] = float4(encoded.b, encoded.g, encoded.r, color.a);
+    DstTex[id.xy] = float4(encoded.r, encoded.g, encoded.b, color.a);
 }
 )";
 
@@ -352,7 +349,7 @@ HRESULT ComputeEngine::UploadAndConvert(const uint8_t* srcPixels, int width, int
 
     // 2. Create Destination Texture (UAV)
     D3D11_TEXTURE2D_DESC dstDesc = srcDesc;
-    dstDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    dstDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     dstDesc.Usage = D3D11_USAGE_DEFAULT;
     dstDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
     
@@ -455,7 +452,7 @@ HRESULT ComputeEngine::ToneMapHdrToSdr(const uint8_t* srcPixels, int width, int 
     dstDesc.Height = srcDesc.Height;
     dstDesc.MipLevels = 1;
     dstDesc.ArraySize = 1;
-    dstDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    dstDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     dstDesc.SampleDesc.Count = 1;
     dstDesc.Usage = D3D11_USAGE_DEFAULT;
     dstDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
@@ -532,7 +529,7 @@ HRESULT ComputeEngine::ToneMapHdrToHdr(const uint8_t* srcPixels, int width, int 
     dstDesc.Height = srcDesc.Height;
     dstDesc.MipLevels = 1;
     dstDesc.ArraySize = 1;
-    dstDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    dstDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     dstDesc.SampleDesc.Count = 1;
     dstDesc.Usage = D3D11_USAGE_DEFAULT;
     dstDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;

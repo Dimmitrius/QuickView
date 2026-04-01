@@ -231,6 +231,7 @@ struct RuntimeConfig {
     bool LockWindowSize = false;
     bool ShowInfoPanel = false;
     bool InfoPanelExpanded = false;  // false=Lite, true=Full
+    bool ShowHdrDetailsExpanded = false;
     bool ShowCompareInfo = false;
     int CompareHudMode = 1; // 0=Lite, 1=Normal (fold identical & optics), 2=Full
     bool ForceRawDecode = false;

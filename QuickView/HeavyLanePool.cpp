@@ -1658,8 +1658,7 @@ tile_decode_done: ; // [P14] Jump target for fast path (skip legacy TJ decode)
 
                     // [CMS] Propagate color profile and HDR metadata
                     safeFrame->iccProfile = std::move(rawFrame.iccProfile);
-                    safeFrame->is_sRGB = rawFrame.is_sRGB;
-                    safeFrame->is_Linear_sRGB = rawFrame.is_Linear_sRGB;
+                    safeFrame->colorInfo = rawFrame.colorInfo;
                     safeFrame->hdrMetadata = rawFrame.hdrMetadata;
 
                     // [GPU Pipeline] Deep copy blend operation and payload

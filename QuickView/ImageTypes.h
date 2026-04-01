@@ -176,8 +176,7 @@ struct RawImageFrame {
     int exifOrientation = 1; /* 1 = Normal */
 
     std::vector<uint8_t> iccProfile;
-    bool is_sRGB = false;        // [CMS] 标记为标准 sRGB
-    bool is_Linear_sRGB = false; // [CMS] 标记为线性 sRGB (HDR)
+    PixelColorInfo colorInfo;
     HdrStaticMetadata hdrMetadata;
 
     // [v10.1] Original source dimensions (for Titan scaled base layers)
@@ -305,8 +304,7 @@ private:
         formatDetails = std::move(other.formatDetails);
         exifOrientation = other.exifOrientation;
         iccProfile = std::move(other.iccProfile);
-        is_sRGB = other.is_sRGB;
-        is_Linear_sRGB = other.is_Linear_sRGB;
+        colorInfo = other.colorInfo;
         hdrMetadata = other.hdrMetadata;
         srcWidth = other.srcWidth;
         srcHeight = other.srcHeight;
@@ -329,8 +327,7 @@ private:
         other.srcHeight = 0;
         // other.formatDetails is moved (empty)
         other.iccProfile.clear(); // Clear source vector after move
-        other.is_sRGB = false;
-        other.is_Linear_sRGB = false;
+        other.colorInfo = {};
         other.hdrMetadata = {};
         other.exifOrientation = 1;
         other.blendOp = GpuBlendOp::None;

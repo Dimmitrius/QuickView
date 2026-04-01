@@ -291,7 +291,7 @@ void ThumbnailManager::QueueRequest(size_t imageId, LPCWSTR path, int priority) 
         // Fast Lane: JPEG (Optimized) + RAW/HEIC/PSD (Embedded Preview) + WebP (Scaled)
         if (e == L".jpg" || e == L".jpeg" || e == L".jpe" || e == L".jfif" ||
             e == L".arw" || e == L".cr2" || e == L".nef" || e == L".dng" || e == L".orf" || e == L".rw2" || e == L".raf" ||
-            e == L".heic" || e == L".heif" || e == L".avif" ||
+            e == L".heic" || e == L".heif" || e == L".hif" || e == L".avif" ||
             e == L".psd" || e == L".psb" ||
             e == L".webp") { // Debug Stats (Removed)
             isFast = true;

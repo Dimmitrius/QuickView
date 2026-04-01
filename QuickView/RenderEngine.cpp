@@ -57,6 +57,115 @@ uint8_t EncodeLinearToSdr8(float value) {
   return static_cast<uint8_t>(value * 255.0f + 0.5f);
 }
 
+struct ColorMatrix3x3 {
+  float m[3][3];
+};
+
+ColorMatrix3x3 MakeIdentityMatrix() {
+  return {{{1.0f, 0.0f, 0.0f},
+           {0.0f, 1.0f, 0.0f},
+           {0.0f, 0.0f, 1.0f}}};
+}
+
+bool TryGetLinearPrimariesToScRgbMatrix(QuickView::ColorPrimaries primaries,
+                                        ColorMatrix3x3 *outMatrix) {
+  if (!outMatrix)
+    return false;
+
+  switch (primaries) {
+  case QuickView::ColorPrimaries::Unknown:
+  case QuickView::ColorPrimaries::SRGB:
+    *outMatrix = MakeIdentityMatrix();
+    return true;
+  case QuickView::ColorPrimaries::DisplayP3:
+    *outMatrix = {{{1.2249401f, -0.2249404f, 0.0f},
+                   {-0.0420569f, 1.0420569f, 0.0f},
+                   {-0.0196376f, -0.0786361f, 1.0982735f}}};
+    return true;
+  case QuickView::ColorPrimaries::Rec2020:
+    *outMatrix = {{{1.6605f, -0.5876f, -0.0728f},
+                   {-0.1246f, 1.1329f, -0.0083f},
+                   {-0.0182f, -0.1006f, 1.1187f}}};
+    return true;
+  default:
+    return false;
+  }
+}
+
+void TransformLinearPixelToScRgb(const ColorMatrix3x3 &matrix, float &r, float &g,
+                                 float &b) {
+  const float rr = matrix.m[0][0] * r + matrix.m[0][1] * g + matrix.m[0][2] * b;
+  const float gg = matrix.m[1][0] * r + matrix.m[1][1] * g + matrix.m[1][2] * b;
+  const float bb = matrix.m[2][0] * r + matrix.m[2][1] * g + matrix.m[2][2] * b;
+  r = rr;
+  g = gg;
+  b = bb;
+}
+
+bool BuildLinearScRgbFloatBuffer(const QuickView::RawImageFrame &frame,
+                                 std::vector<uint8_t> &convertedPixels,
+                                 const uint8_t **pixelsOut,
+                                 UINT *strideOut) {
+  if (!pixelsOut || !strideOut ||
+      frame.format != QuickView::PixelFormat::R32G32B32A32_FLOAT ||
+      !frame.pixels || frame.width <= 0 || frame.height <= 0) {
+    return false;
+  }
+
+  *pixelsOut = frame.pixels;
+  *strideOut = static_cast<UINT>(frame.stride);
+
+  const QuickView::ColorPrimaries primaries =
+      frame.colorInfo.primaries != QuickView::ColorPrimaries::Unknown
+          ? frame.colorInfo.primaries
+          : frame.hdrMetadata.primaries;
+
+  ColorMatrix3x3 matrix = {};
+  if (!TryGetLinearPrimariesToScRgbMatrix(primaries, &matrix)) {
+    return false;
+  }
+
+  const bool needsConversion =
+      primaries == QuickView::ColorPrimaries::DisplayP3 ||
+      primaries == QuickView::ColorPrimaries::Rec2020;
+  if (!needsConversion) {
+    return true;
+  }
+
+  convertedPixels.resize(static_cast<size_t>(frame.stride) * frame.height);
+  memcpy(convertedPixels.data(), frame.pixels,
+         static_cast<size_t>(frame.stride) * frame.height);
+
+  for (int y = 0; y < frame.height; ++y) {
+    float *row = reinterpret_cast<float *>(
+        convertedPixels.data() + static_cast<size_t>(y) * frame.stride);
+    for (int x = 0; x < frame.width; ++x) {
+      TransformLinearPixelToScRgb(matrix, row[x * 4 + 0], row[x * 4 + 1],
+                                  row[x * 4 + 2]);
+    }
+  }
+
+  *pixelsOut = convertedPixels.data();
+  *strideOut = static_cast<UINT>(frame.stride);
+  return true;
+}
+
+HRESULT CreateScRgbColorContext(ID2D1DeviceContext *dc,
+                                ID2D1ColorContext **outContext) {
+  if (!dc || !outContext)
+    return E_INVALIDARG;
+  return dc->CreateColorContext(D2D1_COLOR_SPACE_SCRGB, nullptr, 0, outContext);
+}
+
+bool IsSceneLinearFrame(const QuickView::RawImageFrame &frame) {
+  return frame.colorInfo.IsSceneLinear();
+}
+
+bool IsHdrLikeFrame(const QuickView::RawImageFrame &frame) {
+  return frame.colorInfo.dataSpace == QuickView::PixelDataSpace::EncodedHdr ||
+         frame.colorInfo.IsSceneLinear() || frame.hdrMetadata.hasGainMap;
+}
+
 float EstimateFramePeakScRgb(const QuickView::RawImageFrame &frame) {
   if (frame.format != QuickView::PixelFormat::R32G32B32A32_FLOAT ||
       !frame.pixels || frame.width <= 0 || frame.height <= 0) {
@@ -112,8 +221,12 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
     contentPeakScRgb = EstimateFramePeakScRgb(frame);
   }
 
-  if (contentPeakScRgb <= 1.0f && frame.hdrMetadata.isHdr) {
-    switch (frame.hdrMetadata.transfer) {
+  if (contentPeakScRgb <= 1.0f && IsHdrLikeFrame(frame)) {
+    const QuickView::TransferFunction transfer =
+        frame.colorInfo.transfer != QuickView::TransferFunction::Unknown
+            ? frame.colorInfo.transfer
+            : frame.hdrMetadata.transfer;
+    switch (transfer) {
     case QuickView::TransferFunction::PQ:
     case QuickView::TransferFunction::HLG:
       contentPeakScRgb = 12.5f; // 1000 nits reference fallback
@@ -275,6 +388,161 @@ HRESULT CRenderEngine::CreateDeviceResources() {
   return S_OK;
 }
 
+HRESULT CRenderEngine::LoadColorContextForPrimaries(
+    QuickView::ColorPrimaries primaries,
+    ID2D1ColorContext **outContext) const {
+  if (!outContext)
+    return E_INVALIDARG;
+
+  *outContext = nullptr;
+  switch (primaries) {
+  case QuickView::ColorPrimaries::SRGB:
+    return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0,
+                                            outContext);
+  case QuickView::ColorPrimaries::DisplayP3:
+    return LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_P3, outContext)
+               ? S_OK
+               : E_FAIL;
+  case QuickView::ColorPrimaries::AdobeRGB:
+    return LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_ADOBERGB, outContext)
+               ? S_OK
+               : E_FAIL;
+  case QuickView::ColorPrimaries::ProPhotoRGB:
+    return LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_PROPHOTO, outContext)
+               ? S_OK
+               : E_FAIL;
+  default:
+    return E_FAIL;
+  }
+}
+
+HRESULT CRenderEngine::ResolveSourceColorContext(
+    const QuickView::RawImageFrame &frame, int effectiveCmsMode,
+    ID2D1ColorContext **outContext) {
+  if (!outContext)
+    return E_INVALIDARG;
+  *outContext = nullptr;
+
+  if (frame.format == QuickView::PixelFormat::R32G32B32A32_FLOAT) {
+    const QuickView::ColorPrimaries primaries =
+        frame.colorInfo.primaries != QuickView::ColorPrimaries::Unknown
+            ? frame.colorInfo.primaries
+            : frame.hdrMetadata.primaries;
+    if (IsSceneLinearFrame(frame)) {
+      if (primaries == QuickView::ColorPrimaries::SRGB ||
+          primaries == QuickView::ColorPrimaries::Unknown) {
+        return CreateScRgbColorContext(m_d2dContext.Get(), outContext);
+      }
+      return LoadColorContextForPrimaries(primaries, outContext);
+    }
+    return CreateScRgbColorContext(m_d2dContext.Get(), outContext);
+  }
+
+  if (!frame.iccProfile.empty()) {
+    ColorContextCacheKey key{frame.iccProfile};
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    auto it = m_colorContextCache.find(key);
+    if (it != m_colorContextCache.end()) {
+      *outContext = it->second.Get();
+      if (*outContext)
+        (*outContext)->AddRef();
+      return S_OK;
+    }
+
+    ComPtr<ID2D1ColorContext> embeddedContext;
+    if (SUCCEEDED(m_d2dContext->CreateColorContext(
+            D2D1_COLOR_SPACE_CUSTOM, frame.iccProfile.data(),
+            static_cast<UINT32>(frame.iccProfile.size()), &embeddedContext))) {
+      m_colorContextCache[key] = embeddedContext;
+      *outContext = embeddedContext.Detach();
+      return S_OK;
+    }
+  }
+
+  if (effectiveCmsMode == 1 || effectiveCmsMode == 5) {
+    if (frame.hdrMetadata.primaries == QuickView::ColorPrimaries::DisplayP3 ||
+        frame.hdrMetadata.primaries == QuickView::ColorPrimaries::AdobeRGB ||
+        frame.hdrMetadata.primaries == QuickView::ColorPrimaries::ProPhotoRGB) {
+      if (SUCCEEDED(
+              LoadColorContextForPrimaries(frame.hdrMetadata.primaries, outContext))) {
+        return S_OK;
+      }
+    }
+
+    if (frame.colorInfo.IsSrgb() ||
+        frame.hdrMetadata.primaries == QuickView::ColorPrimaries::SRGB) {
+      return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0,
+                                              outContext);
+    }
+
+    const int fallback = g_config.CmsDefaultFallback;
+    if (fallback == 1)
+      return LoadColorContextForPrimaries(QuickView::ColorPrimaries::DisplayP3,
+                                          outContext);
+    if (fallback == 2)
+      return LoadColorContextForPrimaries(QuickView::ColorPrimaries::AdobeRGB,
+                                          outContext);
+    if (fallback == 3)
+      return LoadColorContextForPrimaries(QuickView::ColorPrimaries::ProPhotoRGB,
+                                          outContext);
+    return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0,
+                                            outContext);
+  }
+
+  if (effectiveCmsMode == 2)
+    return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0,
+                                            outContext);
+  if (effectiveCmsMode == 3)
+    return LoadColorContextForPrimaries(QuickView::ColorPrimaries::DisplayP3,
+                                        outContext);
+  if (effectiveCmsMode == 4)
+    return LoadColorContextForPrimaries(QuickView::ColorPrimaries::AdobeRGB,
+                                        outContext);
+  if (effectiveCmsMode == 6)
+    return LoadColorContextForPrimaries(QuickView::ColorPrimaries::ProPhotoRGB,
+                                        outContext);
+
+  return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0,
+                                          outContext);
+}
+
+HRESULT CRenderEngine::ResolveDestinationColorContext(
+    ID2D1ColorContext **outContext) const {
+  if (!outContext)
+    return E_INVALIDARG;
+  *outContext = nullptr;
+
+  if (m_isAdvancedColor && g_config.EnableAdvancedColor) {
+    return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SCRGB, nullptr, 0,
+                                            outContext);
+  }
+
+  if (!m_displayColorState.gdiDeviceName.empty()) {
+    HDC hdcMon =
+        CreateDCW(L"DISPLAY", m_displayColorState.gdiDeviceName.c_str(), NULL, NULL);
+    if (hdcMon) {
+      DWORD dwLen = 0;
+      GetICMProfileW(hdcMon, &dwLen, NULL);
+      if (dwLen > 0) {
+        std::wstring profilePath(dwLen, L'\0');
+        if (GetICMProfileW(hdcMon, &dwLen, &profilePath[0])) {
+          profilePath.resize(dwLen - 1);
+          const HRESULT hr = m_d2dContext->CreateColorContextFromFilename(
+              profilePath.c_str(), outContext);
+          DeleteDC(hdcMon);
+          if (SUCCEEDED(hr)) {
+            return hr;
+          }
+        }
+      }
+      DeleteDC(hdcMon);
+    }
+  }
+
+  return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0,
+                                          outContext);
+}
+
 // Helper to standardize D2D1 bitmap properties creation
 static inline D2D1_BITMAP_PROPERTIES1 GetDefaultBitmapProps(
     DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -430,6 +698,9 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
   // Map PixelFormat to DXGI_FORMAT and D2D1_ALPHA_MODE
   DXGI_FORMAT dxgiFormat;
   D2D1_ALPHA_MODE alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+  const uint8_t *uploadPixels = frame.pixels;
+  UINT uploadStride = static_cast<UINT>(frame.stride);
+  std::vector<uint8_t> linearScRgbPixels;
 
   wchar_t dbgUpload[256];
   swprintf_s(dbgUpload, L"[RenderEngine] Upload: %dx%d, Format=%d, BlendOp=%d, AdvColor=%d\n",
@@ -463,24 +734,38 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
   D2D1_BITMAP_PROPERTIES1 props = GetDefaultBitmapProps(dxgiFormat, alphaMode);
 
   if (frame.format == QuickView::PixelFormat::R32G32B32A32_FLOAT) {
+      BuildLinearScRgbFloatBuffer(frame, linearScRgbPixels, &uploadPixels, &uploadStride);
+      ComPtr<ID2D1ColorContext> scRgbContext;
+      CreateScRgbColorContext(m_d2dContext.Get(), &scRgbContext);
+
       if (m_isAdvancedColor && g_config.EnableAdvancedColor) {
           // Pure HDR Environment (Roll-off)
           const QuickView::ToneMapSettings toneMapSettings = BuildToneMapSettings(frame, m_displayColorState);
           if (m_computeEngine && m_computeEngine->IsAvailable() && toneMapSettings.contentPeakScRgb > (toneMapSettings.displayPeakScRgb > 1.0f ? toneMapSettings.displayPeakScRgb : 1.0f)) {
               ComPtr<ID3D11Texture2D> pTex;
               if (SUCCEEDED(m_computeEngine->ToneMapHdrToHdr(
-                      frame.pixels, static_cast<int>(frame.width),
-                      static_cast<int>(frame.height), static_cast<int>(frame.stride),
+                      uploadPixels, static_cast<int>(frame.width),
+                      static_cast<int>(frame.height), static_cast<int>(uploadStride),
                       toneMapSettings, &pTex))) {
                   ComPtr<IDXGISurface> dxgiSurface;
                   if (SUCCEEDED(pTex.As(&dxgiSurface))) {
+                      D2D1_BITMAP_PROPERTIES1 hdrProps = GetDefaultBitmapProps(
+                          DXGI_FORMAT_R16G16B16A16_FLOAT, D2D1_ALPHA_MODE_STRAIGHT);
+                      hdrProps.colorContext = scRgbContext.Get();
                       return m_d2dContext->CreateBitmapFromDxgiSurface(
-                          dxgiSurface.Get(), &props,
+                          dxgiSurface.Get(), &hdrProps,
                           reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
                   }
               }
           }
-          // Otherwise, just fall through to standard upload (no tone mapping needed or fallback).
+          D2D1_BITMAP_PROPERTIES1 hdrProps = GetDefaultBitmapProps(
+              DXGI_FORMAT_R32G32B32A32_FLOAT, D2D1_ALPHA_MODE_STRAIGHT);
+          hdrProps.colorContext = scRgbContext.Get();
+          return m_d2dContext->CreateBitmap(
+              D2D1::SizeU(static_cast<UINT32>(frame.width),
+                          static_cast<UINT32>(frame.height)),
+              uploadPixels, uploadStride, &hdrProps,
+              reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
       } else {
           // SDR Environment (Fallback Tone Mapping)
           if (m_computeEngine && m_computeEngine->IsAvailable()) {
@@ -488,13 +773,13 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
       const QuickView::ToneMapSettings toneMapSettings =
           BuildToneMapSettings(frame, m_displayColorState);
       if (SUCCEEDED(m_computeEngine->ToneMapHdrToSdr(
-              frame.pixels, static_cast<int>(frame.width),
-              static_cast<int>(frame.height), static_cast<int>(frame.stride),
+              uploadPixels, static_cast<int>(frame.width),
+              static_cast<int>(frame.height), static_cast<int>(uploadStride),
               toneMapSettings, &pTex))) {
         ComPtr<IDXGISurface> dxgiSurface;
         if (SUCCEEDED(pTex.As(&dxgiSurface))) {
           D2D1_BITMAP_PROPERTIES1 sdrProps = GetDefaultBitmapProps(
-              DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+              DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
           return m_d2dContext->CreateBitmapFromDxgiSurface(
               dxgiSurface.Get(), &sdrProps,
               reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
@@ -511,7 +796,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         sqrtf((toneMapSettings.contentPeakScRgb / (toneMapSettings.displayPeakScRgb > 1.0f ? toneMapSettings.displayPeakScRgb : 1.0f) > 1.0f ? toneMapSettings.contentPeakScRgb / (toneMapSettings.displayPeakScRgb > 1.0f ? toneMapSettings.displayPeakScRgb : 1.0f) : 1.0f));
     for (int y = 0; y < frame.height; ++y) {
       const float *srcRow = reinterpret_cast<const float *>(
-          frame.pixels + static_cast<size_t>(y) * frame.stride);
+          uploadPixels + static_cast<size_t>(y) * uploadStride);
       uint8_t *dstRow =
           sdrPixels.data() + static_cast<size_t>(y) * frame.width * 4;
       for (int x = 0; x < frame.width; ++x) {
@@ -553,7 +838,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
             &pTex))) {
       ComPtr<IDXGISurface> dxgiSurface;
       if (SUCCEEDED(pTex.As(&dxgiSurface))) {
-        props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        props.pixelFormat.format = DXGI_FORMAT_R8G8B8A8_UNORM;
         return m_d2dContext->CreateBitmapFromDxgiSurface(
             dxgiSurface.Get(), &props,
             reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
@@ -581,43 +866,9 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
       applyCms = true; // Manual Overrides (sRGB, ProPhoto, etc)
   }
 
-  if (effectiveCmsMode == 1 || effectiveCmsMode == 5) { // Auto or Grayscale
-    if (!frame.iccProfile.empty()) {
-      wchar_t d_buf[128];
-      swprintf_s(d_buf, L"[CMS] Embedded Profile detected in frame. Size: %zu\n", frame.iccProfile.size());
-
-      ColorContextCacheKey key{frame.iccProfile};
-      std::lock_guard<std::mutex> lock(m_cacheMutex);
-      auto it = m_colorContextCache.find(key);
-      if (it != m_colorContextCache.end()) {
-        srcContext = it->second;
-      } else {
-        if (SUCCEEDED(m_d2dContext->CreateColorContext(
-                D2D1_COLOR_SPACE_CUSTOM, frame.iccProfile.data(),
-                (UINT32)frame.iccProfile.size(), &srcContext))) {
-          m_colorContextCache[key] = srcContext;
-        } else {
-        }
-      }
-    }
-    if (!srcContext) {
-      int fallback = g_config.CmsDefaultFallback;
-      if (fallback == 1) LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_P3, srcContext.GetAddressOf());
-      else if (fallback == 2) LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_ADOBERGB, srcContext.GetAddressOf());
-      else if (fallback == 3) LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_PROPHOTO, srcContext.GetAddressOf());
-      else {
-          m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
-      }
-    }
-  }
-  else if (effectiveCmsMode == 2) m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
-  else if (effectiveCmsMode == 3) LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_P3, srcContext.GetAddressOf());
-  else if (effectiveCmsMode == 4) LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_ADOBERGB, srcContext.GetAddressOf());
-  else if (effectiveCmsMode == 6) {
-      LoadIccFromResource(m_d2dContext.Get(), IDR_ICC_PROPHOTO, srcContext.GetAddressOf());
-  }
-  
-  if (!srcContext) m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
+  ResolveSourceColorContext(frame, effectiveCmsMode, &srcContext);
+  if (!srcContext)
+    m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
 
   // [v10.3] Critical Optimization: Attach detected color context to the bitmap creation properties
   D2D1_BITMAP_PROPERTIES1 propsWithContext = props;
@@ -636,31 +887,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
     // Find destination context (Monitor or scRGB)
     ComPtr<ID2D1ColorContext> dstContext;
 
-    if (m_isAdvancedColor && g_config.EnableAdvancedColor) {
-      m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SCRGB, nullptr, 0, &dstContext);
-    } else {
-      HMONITOR hMon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST);
-      MONITORINFOEXW mi;
-      mi.cbSize = sizeof(mi);
-      if (GetMonitorInfoW(hMon, &mi)) {
-        HDC hdcMon = CreateDCW(L"DISPLAY", mi.szDevice, NULL, NULL);
-        if (hdcMon) {
-          DWORD dwLen = 0;
-          GetICMProfileW(hdcMon, &dwLen, NULL);
-          if (dwLen > 0) {
-            std::wstring profilePath(dwLen, L'\0');
-            if (GetICMProfileW(hdcMon, &dwLen, &profilePath[0])) {
-              profilePath.resize(dwLen - 1);
-              m_d2dContext->CreateColorContextFromFilename(profilePath.c_str(), &dstContext);
-            }
-          }
-          DeleteDC(hdcMon);
-        }
-      }
-      if (!dstContext) {
-          m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &dstContext);
-      }
-    }
+    ResolveDestinationColorContext(&dstContext);
 
     if (srcContext && dstContext) {
       ComPtr<ID2D1Effect> colorManagementEffect;

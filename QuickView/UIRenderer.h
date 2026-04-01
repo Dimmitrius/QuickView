@@ -54,6 +54,7 @@ enum class UIHitResult {
     None,
     PanelToggle,    // Toggle Expand/Collapse
     PanelClose,     // Close Info Panel
+    HdrDetailsToggle, // Toggle HDR professional details
     GPSCoord,       // Click to copy GPS coordinates
     GPSLink,        // Click to open in Maps
     InfoRow,        // Click to copy row content
@@ -197,6 +198,7 @@ private:
     // Info Panel Hit Rects
     D2D1_RECT_F m_panelToggleRect = {};
     D2D1_RECT_F m_panelCloseRect = {};
+    D2D1_RECT_F m_hdrDetailsToggleRect = {};
     D2D1_RECT_F m_gpsCoordRect = {};
     D2D1_RECT_F m_gpsLinkRect = {};
     D2D1_RECT_F m_lastHUDRect = {}; // Track HUD area for hit testing
@@ -206,8 +208,8 @@ private:
     
     // Grid Layout Constants
     static constexpr float GRID_ICON_WIDTH = 16.0f;
-    static constexpr float GRID_LABEL_WIDTH = 45.0f;
-    static constexpr float GRID_ROW_HEIGHT = 17.0f;
+    static constexpr float GRID_LABEL_WIDTH = 56.0f;
+    static constexpr float GRID_ROW_HEIGHT = 20.0f;
     static constexpr float GRID_PADDING = 6.0f;
     
     // OSD 状态

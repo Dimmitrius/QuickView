@@ -703,9 +703,209 @@ static std::wstring DetectFormatFromContent(LPCWSTR filePath) {
         if (pathLower.ends_with(L".tga")) return L"TGA";
         if (pathLower.ends_with(L".jxl")) return L"JXL";
         if (pathLower.ends_with(L".dds")) return L"DDS";
+        if (pathLower.ends_with(L".wdp") || pathLower.ends_with(L".hdp") || pathLower.ends_with(L".jxr")) return L"JXR";
+        if (pathLower.ends_with(L".hif")) return L"HEIC";
     }
     
     return fmt;
+}
+
+static QuickView::ColorPrimaries GuessPrimariesFromMetadataColorSpace(const CImageLoader::ImageMetadata& metadata) {
+    std::wstring colorSpace = metadata.ColorSpace;
+    std::transform(colorSpace.begin(), colorSpace.end(), colorSpace.begin(), ::towlower);
+
+    if (colorSpace.contains(L"p3")) return QuickView::ColorPrimaries::DisplayP3;
+    if (colorSpace.contains(L"2020") || colorSpace.contains(L"2100")) return QuickView::ColorPrimaries::Rec2020;
+    if (colorSpace.contains(L"adobe")) return QuickView::ColorPrimaries::AdobeRGB;
+    if (colorSpace.contains(L"prophoto")) return QuickView::ColorPrimaries::ProPhotoRGB;
+    if (colorSpace.contains(L"srgb")) return QuickView::ColorPrimaries::SRGB;
+    return QuickView::ColorPrimaries::Unknown;
+}
+
+static bool IsHdrTransferFunction(QuickView::TransferFunction transfer) {
+    return transfer == QuickView::TransferFunction::PQ ||
+           transfer == QuickView::TransferFunction::HLG;
+}
+
+static void PopulateHdrInfoFromWicPixelFormat(const WICPixelFormatGUID& pixelFormat,
+                                              CImageLoader::ImageMetadata* metadata,
+                                              QuickView::PixelColorInfo* colorInfoOut = nullptr) {
+    if (!metadata) return;
+
+    const bool isFloat =
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat128bppRGBAFloat) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat128bppPRGBAFloat) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat128bppRGBFloat) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat64bppRGBAHalf) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat64bppPRGBAHalf) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat64bppRGBHalf) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat48bppRGBHalf) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat32bppRGBE);
+
+    const bool isHighBitDepth =
+        isFloat ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat64bppRGBA) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat64bppPRGBA) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat64bppRGB) ||
+        IsEqualGUID(pixelFormat, GUID_WICPixelFormat48bppRGB);
+
+    if (!isHighBitDepth) return;
+
+    QuickView::PixelColorInfo inferred = metadata->colorInfo;
+    inferred.dataSpace = isFloat ? QuickView::PixelDataSpace::SceneLinear
+                                 : QuickView::PixelDataSpace::EncodedHdr;
+    inferred.transfer = isFloat ? QuickView::TransferFunction::Linear
+                                : (metadata->hdrMetadata.transfer != QuickView::TransferFunction::Unknown
+                                       ? metadata->hdrMetadata.transfer
+                                       : QuickView::TransferFunction::SRGB);
+    if (inferred.primaries == QuickView::ColorPrimaries::Unknown) {
+        inferred.primaries = GuessPrimariesFromMetadataColorSpace(*metadata);
+    }
+    if (inferred.nominalBitDepth == 0) {
+        inferred.nominalBitDepth = isFloat ? 16 : 16;
+        if (IsEqualGUID(pixelFormat, GUID_WICPixelFormat128bppRGBAFloat) ||
+            IsEqualGUID(pixelFormat, GUID_WICPixelFormat128bppPRGBAFloat) ||
+            IsEqualGUID(pixelFormat, GUID_WICPixelFormat128bppRGBFloat)) {
+            inferred.nominalBitDepth = 32;
+        }
+    }
+    metadata->colorInfo = inferred;
+    if (colorInfoOut) *colorInfoOut = inferred;
+
+    if (metadata->hdrMetadata.transfer == QuickView::TransferFunction::Unknown) {
+        metadata->hdrMetadata.transfer = inferred.transfer;
+    }
+    if (metadata->hdrMetadata.primaries == QuickView::ColorPrimaries::Unknown) {
+        metadata->hdrMetadata.primaries = inferred.primaries;
+    }
+    if (isFloat || inferred.dataSpace == QuickView::PixelDataSpace::EncodedHdr) {
+        metadata->hdrMetadata.isValid = true;
+    }
+}
+
+static void PopulateHdrInfoFromPngInfo(const WuffsLoader::WuffsImageInfo& info,
+                                       CImageLoader::ImageMetadata* metadata) {
+    if (!metadata) return;
+
+    if (info.bitDepth > 0) {
+        metadata->colorInfo.nominalBitDepth = static_cast<uint8_t>((std::min)(info.bitDepth, 255));
+    }
+    if (info.transfer != QuickView::TransferFunction::Unknown) {
+        metadata->colorInfo.transfer = info.transfer;
+        metadata->hdrMetadata.transfer = info.transfer;
+    } else if (metadata->colorInfo.transfer == QuickView::TransferFunction::Unknown) {
+        metadata->colorInfo.transfer = QuickView::TransferFunction::SRGB;
+    }
+    if (info.primaries != QuickView::ColorPrimaries::Unknown) {
+        metadata->colorInfo.primaries = info.primaries;
+        metadata->hdrMetadata.primaries = info.primaries;
+    } else if (metadata->colorInfo.primaries == QuickView::ColorPrimaries::Unknown) {
+        metadata->colorInfo.primaries = metadata->HasEmbeddedColorProfile
+            ? GuessPrimariesFromMetadataColorSpace(*metadata)
+            : QuickView::ColorPrimaries::SRGB;
+    }
+
+    metadata->colorInfo.hasEmbeddedIcc = metadata->HasEmbeddedColorProfile;
+    metadata->colorInfo.dataSpace = IsHdrTransferFunction(metadata->colorInfo.transfer)
+        ? QuickView::PixelDataSpace::EncodedHdr
+        : QuickView::PixelDataSpace::EncodedSdr;
+
+    if (metadata->colorInfo.dataSpace == QuickView::PixelDataSpace::EncodedHdr) {
+        metadata->hdrMetadata.isValid = true;
+    }
+}
+
+static void PopulateHdrInfoFromPsdHeader(const uint8_t* data, size_t size,
+                                         CImageLoader::ImageMetadata* metadata) {
+    if (!data || size < 26 || !metadata) return;
+    if (memcmp(data, "8BPS", 4) != 0) return;
+
+    const uint16_t version = static_cast<uint16_t>((data[4] << 8) | data[5]);
+    const uint16_t depth = static_cast<uint16_t>((data[22] << 8) | data[23]);
+    const uint16_t colorMode = static_cast<uint16_t>((data[24] << 8) | data[25]);
+    if (version != 1 && version != 2) return;
+
+    metadata->colorInfo.nominalBitDepth = static_cast<uint8_t>((std::min)(depth, static_cast<uint16_t>(255)));
+    if (metadata->colorInfo.transfer == QuickView::TransferFunction::Unknown) {
+        metadata->colorInfo.transfer = (depth >= 32)
+            ? QuickView::TransferFunction::Linear
+            : QuickView::TransferFunction::SRGB;
+    }
+    if (metadata->colorInfo.primaries == QuickView::ColorPrimaries::Unknown) {
+        metadata->colorInfo.primaries = (colorMode == 3 || colorMode == 1)
+            ? QuickView::ColorPrimaries::SRGB
+            : QuickView::ColorPrimaries::Unknown;
+    }
+    metadata->colorInfo.dataSpace = (depth >= 32)
+        ? QuickView::PixelDataSpace::SceneLinear
+        : QuickView::PixelDataSpace::EncodedSdr;
+
+    if (depth >= 32) {
+        metadata->hdrMetadata.isValid = true;
+        metadata->hdrMetadata.transfer = QuickView::TransferFunction::Linear;
+        metadata->hdrMetadata.primaries = metadata->colorInfo.primaries;
+    }
+}
+
+static void ProbeNativeWicFrameInfo(IWICBitmapFrameDecode* frame,
+                                    IWICImagingFactory* factory,
+                                    CImageLoader::ImageMetadata* metadata) {
+    if (!frame || !metadata) return;
+
+    WICPixelFormatGUID srcFormat = {};
+    if (SUCCEEDED(frame->GetPixelFormat(&srcFormat))) {
+        PopulateHdrInfoFromWicPixelFormat(srcFormat, metadata);
+    }
+
+    if (!factory) return;
+
+    UINT count = 0;
+    if (FAILED(frame->GetColorContexts(0, nullptr, &count)) || count == 0) {
+        return;
+    }
+
+    std::vector<ComPtr<IWICColorContext>> contexts(count);
+    std::vector<IWICColorContext*> rawContexts(count);
+    for (UINT i = 0; i < count; ++i) {
+        if (FAILED(factory->CreateColorContext(&contexts[i])) || !contexts[i]) {
+            rawContexts[i] = nullptr;
+            continue;
+        }
+        rawContexts[i] = contexts[i].Get();
+    }
+
+    UINT actual = 0;
+    if (FAILED(frame->GetColorContexts(count, rawContexts.data(), &actual))) {
+        return;
+    }
+
+    for (UINT i = 0; i < actual; ++i) {
+        if (!contexts[i]) continue;
+        WICColorContextType type = WICColorContextUninitialized;
+        if (FAILED(contexts[i]->GetType(&type))) continue;
+        if (type != WICColorContextProfile) continue;
+
+        UINT cbProfile = 0;
+        if (FAILED(contexts[i]->GetProfileBytes(0, nullptr, &cbProfile)) || cbProfile == 0) {
+            continue;
+        }
+
+        std::vector<BYTE> profile(cbProfile);
+        if (FAILED(contexts[i]->GetProfileBytes(cbProfile, profile.data(), &cbProfile))) {
+            continue;
+        }
+
+        if (metadata->iccProfileData.empty()) {
+            metadata->iccProfileData.assign(profile.begin(), profile.end());
+        }
+        metadata->HasEmbeddedColorProfile = true;
+        metadata->colorInfo.hasEmbeddedIcc = true;
+        if (metadata->ColorSpace.empty() || metadata->ColorSpace == L"Uncalibrated") {
+            std::wstring desc = CImageLoader::ParseICCProfileName(profile.data(), profile.size());
+            if (!desc.empty()) metadata->ColorSpace = desc;
+        }
+        break;
+    }
 }
 
 HRESULT CImageLoader::Initialize(IWICImagingFactory* wicFactory) {
@@ -2890,7 +3090,7 @@ HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData*
     if (format == L"TIFF" && tryEmbeddedPreview(L"TIFF Preview", PreviewExtractor::ExtractFromTIFF)) {
         return S_OK;
     }
-    if ((format == L"HEIC" || pathLower.ends_with(L".heic") || pathLower.ends_with(L".heif")) &&
+    if ((format == L"HEIC" || pathLower.ends_with(L".heic") || pathLower.ends_with(L".heif") || pathLower.ends_with(L".hif")) &&
         tryEmbeddedPreview(L"HEIC Preview", PreviewExtractor::ExtractFromHEIC)) {
         return S_OK;
     }
@@ -2901,7 +3101,7 @@ HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData*
 
     if ((format == L"AVIF" || format == L"HEIC" ||
          pathLower.ends_with(L".avif") || pathLower.ends_with(L".avifs") ||
-         pathLower.ends_with(L".heic") || pathLower.ends_with(L".heif")) &&
+         pathLower.ends_with(L".heic") || pathLower.ends_with(L".heif") || pathLower.ends_with(L".hif")) &&
         mappedData && mappedSize > 0) {
         ImageMetadata meta;
         HRESULT hr = LoadThumbAVIF_Proxy(mappedData, mappedSize, targetSize, pData, allowSlow, &meta);
@@ -3126,7 +3326,7 @@ HRESULT CImageLoader::LoadThumbnail(LPCWSTR filePath, int targetSize, ThumbData*
         std::wstring e = ext.substr(dot);
         std::transform(e.begin(), e.end(), e.begin(), ::towlower);
         isPsd = (e == L".psd" || e == L".psb");
-        isHeic = (e == L".heic" || e == L".heif");
+        isHeic = (e == L".heic" || e == L".heif" || e == L".hif");
     }
         
         // [STE Level 1] PSD: Use PreviewExtractor
@@ -3822,9 +4022,20 @@ HRESULT CImageLoader::LoadJXL(LPCWSTR filePath, IWICBitmap** ppBitmap, ImageMeta
 
                 JxlColorEncoding colorEncoding = {};
                 if (JXL_DEC_SUCCESS == JxlDecoderGetColorAsEncodedProfile(dec, JXL_COLOR_PROFILE_TARGET_ORIGINAL, &colorEncoding)) {
+                    const QuickView::TransferFunction transfer = MapJxlTransferFunction(colorEncoding.transfer_function);
+                    const QuickView::ColorPrimaries primaries = MapJxlPrimaries(colorEncoding.primaries);
+                    pMetadata->colorInfo.transfer = transfer;
+                    pMetadata->colorInfo.primaries = primaries;
+                    pMetadata->colorInfo.nominalBitDepth =
+                        static_cast<uint8_t>((std::min)(info.bits_per_sample, 255u));
+                    pMetadata->colorInfo.dataSpace =
+                        (transfer == QuickView::TransferFunction::PQ ||
+                         transfer == QuickView::TransferFunction::HLG)
+                            ? QuickView::PixelDataSpace::EncodedHdr
+                            : QuickView::PixelDataSpace::EncodedSdr;
                     pMetadata->hdrMetadata.isValid = true;
-                    pMetadata->hdrMetadata.transfer = MapJxlTransferFunction(colorEncoding.transfer_function);
-                    pMetadata->hdrMetadata.primaries = MapJxlPrimaries(colorEncoding.primaries);
+                    pMetadata->hdrMetadata.transfer = transfer;
+                    pMetadata->hdrMetadata.primaries = primaries;
                     pMetadata->hdrMetadata.isSceneLinear =
                         (pMetadata->hdrMetadata.transfer == QuickView::TransferFunction::Linear);
                     pMetadata->hdrMetadata.isHdr =
@@ -4044,11 +4255,11 @@ HRESULT CImageLoader::LoadToMemory(LPCWSTR filePath, IWICBitmap** ppBitmap, std:
              detectedFmt == L"HEIC" ||
              ((detectedFmt == L"Unknown") &&
               (path.ends_with(L".avif") || path.ends_with(L".avifs") ||
-               path.ends_with(L".heic") || path.ends_with(L".heif")))) {
+               path.ends_with(L".heic") || path.ends_with(L".heif") || path.ends_with(L".hif")))) {
         HRESULT hr = LoadAVIF(filePath, ppBitmap);
         if (SUCCEEDED(hr)) {
             if (pLoaderName) {
-                *pLoaderName = (detectedFmt == L"HEIC" || path.ends_with(L".heic") || path.ends_with(L".heif"))
+                *pLoaderName = (detectedFmt == L"HEIC" || path.ends_with(L".heic") || path.ends_with(L".heif") || path.ends_with(L".hif"))
                     ? L"libavif/HEIF"
                     : L"libavif";
             }
@@ -4412,6 +4623,15 @@ namespace QuickView {
         // packaged into GpuShaderPayload + AuxLayer for GPU-side baking.
         // ====================================================================
         namespace UltraHdr {
+            static bool ContainsUltraHdrXmpSignature(const uint8_t* xmpData, size_t xmpLen) {
+                if (!xmpData || xmpLen < 10) return false;
+                std::string xml(reinterpret_cast<const char*>(xmpData), xmpLen);
+                return xml.find("hdrgm:") != std::string::npos ||
+                       xml.find("HDRGainMap") != std::string::npos ||
+                       xml.find("GainMapMin") != std::string::npos ||
+                       xml.find("GainMapMax") != std::string::npos ||
+                       xml.find("HDRCapacityMax") != std::string::npos;
+            }
 
             // Extract float value from XMP attribute: attrName="value"
             static bool FindXmpAttr(const std::string& xml, const char* attrName, float* out) {
@@ -4438,9 +4658,7 @@ namespace QuickView {
                 if (!xmpData || xmpLen < 10) return false;
                 std::string xml(reinterpret_cast<const char*>(xmpData), xmpLen);
 
-                // Require hdrgm namespace
-                if (xml.find("hdrgm:") == std::string::npos &&
-                    xml.find("HDRGainMap") == std::string::npos) {
+                if (!ContainsUltraHdrXmpSignature(xmpData, xmpLen)) {
                     return false;
                 }
 
@@ -4589,6 +4807,7 @@ namespace QuickView {
                 
                 GpuShaderPayload ultraHdrPayload;
                 bool hasUltraHdr = false;
+                bool ultraHdrPayloadParsed = false;
 
                 // [CMS] Extract and Merge Multi-segment ICC Profile from APP2 markers
                 {
@@ -4621,10 +4840,14 @@ namespace QuickView {
                                 const uint8_t* xmpData = marker->data + matchedLen;
                                 const size_t xmpLen = marker->data_length - matchedLen;
                                 
+                                if (UltraHdr::ContainsUltraHdrXmpSignature(xmpData, xmpLen)) {
+                                    hasUltraHdr = true;
+                                }
+
                                 if (UltraHdr::ParseXmpToPayload(xmpData, xmpLen, ultraHdrPayload)) {
                                     ultraHdrPayload.sdrWidth = (uint32_t)cinfo.image_width;
                                     ultraHdrPayload.sdrHeight = (uint32_t)cinfo.image_height;
-                                    hasUltraHdr = true;
+                                    ultraHdrPayloadParsed = true;
                                     OutputDebugStringW(L"[UltraHDR] XMP Gain Map parameters found and parsed (Early stage).\n");
                                 } else {
                                     OutputDebugStringW(L"[UltraHDR] APP1 XMP found but ParseXmpToPayload failed.\n");
@@ -4843,6 +5066,9 @@ namespace QuickView {
                 result.stride = stride;
                 result.format = ctx.format;
                 result.success = true;
+                result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::EncodedSdr;
+                result.metadata.colorInfo.transfer = QuickView::TransferFunction::SRGB;
+                result.metadata.colorInfo.nominalBitDepth = 8;
                 
                 // [Fix] Respect EasyExif result if available. Fallback to Raw Scan only if needed.
                 if (result.metadata.ExifOrientation == 1) {
@@ -4854,22 +5080,31 @@ namespace QuickView {
                 // is still alive — it's the original file buffer)
                 // ============================================================
                 if (hasUltraHdr) {
+                    result.metadata.hdrMetadata.hasGainMap = true;
+                    result.metadata.hdrMetadata.isValid = true;
+                    result.metadata.hdrMetadata.transfer = QuickView::TransferFunction::SRGB;
+                    result.metadata.hdrMetadata.gainMapBaseHeadroom = ultraHdrPayload.hdrCapacityMin;
+                    result.metadata.hdrMetadata.gainMapAlternateHeadroom = ultraHdrPayload.hdrCapacityMax;
+                    result.metadata.FormatDetails += L" Ultra HDR";
                     ultraHdrPayload.sdrWidth = (uint32_t)result.width;
                     ultraHdrPayload.sdrHeight = (uint32_t)result.height;
 
                     const uint8_t* gainJpegData = nullptr;
                     size_t gainJpegSize = 0;
-                    if (UltraHdr::FindMpfSecondImage(pBuf, bufSize, &gainJpegData, &gainJpegSize)) {
+                    if (ultraHdrPayloadParsed &&
+                        UltraHdr::FindMpfSecondImage(pBuf, bufSize, &gainJpegData, &gainJpegSize)) {
                         OutputDebugStringW(L"[UltraHDR] MPF Secondary Image (Gain Map) found.\n");
                         auto auxLayer = UltraHdr::DecodeGainMapJpeg(gainJpegData, gainJpegSize, ctx);
                         if (auxLayer) {
                             result.blendOp = GpuBlendOp::UltraHdrGainMap;
                             result.auxLayer = std::move(auxLayer);
                             result.shaderPayload = ultraHdrPayload;
-                            result.metadata.FormatDetails += L" Ultra HDR";
-                            result.metadata.hdrMetadata.hasGainMap = true;
                         }
                     }
+                }
+
+                if (!result.metadata.iccProfileData.empty()) {
+                    result.metadata.colorInfo.hasEmbeddedIcc = true;
                 }
 
                 return S_OK;
@@ -4928,6 +5163,11 @@ namespace QuickView {
                 
                 std::wstring details = L"Wuffs PNG";
                 if (showBitDepth) details += L" " + std::to_wstring(info.bitDepth) + L"-bit";
+                if (info.transfer == QuickView::TransferFunction::PQ) details += L" / PQ";
+                else if (info.transfer == QuickView::TransferFunction::HLG) details += L" / HLG";
+                else if (info.transfer == QuickView::TransferFunction::Linear) details += L" / Linear";
+                if (info.primaries == QuickView::ColorPrimaries::Rec2020) details += L" / P2020";
+                else if (info.primaries == QuickView::ColorPrimaries::DisplayP3) details += L" / P3";
                 if (info.hasAlpha) details += L" Alpha";
                 if (info.isAnim) details += L" [Anim]";
                 
@@ -4939,7 +5179,10 @@ namespace QuickView {
                 if (!info.iccProfile.empty()) {
                     result.metadata.iccProfileData = std::move(info.iccProfile);
                     result.metadata.HasEmbeddedColorProfile = true;
+                    result.metadata.colorInfo.hasEmbeddedIcc = true;
                 }
+
+                PopulateHdrInfoFromPngInfo(info, &result.metadata);
                 
                 return S_OK;
             }
@@ -5203,6 +5446,17 @@ namespace QuickView {
                                   info.bits_per_sample > 8);
 
                              if (ctx.pMetadata) {
+                                 ctx.pMetadata->colorInfo.transfer = transfer;
+                                 ctx.pMetadata->colorInfo.primaries = primaries;
+                                 ctx.pMetadata->colorInfo.nominalBitDepth =
+                                     static_cast<uint8_t>((std::min)(info.bits_per_sample, 255u));
+                                 ctx.pMetadata->colorInfo.dataSpace =
+                                     useFloatOutput
+                                         ? QuickView::PixelDataSpace::SceneLinear
+                                         : ((transfer == QuickView::TransferFunction::PQ ||
+                                             transfer == QuickView::TransferFunction::HLG)
+                                                ? QuickView::PixelDataSpace::EncodedHdr
+                                                : QuickView::PixelDataSpace::EncodedSdr);
                                  ctx.pMetadata->hdrMetadata.isValid = true;
                                  ctx.pMetadata->hdrMetadata.transfer = transfer;
                                  ctx.pMetadata->hdrMetadata.primaries = primaries;
@@ -5403,7 +5657,11 @@ namespace QuickView {
                             }
                             result.stride = finalW * 16;
                             result.format = PixelFormat::R32G32B32A32_FLOAT;
-                            result.metadata.is_Linear_sRGB = true;
+                            result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinear;
+                            result.metadata.colorInfo.transfer = QuickView::TransferFunction::Linear;
+                            result.metadata.colorInfo.primaries = primaries;
+                            result.metadata.colorInfo.nominalBitDepth =
+                                static_cast<uint8_t>((std::min)(info.bits_per_sample, 255u));
                             result.metadata.hdrMetadata.isSceneLinear = true;
                         } else {
                             // [v8.6] Fix: JXL outputs RGBA Straight, D2D needs BGRA Premultiplied.
@@ -5542,11 +5800,15 @@ namespace QuickView {
                             result.metadata.LoaderName = L"libavif (Unified HDR GainMap)";
                             result.metadata.Width = origW;
                             result.metadata.Height = origH;
-                            result.metadata.is_Linear_sRGB = true;
+                            result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinear;
+                            result.metadata.colorInfo.transfer = QuickView::TransferFunction::Linear;
+                            result.metadata.colorInfo.primaries = result.metadata.hdrMetadata.primaries;
+                            result.metadata.colorInfo.nominalBitDepth = 16;
                             if (decoder->image->icc.data && decoder->image->icc.size > 0) {
                                 result.metadata.iccProfileData.assign(
                                     decoder->image->icc.data,
                                     decoder->image->icc.data + decoder->image->icc.size);
+                                result.metadata.colorInfo.hasEmbeddedIcc = true;
                             }
                             result.metadata.FormatDetails = gainMapFormatDetails;
                             avifDecoderDestroy(decoder);
@@ -5608,7 +5870,10 @@ namespace QuickView {
                     result.metadata.LoaderName = L"libavif (Unified HDR)";
                     result.metadata.Width = origW;
                     result.metadata.Height = origH;
-                    result.metadata.is_Linear_sRGB = true;
+                    result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinear;
+                    result.metadata.colorInfo.transfer = QuickView::TransferFunction::Linear;
+                    result.metadata.colorInfo.primaries = primaries;
+                    result.metadata.colorInfo.nominalBitDepth = 16;
                     PopulateAvifHdrStaticMetadata(decoder->image, &result.metadata.hdrMetadata);
                     result.metadata.hdrMetadata.isSceneLinear = true;
                     result.metadata.hdrMetadata.isHdr = true;
@@ -5616,6 +5881,7 @@ namespace QuickView {
                         result.metadata.iccProfileData.assign(
                             decoder->image->icc.data,
                             decoder->image->icc.data + decoder->image->icc.size);
+                        result.metadata.colorInfo.hasEmbeddedIcc = true;
                     }
 
                     wchar_t fmtBuf[128];
@@ -5675,11 +5941,22 @@ namespace QuickView {
                 result.metadata.Width = origW;
                 result.metadata.Height = origH;
                 PopulateAvifHdrStaticMetadata(decoder->image, &result.metadata.hdrMetadata);
-                result.metadata.hdrMetadata.isHdr = false;
+                result.metadata.colorInfo.transfer = result.metadata.hdrMetadata.transfer;
+                result.metadata.colorInfo.primaries = result.metadata.hdrMetadata.primaries;
+                result.metadata.colorInfo.nominalBitDepth =
+                    static_cast<uint8_t>((std::min)(static_cast<uint32_t>(decoder->image->depth), 255u));
+                result.metadata.colorInfo.dataSpace =
+                    (result.metadata.hdrMetadata.transfer == QuickView::TransferFunction::PQ ||
+                     result.metadata.hdrMetadata.transfer == QuickView::TransferFunction::HLG)
+                        ? QuickView::PixelDataSpace::EncodedHdr
+                        : QuickView::PixelDataSpace::EncodedSdr;
+                result.metadata.hdrMetadata.isHdr =
+                    result.metadata.colorInfo.dataSpace == QuickView::PixelDataSpace::EncodedHdr;
                 if (decoder->image->icc.data && decoder->image->icc.size > 0) {
                     result.metadata.iccProfileData.assign(
                         decoder->image->icc.data,
                         decoder->image->icc.data + decoder->image->icc.size);
+                    result.metadata.colorInfo.hasEmbeddedIcc = true;
                 }
                 wchar_t fmtBuf[128];
                 swprintf_s(fmtBuf, L"%d-bit AVIF", decoder->image->depth);
@@ -5986,7 +6263,10 @@ namespace QuickView {
                 result.metadata.FormatDetails = L"TinyEXR";
                 result.metadata.Width = w;
                 result.metadata.Height = h;
-                result.metadata.is_Linear_sRGB = true;
+                result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinear;
+                result.metadata.colorInfo.transfer = QuickView::TransferFunction::Linear;
+                result.metadata.colorInfo.primaries = QuickView::ColorPrimaries::SRGB;
+                result.metadata.colorInfo.nominalBitDepth = 16;
                 result.metadata.hdrMetadata.isValid = true;
                 result.metadata.hdrMetadata.isHdr = true;
                 result.metadata.hdrMetadata.isSceneLinear = true;
@@ -6283,8 +6563,25 @@ namespace QuickView {
                 std::wstring details = (header.version == 2) ? L"PSB v2 Composite" : L"PSD Composite";
                 details += (header.compression == 0) ? L" Raw" : L" RLE";
                 if (header.depth == 16) details += L" 16bpc";
+                else if (header.depth == 32) details += L" 32bpc";
                 if (outW != header.width || outH != header.height) details += L" [Scaled]";
                 result.metadata.FormatDetails = details;
+                result.metadata.colorInfo.nominalBitDepth = static_cast<uint8_t>((std::min)(header.depth, static_cast<uint16_t>(255)));
+                result.metadata.colorInfo.primaries = QuickView::ColorPrimaries::SRGB;
+                result.metadata.colorInfo.transfer =
+                    (header.depth >= 32) ? QuickView::TransferFunction::Linear
+                                         : QuickView::TransferFunction::SRGB;
+                result.metadata.colorInfo.dataSpace =
+                    (header.depth >= 32) ? QuickView::PixelDataSpace::SceneLinear
+                                         : QuickView::PixelDataSpace::EncodedSdr;
+                // Populate HDR metadata for high bit-depth PSD/PSB
+                result.metadata.hdrMetadata.isValid = true;
+                result.metadata.hdrMetadata.transfer =
+                    (header.depth >= 32) ? QuickView::TransferFunction::Linear
+                                         : QuickView::TransferFunction::SRGB;
+                result.metadata.hdrMetadata.primaries = QuickView::ColorPrimaries::SRGB;
+                result.metadata.hdrMetadata.isHdr = (header.depth >= 32);
+                result.metadata.hdrMetadata.isSceneLinear = (header.depth >= 32);
                 return S_OK;
             }
         }
@@ -6370,7 +6667,10 @@ namespace QuickView {
                 result.metadata.FormatDetails = L"Radiance HDR Float";
                 result.metadata.Width = w;
                 result.metadata.Height = h;
-                result.metadata.is_Linear_sRGB = true;
+                result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinear;
+                result.metadata.colorInfo.transfer = QuickView::TransferFunction::Linear;
+                result.metadata.colorInfo.primaries = QuickView::ColorPrimaries::SRGB;
+                result.metadata.colorInfo.nominalBitDepth = 32;
                 result.metadata.hdrMetadata.isValid = true;
                 result.metadata.hdrMetadata.isHdr = true;
                 result.metadata.hdrMetadata.isSceneLinear = true;
@@ -6403,6 +6703,8 @@ namespace QuickView {
                                      srcFormat == GUID_WICPixelFormat64bppRGBA ||
                                      srcFormat == GUID_WICPixelFormat48bppRGB ||
                                      result.metadata.hdrMetadata.isHdr);
+
+                PopulateHdrInfoFromWicPixelFormat(srcFormat, &result.metadata);
 
                 ComPtr<IWICFormatConverter> converter;
                 if (FAILED(factory->CreateFormatConverter(&converter))) return E_FAIL;
@@ -6437,12 +6739,24 @@ namespace QuickView {
                 result.metadata.Height = h;
                 
                 if (isHighBitDepth) {
-                    result.metadata.FormatDetails = L"High Precision (scRGB)";
+                    result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinearScRgb;
+                    result.metadata.colorInfo.transfer = QuickView::TransferFunction::Linear;
+                    result.metadata.colorInfo.primaries = QuickView::ColorPrimaries::SRGB;
+                    result.metadata.colorInfo.nominalBitDepth =
+                        (srcFormat == GUID_WICPixelFormat64bppRGBAHalf || srcFormat == GUID_WICPixelFormat64bppRGBA)
+                            ? 16
+                            : 32;
+
+                    result.metadata.FormatDetails = L"High Precision HEIF";
                     if (result.metadata.hdrMetadata.transfer == QuickView::TransferFunction::PQ) result.metadata.FormatDetails += L" / PQ";
                     else if (result.metadata.hdrMetadata.transfer == QuickView::TransferFunction::HLG) result.metadata.FormatDetails += L" / HLG";
                     
                     if (result.metadata.hdrMetadata.primaries == QuickView::ColorPrimaries::Rec2020) result.metadata.FormatDetails += L" / P2020";
                     else if (result.metadata.hdrMetadata.primaries == QuickView::ColorPrimaries::DisplayP3) result.metadata.FormatDetails += L" / P3";
+                } else {
+                    result.metadata.colorInfo.dataSpace = QuickView::PixelDataSpace::EncodedSdr;
+                    result.metadata.colorInfo.transfer = QuickView::TransferFunction::SRGB;
+                    result.metadata.colorInfo.nominalBitDepth = 8;
                 }
                 return S_OK;
             }
@@ -7537,8 +7851,17 @@ HRESULT CImageLoader::LoadStbImage(LPCWSTR filePath, IWICBitmap** ppBitmap, bool
     }
 
     if (pMetadata) {
-        if (floatFormat) pMetadata->is_Linear_sRGB = true;
-        else pMetadata->is_sRGB = true;
+        if (floatFormat) {
+            pMetadata->colorInfo.dataSpace = QuickView::PixelDataSpace::SceneLinear;
+            pMetadata->colorInfo.transfer = QuickView::TransferFunction::Linear;
+            pMetadata->colorInfo.primaries = QuickView::ColorPrimaries::SRGB;
+            pMetadata->colorInfo.nominalBitDepth = 16;
+        } else {
+            pMetadata->colorInfo.dataSpace = QuickView::PixelDataSpace::EncodedSdr;
+            pMetadata->colorInfo.transfer = QuickView::TransferFunction::SRGB;
+            pMetadata->colorInfo.primaries = QuickView::ColorPrimaries::SRGB;
+            pMetadata->colorInfo.nominalBitDepth = 8;
+        }
 
         if (floatFormat) {
             pMetadata->hdrMetadata.isValid = true;
@@ -8521,7 +8844,7 @@ HRESULT CImageLoader::ReadMetadata(LPCWSTR filePath, ImageMetadata* pMetadata, b
                          path.ends_with(L".dng") || path.ends_with(L".orf") || path.ends_with(L".rw2") || 
                          path.ends_with(L".raf") || path.ends_with(L".pef") || path.ends_with(L".srw") || 
                          path.ends_with(L".cr3") || path.ends_with(L".nrw") ||
-                         path.ends_with(L".heic") || path.ends_with(L".heif"));
+                         path.ends_with(L".heic") || path.ends_with(L".heif") || path.ends_with(L".hif"));
                          
         if (isRawExt) {
             if (SUCCEEDED(ReadMetadataLibRaw(filePath, pMetadata))) {
@@ -8546,6 +8869,17 @@ HRESULT CImageLoader::ReadMetadata(LPCWSTR filePath, ImageMetadata* pMetadata, b
     // Dimensions (if missing)
     if (pMetadata->Width == 0 || pMetadata->Height == 0) {
         frame->GetSize(&pMetadata->Width, &pMetadata->Height);
+    }
+
+    ProbeNativeWicFrameInfo(frame.Get(), m_wicFactory.Get(), pMetadata);
+
+    if ((pMetadata->Format == L"PSD" || pMetadata->Format == L"PSB") &&
+        pMetadata->colorInfo.dataSpace == QuickView::PixelDataSpace::Unknown) {
+        std::vector<uint8_t> header;
+        header.resize(26);
+        if (ReadFileToVector(filePath, header) && header.size() >= 26) {
+            PopulateHdrInfoFromPsdHeader(header.data(), header.size(), pMetadata);
+        }
     }
     
     // 4. Metadata Reader (Standard EXIF + GPS)
@@ -8583,45 +8917,45 @@ HRESULT CImageLoader::ReadMetadata(LPCWSTR filePath, ImageMetadata* pMetadata, b
     if (pMetadata->ColorSpace.empty() || pMetadata->ColorSpace == L"Uncalibrated") {
         UINT count = 0;
         if (SUCCEEDED(frame->GetColorContexts(0, nullptr, &count)) && count > 0) {
-            std::vector<IWICColorContext*> contexts(count);
-            for (UINT i = 0; i < count; i++) m_wicFactory->CreateColorContext(&contexts[i]);
-            
+            std::vector<ComPtr<IWICColorContext>> contexts(count);
+            std::vector<IWICColorContext*> rawContexts(count);
+            for (UINT i = 0; i < count; i++) {
+                m_wicFactory->CreateColorContext(&contexts[i]);
+                rawContexts[i] = contexts[i].Get();
+            }
+
             UINT actual = 0;
-            if (SUCCEEDED(frame->GetColorContexts(count, contexts.data(), &actual))) {
+            if (SUCCEEDED(frame->GetColorContexts(count, rawContexts.data(), &actual))) {
                 bool found = false;
                 for (UINT i = 0; i < actual; i++) {
-                    if (!found) { 
-                        WICColorContextType type;
-                        contexts[i]->GetType(&type);
-                        if (type == WICColorContextExifColorSpace) {
-                            // WIC's wrapper for EXIF ColorSpace tag - usually redundant with above
-                            UINT val = 0; contexts[i]->GetExifColorSpace(&val);
-                            if (val == 1) { pMetadata->ColorSpace = L"sRGB"; found = true; }
-                            else if (val == 2) { pMetadata->ColorSpace = L"Adobe RGB"; found = true; }
-                        } else if (type == WICColorContextProfile) {
-                            // Deep inspect profile
-                            UINT cbProfile = 0;
-                            contexts[i]->GetProfileBytes(0, nullptr, &cbProfile);
-                            if (cbProfile > 0) {
-                                std::vector<BYTE> profile(cbProfile);
-                                if (SUCCEEDED(contexts[i]->GetProfileBytes(cbProfile, profile.data(), &cbProfile))) {
-                                    // Search for signatures
-                                    // [v6.2] Professional Parsing
-                                    std::wstring desc = CImageLoader::ParseICCProfileName(profile.data(), profile.size());
-                                    if (!desc.empty()) {
-                                        pMetadata->ColorSpace = desc;
-                                        found = true;
-                                        pMetadata->HasEmbeddedColorProfile = true; // [Phase 18] Flag it
-                                    } 
+                    if (!contexts[i] || found) continue;
+                    WICColorContextType type;
+                    contexts[i]->GetType(&type);
+                    if (type == WICColorContextExifColorSpace) {
+                        // WIC's wrapper for EXIF ColorSpace tag - usually redundant with above
+                        UINT val = 0; contexts[i]->GetExifColorSpace(&val);
+                        if (val == 1) { pMetadata->ColorSpace = L"sRGB"; found = true; }
+                        else if (val == 2) { pMetadata->ColorSpace = L"Adobe RGB"; found = true; }
+                    } else if (type == WICColorContextProfile) {
+                        UINT cbProfile = 0;
+                        contexts[i]->GetProfileBytes(0, nullptr, &cbProfile);
+                        if (cbProfile > 0) {
+                            std::vector<BYTE> profile(cbProfile);
+                            if (SUCCEEDED(contexts[i]->GetProfileBytes(cbProfile, profile.data(), &cbProfile))) {
+                                std::wstring desc = CImageLoader::ParseICCProfileName(profile.data(), profile.size());
+                                if (!desc.empty()) {
+                                    pMetadata->ColorSpace = desc;
+                                    found = true;
+                                    pMetadata->HasEmbeddedColorProfile = true;
+                                    pMetadata->colorInfo.hasEmbeddedIcc = true;
+                                    if (pMetadata->iccProfileData.empty()) {
+                                        pMetadata->iccProfileData.assign(profile.begin(), profile.end());
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            // Release ALL created contexts
-            for (UINT i = 0; i < count; i++) {
-                if (contexts[i]) contexts[i]->Release();
             }
         }
     }
@@ -10415,8 +10749,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
         outFrame->exifOrientation = res.metadata.ExifOrientation; // [v8.7] Propagate Orientation
         outFrame->iccProfile.assign(res.metadata.iccProfileData.begin(), res.metadata.iccProfileData.end());
 
-        outFrame->is_sRGB = res.metadata.is_sRGB;
-        outFrame->is_Linear_sRGB = res.metadata.is_Linear_sRGB;
+        outFrame->colorInfo = res.metadata.colorInfo;
         outFrame->hdrMetadata = res.metadata.hdrMetadata;
         
         // [v10.1] Preserve original resolution if frame is scaled
@@ -10922,7 +11255,26 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
     if (pMetadata) {
         ReadMetadata(filePath, pMetadata);
         pMetadata->LoaderName = loaderName;
+        PopulateHdrInfoFromWicPixelFormat(outWicFormat, pMetadata);
         if (pMetadata->FormatDetails.empty()) pMetadata->FormatDetails = L"Legacy WIC";
+        // Ensure basic hdrMetadata is always valid for Info Panel display
+        if (!pMetadata->hdrMetadata.isValid) {
+            pMetadata->hdrMetadata.isValid = true;
+            pMetadata->hdrMetadata.transfer = isFloat
+                ? QuickView::TransferFunction::Linear
+                : QuickView::TransferFunction::SRGB;
+            pMetadata->hdrMetadata.primaries = QuickView::ColorPrimaries::SRGB;
+            pMetadata->hdrMetadata.isHdr = isFloat;
+            pMetadata->hdrMetadata.isSceneLinear = isFloat;
+        }
+        if (pMetadata->colorInfo.nominalBitDepth == 0) {
+            pMetadata->colorInfo.nominalBitDepth = isFloat ? 32 : 8;
+        }
+        if (pMetadata->colorInfo.transfer == QuickView::TransferFunction::Unknown) {
+            pMetadata->colorInfo.transfer = isFloat
+                ? QuickView::TransferFunction::Linear
+                : QuickView::TransferFunction::SRGB;
+        }
     }
     
     return S_OK;

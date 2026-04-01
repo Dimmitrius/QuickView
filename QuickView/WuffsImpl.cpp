@@ -89,14 +89,36 @@ static bool DecodePNG_Impl(const uint8_t* data, size_t size,
                WuffsImageInfo* pInfo) {
     if (!data || size == 0) return false;
 
-    // [CMS] 提取 iCCP 并通过 zlib-ng 解压 (Zero-copy 预扫，无视 Wuffs API 版本限制)
-    if (pInfo && pInfo->iccProfile.empty()) {
+    // [CMS/HDR] 预扫 PNG 关键块，提取 bit depth / iCCP / cICP / sRGB。
+    if (pInfo) {
         const uint8_t* p = data;
         size_t offset = 8; // skip PNG signature
         while (offset + 12 <= size) {
             uint32_t chunk_len = (p[offset]<<24) | (p[offset+1]<<16) | (p[offset+2]<<8) | p[offset+3];
             uint32_t chunk_type = (p[offset+4]<<24) | (p[offset+5]<<16) | (p[offset+6]<<8) | p[offset+7];
-            if (chunk_type == 0x69434350) { // 'iCCP' = 0x69 0x43 0x43 0x50
+
+            if (chunk_type == 0x49484452 && chunk_len >= 13) { // IHDR
+                pInfo->bitDepth = p[offset + 8 + 8];
+            } else if (chunk_type == 0x63494350 && chunk_len >= 4) { // cICP
+                const uint8_t primaries = p[offset + 8];
+                const uint8_t transfer = p[offset + 9];
+                if (primaries == 1) pInfo->primaries = QuickView::ColorPrimaries::SRGB;
+                else if (primaries == 9) pInfo->primaries = QuickView::ColorPrimaries::Rec2020;
+                else if (primaries == 11 || primaries == 12) pInfo->primaries = QuickView::ColorPrimaries::DisplayP3;
+
+                if (transfer == 13) pInfo->transfer = QuickView::TransferFunction::SRGB;
+                else if (transfer == 16) pInfo->transfer = QuickView::TransferFunction::PQ;
+                else if (transfer == 18) pInfo->transfer = QuickView::TransferFunction::HLG;
+                else if (transfer == 8) pInfo->transfer = QuickView::TransferFunction::Linear;
+                else if (transfer == 1 || transfer == 6 || transfer == 14 || transfer == 15) pInfo->transfer = QuickView::TransferFunction::Rec709;
+            } else if (chunk_type == 0x73524742 && chunk_len >= 1) { // sRGB
+                if (pInfo->transfer == QuickView::TransferFunction::Unknown) {
+                    pInfo->transfer = QuickView::TransferFunction::SRGB;
+                }
+                if (pInfo->primaries == QuickView::ColorPrimaries::Unknown) {
+                    pInfo->primaries = QuickView::ColorPrimaries::SRGB;
+                }
+            } else if (chunk_type == 0x69434350 && pInfo->iccProfile.empty()) { // iCCP
                 size_t payload_offset = offset + 8;
                 if (payload_offset + chunk_len <= size) {
                     const uint8_t* payload = p + payload_offset;
@@ -123,7 +145,6 @@ static bool DecodePNG_Impl(const uint8_t* data, size_t size,
                         }
                     }
                 }
-                break;
             } else if (chunk_type == 0x49444154 || chunk_type == 0x49454E44) { // IDAT, IEND
                 break;
             }
@@ -163,7 +184,7 @@ static bool DecodePNG_Impl(const uint8_t* data, size_t size,
         // If 16-bit, Wuffs might report it? 
         // Wuffs v0.3+ usually decodes to 8-bit BGRA/RGBA.
         // However, we can check basic assumption:
-        pInfo->bitDepth = 8; // Default
+        if (pInfo->bitDepth <= 0) pInfo->bitDepth = 8; // Default
         
         // Simple heuristic for APNG? Wuffs doesn't easily expose "is_animated" flag in image_config for PNG?
         // Actually it might satisfy "generic" animation interface?

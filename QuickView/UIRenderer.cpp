@@ -47,7 +47,9 @@ static bool PointInRect(float x, float y, const D2D1_RECT_F& rect) {
 namespace {
 static std::wstring FormatHdrNits(float nits);
 static std::wstring FormatHdrStops(float stops);
-static std::wstring BuildHdrSummary(const QuickView::HdrStaticMetadata& hdr);
+static bool IsHdrLikeContent(const CImageLoader::ImageMetadata& metadata);
+static std::wstring BuildDynamicRangeLabel(const CImageLoader::ImageMetadata& metadata);
+static std::wstring BuildHdrSummary(const CImageLoader::ImageMetadata& metadata);
 static std::wstring BuildHdrDetail(const QuickView::HdrStaticMetadata& hdr);
 
 static float GetHdrUiWhiteScale(CompositionEngine* compEngine) {
@@ -193,6 +195,12 @@ HitTestResult UIRenderer::HitTest(float x, float y) {
     if (x >= m_panelCloseRect.left && x <= m_panelCloseRect.right &&
         y >= m_panelCloseRect.top && y <= m_panelCloseRect.bottom) {
         result.type = UIHitResult::PanelClose;
+        return result;
+    }
+
+    if (x >= m_hdrDetailsToggleRect.left && x <= m_hdrDetailsToggleRect.right &&
+        y >= m_hdrDetailsToggleRect.top && y <= m_hdrDetailsToggleRect.bottom) {
+        result.type = UIHitResult::HdrDetailsToggle;
         return result;
     }
     
@@ -1325,10 +1333,10 @@ void UIRenderer::DrawDebugHUD(ID2D1DeviceContext* dc) {
         }
 
         std::wstring imageLine = L"Image: ";
-        if (g_currentMetadata.hdrMetadata.isValid || g_currentMetadata.hdrMetadata.hasGainMap) {
-            const std::wstring hdrSummary = BuildHdrSummary(g_currentMetadata.hdrMetadata);
+        if (IsHdrLikeContent(g_currentMetadata) || g_currentMetadata.hdrMetadata.isValid) {
+            const std::wstring hdrSummary = BuildHdrSummary(g_currentMetadata);
             const std::wstring hdrDetail = BuildHdrDetail(g_currentMetadata.hdrMetadata);
-            imageLine += hdrSummary.empty() ? L"HDR metadata" : hdrSummary;
+            imageLine += hdrSummary.empty() ? BuildDynamicRangeLabel(g_currentMetadata) : hdrSummary;
             if (!hdrDetail.empty()) imageLine += L"  " + hdrDetail;
         } else {
             imageLine += L"SDR / no HDR metadata";
@@ -1539,8 +1547,23 @@ namespace {
     static void AppendFormatToken(std::wstring& target, const std::wstring& token);
     static std::wstring FormatHdrNits(float nits);
     static std::wstring FormatHdrStops(float stops);
-    static std::wstring BuildHdrSummary(const QuickView::HdrStaticMetadata& hdr);
+    static std::wstring FormatHdrRatio(float ratio);
+    static bool IsHdrLikeContent(const CImageLoader::ImageMetadata& metadata);
+    static std::wstring BuildHdrSummary(const CImageLoader::ImageMetadata& metadata);
     static std::wstring BuildHdrDetail(const QuickView::HdrStaticMetadata& hdr);
+    static int ExtractNominalBitDepth(const CImageLoader::ImageMetadata& metadata);
+    static std::wstring BuildDynamicRangeLabel(const CImageLoader::ImageMetadata& metadata);
+    static std::wstring BuildRenderPathLabel(const CImageLoader::ImageMetadata& metadata,
+                                             const QuickView::DisplayColorState& displayState);
+    static std::wstring BuildDisplayHeadroomLabel(const QuickView::DisplayColorState& displayState);
+    static std::wstring BuildMasteringDisplayLabel(const QuickView::HdrStaticMetadata& hdr);
+    static std::wstring BuildGainRatioLabel(const QuickView::HdrStaticMetadata& hdr);
+    static std::wstring BuildGainBlendWeightLabel(const QuickView::HdrStaticMetadata& hdr,
+                                                  const QuickView::DisplayColorState& displayState);
+    static std::wstring BuildTooltipHelpText(const std::wstring& description,
+                                             const std::wstring& highMeaning,
+                                             const std::wstring& lowMeaning,
+                                             const std::wstring& reference);
 }
 
 // ============================================================================
@@ -1551,8 +1574,16 @@ D2D1_SIZE_F UIRenderer::GetRequiredInfoPanelSize() const {
     const float s = m_uiScale;
 
     if (g_runtime.ShowInfoPanel && g_runtime.InfoPanelExpanded) {
-        float width = 260.0f * s;
         std::vector<InfoRow> rows = BuildGridRows(g_currentMetadata, g_imagePath, false);
+        float width = 340.0f * s;
+        for (const auto& row : rows) {
+            float rowWidth = 34.0f * s;
+            rowWidth += MeasureTextWidth(row.label) + 18.0f * s;
+            rowWidth += MeasureTextWidth(row.valueMain) + 12.0f * s;
+            if (!row.valueSub.empty()) rowWidth += MeasureTextWidth(row.valueSub) + 12.0f * s;
+            width = (std::max)(width, rowWidth);
+        }
+        width = (std::clamp)(width, 340.0f * s, 430.0f * s);
         float height = 26.0f * s + (float)rows.size() * GRID_ROW_HEIGHT * s + 14.0f * s;
 
         if (g_currentMetadata.HasGPS) height += 50.0f * s;
@@ -1675,14 +1706,39 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
         rows.push_back({ L"\U0001F3AF", L"Focal", metadata.Focal, focalSub, L"", TruncateMode::None, false });
     }
 
-    if (!metadata.ColorSpace.empty()) {
+    {
         std::wstring colorText = metadata.ColorSpace;
+        const bool hdrLikeContent = IsHdrLikeContent(metadata);
+        if (hdrLikeContent &&
+            (colorText.empty() ||
+             colorText == L"sRGB (Untagged)" ||
+             colorText == L"Embedded Profile" ||
+             colorText == L"Uncalibrated")) {
+            const wchar_t* primaries = QuickView::ToString(
+                metadata.colorInfo.primaries != QuickView::ColorPrimaries::Unknown
+                    ? metadata.colorInfo.primaries
+                    : metadata.hdrMetadata.primaries);
+            if (primaries && wcscmp(primaries, L"Unknown") != 0) {
+                colorText = primaries;
+            }
+        }
+        if (colorText.empty()) {
+            const wchar_t* primaries = QuickView::ToString(metadata.hdrMetadata.primaries);
+            if (primaries && wcscmp(primaries, L"Unknown") != 0) {
+                colorText = primaries;
+            }
+        }
+        if (!colorText.empty()) {
         if (metadata.HasEmbeddedColorProfile) colorText += L" [ICC]";
         rows.push_back({ L"\U0001F3A8", L"Color", colorText, L"", L"", TruncateMode::None, false });
+        }
     }
 
-    if (metadata.hdrMetadata.isValid || metadata.hdrMetadata.hasGainMap) {
-        const std::wstring hdrSummary = BuildHdrSummary(metadata.hdrMetadata);
+    if (metadata.hdrMetadata.isValid ||
+        metadata.hdrMetadata.hasGainMap ||
+        metadata.colorInfo.dataSpace == QuickView::PixelDataSpace::EncodedHdr ||
+        metadata.colorInfo.IsSceneLinear()) {
+        const std::wstring hdrSummary = BuildHdrSummary(metadata);
         const std::wstring hdrDetail = BuildHdrDetail(metadata.hdrMetadata);
         if (!hdrSummary.empty() || !hdrDetail.empty()) {
             rows.push_back({
@@ -1694,6 +1750,63 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
                 TruncateMode::EndEllipsis,
                 false
             });
+        }
+        rows.push_back({
+            L"\U0001F9EA",
+            L"HDR Pro",
+            g_runtime.ShowHdrDetailsExpanded ? L"Hide professional details" : L"Show professional details",
+            g_runtime.ShowHdrDetailsExpanded ? L"\u25BE" : L"\u25B8",
+            L"",
+            TruncateMode::EndEllipsis,
+            true
+        });
+
+        if (g_runtime.ShowHdrDetailsExpanded) {
+            const auto& displayState = m_compEngine->GetDisplayColorState();
+            const int bitDepth = ExtractNominalBitDepth(metadata);
+
+            rows.push_back({ L"\U0001F4CC", L"D.Range", BuildDynamicRangeLabel(metadata), L"", L"", TruncateMode::EndEllipsis, false });
+            if (bitDepth > 0) {
+                wchar_t bitBuf[48];
+                swprintf_s(bitBuf, metadata.colorInfo.IsSceneLinear() ? L"%d-bit Float" : L"%d-bit", bitDepth);
+                rows.push_back({ L"\U0001F522", L"BitDepth", bitBuf, L"", L"", TruncateMode::None, false });
+            }
+            const QuickView::TransferFunction effectiveTransfer =
+                metadata.hdrMetadata.transfer != QuickView::TransferFunction::Unknown
+                    ? metadata.hdrMetadata.transfer
+                    : metadata.colorInfo.transfer;
+            rows.push_back({ L"\U0001F4A0", L"Transfer", QuickView::ToString(effectiveTransfer), L"", L"", TruncateMode::None, false });
+            if (metadata.ColorSpace.empty()) {
+                const wchar_t* primaries = QuickView::ToString(metadata.hdrMetadata.primaries);
+                if (primaries && wcscmp(primaries, L"Unknown") != 0) {
+                    rows.push_back({ L"\U0001F308", L"Gamut", primaries, L"", L"", TruncateMode::None, false });
+                }
+            }
+            if (metadata.hdrMetadata.maxCLLNits > 0.0f) {
+                rows.push_back({ L"\U00002600", L"MaxCLL", FormatHdrNits(metadata.hdrMetadata.maxCLLNits), L"", L"", TruncateMode::None, false });
+            }
+            if (metadata.hdrMetadata.maxFALLNits > 0.0f) {
+                rows.push_back({ L"\U0001F525", L"MaxFALL", FormatHdrNits(metadata.hdrMetadata.maxFALLNits), L"", L"", TruncateMode::None, false });
+            }
+            const std::wstring mastering = BuildMasteringDisplayLabel(metadata.hdrMetadata);
+            if (!mastering.empty()) {
+                rows.push_back({ L"\U0001F5A5", L"Mastering", mastering, L"", mastering, TruncateMode::EndEllipsis, false });
+            }
+            rows.push_back({ L"\U0001F6E0", L"Pipeline", BuildRenderPathLabel(metadata, displayState), L"", L"", TruncateMode::EndEllipsis, false });
+            rows.push_back({ L"\U0001F4A1", L"Headroom", BuildDisplayHeadroomLabel(displayState), L"", L"", TruncateMode::EndEllipsis, false });
+
+            if (metadata.hdrMetadata.hasGainMap) {
+                rows.push_back({ L"\U0001F5BC", L"Base", L"SDR Base Layer", L"", L"", TruncateMode::EndEllipsis, false });
+                rows.push_back({ L"\U0001F4C8", L"GainMap", L"Present (ISO 21496-1)", metadata.hdrMetadata.gainMapApplied ? L"Applied" : L"Detected", L"", TruncateMode::EndEllipsis, false });
+                const std::wstring gainRatio = BuildGainRatioLabel(metadata.hdrMetadata);
+                if (!gainRatio.empty()) {
+                    rows.push_back({ L"\U00002696", L"GainRatio", gainRatio, L"", gainRatio, TruncateMode::EndEllipsis, false });
+                }
+                const std::wstring gainWeight = BuildGainBlendWeightLabel(metadata.hdrMetadata, displayState);
+                if (!gainWeight.empty()) {
+                    rows.push_back({ L"\U0001F500", L"Blend", gainWeight, L"", gainWeight, TruncateMode::EndEllipsis, false });
+                }
+            }
         }
     }
 
@@ -1760,10 +1873,17 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
     for (auto& row : rows) {
         TooltipInfo info = GetTooltipInfo(row.label);
         if (!info.description.empty()) {
-            row.fullText = info.description + L"\n" + 
-                          AppStrings::HUD_Label_High + info.highMeaning + L"\n" + 
-                          AppStrings::HUD_Label_Low + info.lowMeaning + L"\n" + 
-                          AppStrings::HUD_Label_Ref + info.reference;
+            const std::wstring helpText = BuildTooltipHelpText(
+                info.description,
+                info.highMeaning,
+                info.lowMeaning,
+                info.reference);
+            if (row.fullText.empty()) {
+                row.fullText = row.label + L": " + row.valueMain;
+                if (!row.valueSub.empty()) row.fullText += L" " + row.valueSub;
+            }
+            row.fullText += L"\n\n";
+            row.fullText += helpText;
         }
     }
 
@@ -1771,6 +1891,12 @@ std::vector<InfoRow> UIRenderer::BuildGridRows(const CImageLoader::ImageMetadata
 }
 
 namespace {
+    static bool IsHdrLikeContent(const CImageLoader::ImageMetadata& metadata) {
+        return metadata.hdrMetadata.hasGainMap ||
+               metadata.colorInfo.dataSpace == QuickView::PixelDataSpace::EncodedHdr ||
+               metadata.colorInfo.IsSceneLinear();
+    }
+
     static std::wstring FormatHdrNits(float nits) {
         if (!(nits > 0.0f)) return L"";
         wchar_t buf[32];
@@ -1785,7 +1911,138 @@ namespace {
         return buf;
     }
 
-    static std::wstring BuildHdrSummary(const QuickView::HdrStaticMetadata& hdr) {
+    static std::wstring FormatHdrRatio(float ratio) {
+        if (!(ratio > 0.0f)) return L"";
+        wchar_t buf[32];
+        swprintf_s(buf, L"%.2fx", ratio);
+        return buf;
+    }
+
+    static int ExtractNominalBitDepth(const CImageLoader::ImageMetadata& metadata) {
+        if (metadata.colorInfo.nominalBitDepth > 0) return metadata.colorInfo.nominalBitDepth;
+
+        const size_t bitPos = metadata.FormatDetails.find(L"-bit");
+        if (bitPos != std::wstring::npos) {
+            size_t start = bitPos;
+            while (start > 0 && iswdigit(metadata.FormatDetails[start - 1])) {
+                --start;
+            }
+            if (start < bitPos) {
+                return _wtoi(metadata.FormatDetails.substr(start, bitPos - start).c_str());
+            }
+        }
+        return 0;
+    }
+
+    static std::wstring BuildDynamicRangeLabel(const CImageLoader::ImageMetadata& metadata) {
+        const auto& hdr = metadata.hdrMetadata;
+        if (metadata.FormatDetails.find(L"Ultra HDR") != std::wstring::npos || hdr.hasGainMap) {
+            return L"Ultra HDR (Gain Map)";
+        }
+        if (hdr.transfer == QuickView::TransferFunction::PQ) return L"HDR10 (PQ)";
+        if (hdr.transfer == QuickView::TransferFunction::HLG) return L"HLG";
+        if (metadata.colorInfo.dataSpace == QuickView::PixelDataSpace::EncodedHdr) {
+            return L"HDR";
+        }
+        if (metadata.colorInfo.IsSceneLinear()) {
+            return L"HDR (Linear)";
+        }
+        return L"SDR";
+    }
+
+    static std::wstring BuildRenderPathLabel(const CImageLoader::ImageMetadata& metadata,
+                                             const QuickView::DisplayColorState& displayState) {
+        const bool hdrContent = IsHdrLikeContent(metadata);
+        if (hdrContent) {
+            if (displayState.advancedColorActive && g_config.EnableAdvancedColor) {
+                return L"[HDR Direct] DirectComposition scRGB (FP16)";
+            }
+            return L"[SDR Fallback] GPU Tone Mapped to SDR";
+        }
+        return L"[SDR Native] D2D Color Management";
+    }
+
+    static std::wstring BuildDisplayHeadroomLabel(const QuickView::DisplayColorState& displayState) {
+        const float sdrWhite = displayState.sdrWhiteLevelNits > 0.0f ? displayState.sdrWhiteLevelNits : 80.0f;
+        const float peak = displayState.maxLuminanceNits > 0.0f ? displayState.maxLuminanceNits : sdrWhite;
+        std::wstring label = FormatHdrRatio(peak / sdrWhite);
+        if (!label.empty()) label += L" ";
+        wchar_t buf[96];
+        swprintf_s(buf, L"(%.0f nits SDR / %.0f nits Max)", sdrWhite, peak);
+        label += buf;
+        return label;
+    }
+
+    static std::wstring BuildMasteringDisplayLabel(const QuickView::HdrStaticMetadata& hdr) {
+        if (!(hdr.masteringMinNits > 0.0f) && !(hdr.masteringMaxNits > 0.0f)) return L"";
+        std::wstring label;
+        if (hdr.masteringMinNits > 0.0f) {
+            label += L"Min ";
+            label += FormatHdrNits(hdr.masteringMinNits);
+        }
+        if (hdr.masteringMaxNits > 0.0f) {
+            if (!label.empty()) label += L", ";
+            label += L"Max ";
+            label += FormatHdrNits(hdr.masteringMaxNits);
+        }
+        return label;
+    }
+
+    static std::wstring BuildGainRatioLabel(const QuickView::HdrStaticMetadata& hdr) {
+        if (!hdr.hasGainMap) return L"";
+        const float minRatio = exp2f(hdr.gainMapBaseHeadroom);
+        const float maxRatio = exp2f((hdr.gainMapAlternateHeadroom > hdr.gainMapBaseHeadroom) ? hdr.gainMapAlternateHeadroom : hdr.gainMapBaseHeadroom);
+        std::wstring label = L"Min ";
+        label += FormatHdrRatio(minRatio);
+        label += L", Max ";
+        label += FormatHdrRatio(maxRatio);
+        return label;
+    }
+
+    static std::wstring BuildGainBlendWeightLabel(const QuickView::HdrStaticMetadata& hdr,
+                                                  const QuickView::DisplayColorState& displayState) {
+        if (!hdr.hasGainMap) return L"";
+        const float baseStops = hdr.gainMapBaseHeadroom;
+        const float altStops = hdr.gainMapAlternateHeadroom;
+        const float currentStops = hdr.gainMapAppliedHeadroom > 0.0f ? hdr.gainMapAppliedHeadroom : displayState.GetHdrHeadroomStops();
+        float weight = 0.0f;
+        if (altStops > baseStops + 0.001f) {
+            weight = (currentStops - baseStops) / (altStops - baseStops);
+        } else if (currentStops > 0.0f) {
+            weight = 1.0f;
+        }
+        weight = (std::clamp)(weight, 0.0f, 1.0f);
+        wchar_t buf[80];
+        swprintf_s(buf, L"%.2f (%.2f st target)", weight, currentStops);
+        return buf;
+    }
+
+    static std::wstring BuildTooltipHelpText(const std::wstring& description,
+                                             const std::wstring& highMeaning,
+                                             const std::wstring& lowMeaning,
+                                             const std::wstring& reference) {
+        if (description.empty()) return L"";
+        std::wstring text = description;
+        if (!highMeaning.empty()) {
+            text += L"\n";
+            text += AppStrings::HUD_Label_High;
+            text += highMeaning;
+        }
+        if (!lowMeaning.empty()) {
+            text += L"\n";
+            text += AppStrings::HUD_Label_Low;
+            text += lowMeaning;
+        }
+        if (!reference.empty()) {
+            text += L"\n";
+            text += AppStrings::HUD_Label_Ref;
+            text += reference;
+        }
+        return text;
+    }
+
+    static std::wstring BuildHdrSummary(const CImageLoader::ImageMetadata& metadata) {
+        const auto& hdr = metadata.hdrMetadata;
         if (!hdr.isValid && !hdr.hasGainMap) return L"";
 
         std::wstring summary = QuickView::ToString(hdr.transfer);
@@ -1805,7 +2062,7 @@ namespace {
             summary += L"[GainMap]";
         }
 
-        if (hdr.isSceneLinear) {
+        if (metadata.colorInfo.IsSceneLinear()) {
             if (!summary.empty()) summary += L" ";
             summary += L"[Linear]";
         }
@@ -1857,6 +2114,7 @@ namespace {
 }
 
 void UIRenderer::BuildInfoGrid() {
+    m_hdrDetailsToggleRect = {};
     m_infoGrid = BuildGridRows(g_currentMetadata, g_imagePath, false);
 }
 
@@ -1877,12 +2135,16 @@ void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY
     float valueColStart = startX + iconW + labelW;
     float valueColWidth = width - iconW - labelW - gridPad;
     float y = startY;
+    m_hdrDetailsToggleRect = {};
     
     for (size_t i = 0; i < m_infoGrid.size(); i++) {
         auto& row = m_infoGrid[i];
         
         // Calculate hit rect
         row.hitRect = D2D1::RectF(startX, y, startX + width, y + rowH);
+        if (row.label == L"HDR Pro") {
+            m_hdrDetailsToggleRect = row.hitRect;
+        }
         
         // Hover highlight
         if ((int)i == m_hoverRowIndex) {
@@ -1895,20 +2157,38 @@ void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY
         
         // Label column (gray)
         D2D1_RECT_F labelRect = D2D1::RectF(startX + iconW, y, valueColStart, y + rowH);
-        dc->DrawText(row.label.c_str(), (UINT32)row.label.length(), m_panelFormat.Get(), labelRect, brushGray.Get());
+        const float labelMaxWidth = (labelW > 6.0f * s) ? (labelW - 6.0f * s) : labelW;
+        const std::wstring displayLabel = MakeEndEllipsis(labelMaxWidth, row.label);
+        const bool labelTruncated = (displayLabel != row.label);
+        dc->DrawText(displayLabel.c_str(), (UINT32)displayLabel.length(), m_panelFormat.Get(), labelRect, brushGray.Get());
         
         // Value column - apply truncation
-        float subWidth = row.valueSub.empty() ? 0 : MeasureTextWidth(row.valueSub) + 5.0f * s;
+        const float desiredSubWidth = row.valueSub.empty() ? 0 : MeasureTextWidth(row.valueSub) + 5.0f * s;
+        const float maxSubWidth = row.valueSub.empty() ? 0.0f : valueColWidth * 0.42f;
+        float subWidth = row.valueSub.empty() ? 0.0f : (std::min)(desiredSubWidth, maxSubWidth);
         float mainMaxWidth = valueColWidth - subWidth;
+        if (mainMaxWidth < valueColWidth * 0.45f) {
+            mainMaxWidth = valueColWidth * 0.45f;
+            subWidth = row.valueSub.empty() ? 0.0f : (valueColWidth - mainMaxWidth);
+        }
+        if (mainMaxWidth < 24.0f * s) mainMaxWidth = 24.0f * s;
         
         if (row.mode == TruncateMode::MiddleEllipsis) {
             row.displayText = MakeMiddleEllipsis(mainMaxWidth, row.valueMain);
         } else if (row.mode == TruncateMode::EndEllipsis) {
             row.displayText = MakeEndEllipsis(mainMaxWidth, row.valueMain);
         } else {
-            row.displayText = row.valueMain;
+            row.displayText = MakeEndEllipsis(mainMaxWidth, row.valueMain);
         }
-        row.isTruncated = (row.displayText != row.valueMain);
+        const std::wstring displaySub = row.valueSub.empty() ? L"" : MakeEndEllipsis(subWidth, row.valueSub);
+        row.isTruncated = (row.displayText != row.valueMain) || (displaySub != row.valueSub) || labelTruncated;
+
+        if (row.fullText.empty()) {
+            row.fullText = row.label + L": " + row.valueMain;
+            if (!row.valueSub.empty()) {
+                row.fullText += L" " + row.valueSub;
+            }
+        }
         
         // Draw main value
         D2D1_RECT_F valueRect = D2D1::RectF(valueColStart, y, valueColStart + mainMaxWidth, y + rowH);
@@ -1917,7 +2197,7 @@ void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY
         // Draw sub value (gray)
         if (!row.valueSub.empty()) {
             D2D1_RECT_F subRect = D2D1::RectF(valueColStart + mainMaxWidth, y, startX + width, y + rowH);
-            dc->DrawText(row.valueSub.c_str(), (UINT32)row.valueSub.length(), m_panelFormat.Get(), subRect, brushGray.Get());
+            dc->DrawText(displaySub.c_str(), (UINT32)displaySub.length(), m_panelFormat.Get(), subRect, brushGray.Get());
         }
         
         y += rowH;
@@ -2097,6 +2377,15 @@ void UIRenderer::DrawCompactInfo(ID2D1DeviceContext* dc) {
             info += L"   [" + compactDetails + L"]";
         }
     }
+
+    if (IsHdrLikeContent(g_currentMetadata) || g_currentMetadata.hdrMetadata.isValid) {
+        const std::wstring dynamicRange = BuildDynamicRangeLabel(g_currentMetadata);
+        if (!dynamicRange.empty()) {
+            info += L"   [";
+            info += dynamicRange;
+            info += L"]";
+        }
+    }
     
     float textW = MeasureTextWidth(info);
     float totalW = textW + 56.0f * s;
@@ -2135,7 +2424,15 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     
     // Panel Rect
     float padding = 8.0f * s;
-    float width = 260.0f * s; 
+    float width = 340.0f * s;
+    for (const auto& row : m_infoGrid) {
+        float rowWidth = 34.0f * s;
+        rowWidth += MeasureTextWidth(row.label) + 18.0f * s;
+        rowWidth += MeasureTextWidth(row.valueMain) + 12.0f * s;
+        if (!row.valueSub.empty()) rowWidth += MeasureTextWidth(row.valueSub) + 12.0f * s;
+        width = (std::max)(width, rowWidth);
+    }
+    width = (std::clamp)(width, 340.0f * s, 430.0f * s);
     float height = 26.0f * s + (float)m_infoGrid.size() * GRID_ROW_HEIGHT * s + 14.0f * s;
     float startX = 16.0f * s;
     float startY = 32.0f * s; 

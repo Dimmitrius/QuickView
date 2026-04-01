@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory_resource>
 #include <functional>
+#include "DisplayColorInfo.h"
 
 namespace WuffsLoader {
 
@@ -23,6 +24,8 @@ struct WuffsImageInfo {
     int bitDepth = 0;       // e.g. 8, 16
     bool hasAlpha = false;  // true if alpha channel exists (or transparency)
     bool isAnim = false;    // true if animated (APNG)
+    QuickView::TransferFunction transfer = QuickView::TransferFunction::Unknown;
+    QuickView::ColorPrimaries primaries = QuickView::ColorPrimaries::Unknown;
     
     // [CMS] 提取出的原始 ICC 配置数据 (如果是 zlib 压缩的，Wuffs 返回时我们会当场解压放进来)
     std::pmr::vector<uint8_t> iccProfile;

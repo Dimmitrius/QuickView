@@ -526,7 +526,7 @@ HRESULT CompositionEngine::Initialize(HWND hwnd, ID3D11Device* d3dDevice, ID2D1D
 
 bool CompositionEngine::RefreshDisplayColorState() {
     const bool changed = m_displayColorInfo.Refresh(m_hwnd);
-    m_isAdvancedColor = m_displayColorInfo.GetState().ShouldUseScRgbPipeline();
+    m_isAdvancedColor = m_allowAdvancedColor && m_displayColorInfo.GetState().ShouldUseScRgbPipeline();
     m_surfaceFormat = m_isAdvancedColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
 
     if (m_isAdvancedColor) {

@@ -2485,6 +2485,7 @@ void RequestRepaint(PaintLayer layer) {
 static void RefreshDisplayColorPipeline(HWND hwnd, bool requestFullRepaint) {
     if (!g_compEngine) return;
 
+    g_compEngine->SetAdvancedColorEnabled(g_config.EnableAdvancedColor);
     const bool changed = g_compEngine->RefreshDisplayColorState();
     const float displayHdrHeadroomStops = GetCurrentDisplayHdrHeadroomStops();
     if (g_renderEngine) {
@@ -4043,9 +4044,13 @@ static constexpr FormatExtRule g_formatRules[] = {
     { L"tif",  L".tiff", L".tif" },
     { L"heif", L".heic", L".heif" },
     { L"heic", L".heic", L".heif" },
+    { L"hif",  L".hif", L".heic", L".heif" },
     { L"hdr",  L".hdr", L".pic" },
     { L"psd",  L".psd", L".psb" },
     { L"exr",  L".exr" },
+    { L"jxr",  L".jxr", L".wdp", L".hdp" },
+    { L"wdp",  L".wdp", L".jxr", L".hdp" },
+    { L"hdp",  L".hdp", L".wdp", L".jxr" },
     { L"qoi",  L".qoi" },
     { L"tga",  L".tga", L".icb", L".vda", L".vst" },
     { L"pcx",  L".pcx" },
@@ -5675,6 +5680,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     // Initialize DirectComposition (Visual Ping-Pong Architecture)
     // g_compEngine = std::make_unique<CompositionEngine>();
     g_compEngine = new CompositionEngine();
+    g_compEngine->SetAdvancedColorEnabled(g_config.EnableAdvancedColor);
     if (SUCCEEDED(g_compEngine->Initialize(hwnd, g_renderEngine->GetD3DDevice(), g_renderEngine->GetD2DDevice()))) {
         g_renderEngine->SetAdvancedColorMode(g_compEngine->IsAdvancedColor());
         g_renderEngine->SetDisplayColorState(g_compEngine->GetDisplayColorState());
@@ -5732,7 +5738,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
         ofn.hwndOwner = hwnd;
         ofn.lpstrFile = szFile;
         ofn.nMaxFile = MAX_PATH;
-        ofn.lpstrFilter = L"All Images\0*.jpg;*.jpeg;*.jpe;*.jfif;*.png;*.bmp;*.dib;*.gif;*.tif;*.tiff;*.ico;*.webp;*.avif;*.heic;*.heif;*.svg;*.svgz;*.jxl;*.exr;*.hdr;*.pic;*.psd;*.psb;*.tga;*.pcx;*.qoi;*.wbmp;*.pam;*.pbm;*.pgm;*.ppm;*.wdp;*.hdp;*.arw;*.cr2;*.cr3;*.crw;*.dng;*.nef;*.orf;*.raf;*.rw2;*.srw;*.x3f;*.mrw;*.mos;*.kdc;*.dcr;*.sr2;*.pef;*.erf;*.3fr;*.mef;*.nrw;*.raw\0All Files\0*.*\0";
+        ofn.lpstrFilter = L"All Images\0*.jpg;*.jpeg;*.jpe;*.jfif;*.png;*.bmp;*.dib;*.gif;*.tif;*.tiff;*.ico;*.webp;*.avif;*.heic;*.heif;*.hif;*.svg;*.svgz;*.jxl;*.exr;*.hdr;*.pic;*.psd;*.psb;*.tga;*.pcx;*.qoi;*.wbmp;*.pam;*.pbm;*.pgm;*.ppm;*.wdp;*.hdp;*.jxr;*.arw;*.cr2;*.cr3;*.crw;*.dng;*.nef;*.orf;*.raf;*.rw2;*.srw;*.x3f;*.mrw;*.mos;*.kdc;*.dcr;*.sr2;*.pef;*.erf;*.3fr;*.mef;*.nrw;*.raw\0All Files\0*.*\0";
         ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
         if (GetOpenFileNameW(&ofn)) {
             g_navigator.Initialize(szFile);
@@ -7078,6 +7084,11 @@ SKIP_EDGE_NAV:;
                       RequestRepaint(PaintLayer::All);
                       return 0;
 
+                 case UIHitResult::HdrDetailsToggle:
+                     g_runtime.ShowHdrDetailsExpanded = !g_runtime.ShowHdrDetailsExpanded;
+                     RequestRepaint(PaintLayer::All);
+                     return 0;
+
                  case UIHitResult::HudToggleLite:
                      // Toggle between Lite (0) and Normal (1)
                      if (g_runtime.CompareHudMode == 0) {
@@ -8133,7 +8144,7 @@ SKIP_EDGE_NAV:;
             ofn.hwndOwner = hwnd;
             ofn.lpstrFile = szFile;
             ofn.nMaxFile = MAX_PATH;
-            ofn.lpstrFilter = L"All Images\0*.jpg;*.jpeg;*.jpe;*.jfif;*.png;*.bmp;*.dib;*.gif;*.tif;*.tiff;*.ico;*.webp;*.avif;*.heic;*.heif;*.svg;*.svgz;*.jxl;*.exr;*.hdr;*.pic;*.psd;*.psb;*.tga;*.pcx;*.qoi;*.wbmp;*.pam;*.pbm;*.pgm;*.ppm;*.wdp;*.hdp;*.arw;*.cr2;*.cr3;*.crw;*.dng;*.nef;*.orf;*.raf;*.rw2;*.srw;*.x3f;*.mrw;*.mos;*.kdc;*.dcr;*.sr2;*.pef;*.erf;*.3fr;*.mef;*.nrw;*.raw\0All Files\0*.*\0";
+            ofn.lpstrFilter = L"All Images\0*.jpg;*.jpeg;*.jpe;*.jfif;*.png;*.bmp;*.dib;*.gif;*.tif;*.tiff;*.ico;*.webp;*.avif;*.heic;*.heif;*.hif;*.svg;*.svgz;*.jxl;*.exr;*.hdr;*.pic;*.psd;*.psb;*.tga;*.pcx;*.qoi;*.wbmp;*.pam;*.pbm;*.pgm;*.ppm;*.wdp;*.hdp;*.jxr;*.arw;*.cr2;*.cr3;*.crw;*.dng;*.nef;*.orf;*.raf;*.rw2;*.srw;*.x3f;*.mrw;*.mos;*.kdc;*.dcr;*.sr2;*.pef;*.erf;*.3fr;*.mef;*.nrw;*.raw\0All Files\0*.*\0";
             ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
                     if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left) {
@@ -9190,6 +9201,17 @@ void ProcessEngineEvents(HWND hwnd) {
                 if (!finalMetadata.HasEmbeddedColorProfile && g_currentMetadata.HasEmbeddedColorProfile) {
                     finalMetadata.HasEmbeddedColorProfile = true;
                 }
+
+                // 8. HDR / Pixel Workspace: preserve decoder-provided high-value metadata
+                if (finalMetadata.colorInfo.dataSpace == QuickView::PixelDataSpace::Unknown &&
+                    g_currentMetadata.colorInfo.dataSpace != QuickView::PixelDataSpace::Unknown) {
+                    finalMetadata.colorInfo = g_currentMetadata.colorInfo;
+                }
+                if (!finalMetadata.hdrMetadata.isValid &&
+                    !finalMetadata.hdrMetadata.hasGainMap &&
+                    (g_currentMetadata.hdrMetadata.isValid || g_currentMetadata.hdrMetadata.hasGainMap)) {
+                    finalMetadata.hdrMetadata = g_currentMetadata.hdrMetadata;
+                }
                 
                  // [v5.3 Fix] Do NOT force true here.
                  // We want UIRenderer to detect "false" and trigger RequestFullMetadata (Async).
@@ -9197,6 +9219,7 @@ void ProcessEngineEvents(HWND hwnd) {
 
                 // Metadata - Full Copy (Propagate EXIF/Histograms/LoaderName)
                 g_currentMetadata = finalMetadata;
+                g_runtime.ShowHdrDetailsExpanded = false;
 
                 // [Feature] Auto Fullscreen on Open
                 static ImageID lastFullscreenTriggeredId = ~(0ULL);
@@ -9391,6 +9414,8 @@ void ProcessEngineEvents(HWND hwnd) {
                  if (!evt.metadata.ExposureProgram.empty()) g_currentMetadata.ExposureProgram = evt.metadata.ExposureProgram;
                  if (!evt.metadata.ColorSpace.empty()) g_currentMetadata.ColorSpace = evt.metadata.ColorSpace;
                  if (evt.metadata.HasEmbeddedColorProfile) g_currentMetadata.HasEmbeddedColorProfile = true;
+                 if (evt.metadata.colorInfo.dataSpace != QuickView::PixelDataSpace::Unknown) g_currentMetadata.colorInfo = evt.metadata.colorInfo;
+                 if (evt.metadata.hdrMetadata.isValid || evt.metadata.hdrMetadata.hasGainMap) g_currentMetadata.hdrMetadata = evt.metadata.hdrMetadata;
                  
                  // [v6.3] Propagate Format Details & Format
                  if (!evt.metadata.FormatDetails.empty()) g_currentMetadata.FormatDetails = evt.metadata.FormatDetails;
@@ -9805,7 +9830,7 @@ static bool ShouldUsePhase2TitanDebounce(const std::wstring& path, uintmax_t fil
          fmtUpper == L"WEBP" || fmtUpper == L"PNG" ||
          fmtUpper == L"JXL" || fmtUpper == L"TIF" ||
          fmtUpper == L"TIFF" || fmtUpper == L"AVIF" ||
-         fmtUpper == L"HEIC");
+         fmtUpper == L"HEIC" || fmtUpper == L"HIF");
 
     const bool sizeTrigger = (info.width > 8192 || info.height > 8192);
     const size_t pixelCount = (size_t)info.width * (size_t)info.height;
@@ -10043,7 +10068,8 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
 // [v3.1] Global Quality Level (0=Default/Bilinear, 1=Bicubic, 2=Nearest)
     // [v5.5 Fix] Reset global metadata to prevent stale data merging
     // Crucial for the Race Fix in FullReady to work correctly!
-    g_currentMetadata = {}; 
+    g_currentMetadata = {};
+    g_runtime.ShowHdrDetailsExpanded = false;
     g_currentMetadata.IsFullMetadataLoaded = false;
 
     // Phase 1: zero-latency placeholder chain

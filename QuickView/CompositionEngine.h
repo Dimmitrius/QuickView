@@ -114,6 +114,7 @@ public:
     UINT GetWidth() const { return m_width; }
     UINT GetHeight() const { return m_height; }
     bool IsAdvancedColor() const { return m_isAdvancedColor; }
+    void SetAdvancedColorEnabled(bool enabled) { m_allowAdvancedColor = enabled; }
     const QuickView::DisplayColorState& GetDisplayColorState() const { return m_displayColorInfo.GetState(); }
     bool RefreshDisplayColorState();
     
@@ -210,6 +211,7 @@ private:
     ComPtr<ID2D1Device> m_d2dDevice;
 
     // Advanced Color (HDR) Support
+    bool m_allowAdvancedColor = true;
     bool m_isAdvancedColor = false;
     DXGI_FORMAT m_surfaceFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
     QuickView::DisplayColorInfo m_displayColorInfo;

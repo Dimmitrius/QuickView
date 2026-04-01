@@ -98,9 +98,8 @@ public:
     bool HasSharpness = false;
     bool HasEntropy = false;
 
-    // [CMS] Color Management fallback tags & payload
-    bool is_sRGB = false;
-    bool is_Linear_sRGB = false;
+    // [CMS] Unified pixel workspace description
+    QuickView::PixelColorInfo colorInfo;
     std::pmr::vector<uint8_t> iccProfileData; // [CMS] Extracted raw ICC payload
     QuickView::HdrStaticMetadata hdrMetadata;
 

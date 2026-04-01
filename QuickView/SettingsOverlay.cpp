@@ -202,7 +202,7 @@ bool SettingsOverlay::RegisterAssociations() {
         L".webp", L".avif", L".heic", L".heif", L".svg", L".svgz", L".jxl",
         // Professional / HDR / Legacy
         L".exr", L".hdr", L".pic", L".psd", L".psb", L".tga", L".pcx", L".qoi", 
-        L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp",
+        L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp", L".jxr", L".hif",
         // RAW Formats (LibRaw supported)
         L".arw", L".cr2", L".cr3", L".crw", L".dng", L".nef", L".orf", L".raf", L".rw2", L".srw", L".x3f",
         L".mrw", L".mos", L".kdc", L".dcr", L".sr2", L".pef", L".erf", L".3fr", L".mef", L".nrw"
@@ -301,7 +301,7 @@ void SettingsOverlay::UnregisterAssociations() {
         L".tif", L".tiff", L".ico", 
         L".webp", L".avif", L".heic", L".heif", L".svg", L".svgz", L".jxl",
         L".exr", L".hdr", L".pic", L".psd", L".psb", L".tga", L".pcx", L".qoi", 
-        L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp",
+        L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp", L".jxr", L".hif",
         L".arw", L".cr2", L".cr3", L".crw", L".dng", L".nef", L".orf", L".raf", L".rw2", L".srw", L".x3f",
         L".mrw", L".mos", L".kdc", L".dcr", L".sr2", L".pef", L".erf", L".3fr", L".mef", L".nrw"
     };
@@ -1207,7 +1207,12 @@ void SettingsOverlay::BuildMenu() {
         SaveConfig();
         extern HWND g_mainHwnd;
         extern FireAndForget LoadImageAsync(HWND hwnd, std::wstring path, bool showOSD = true, QuickView::BrowseDirection dir = QuickView::BrowseDirection::IDLE);
-        LoadImageAsync(g_mainHwnd, g_imagePath, false, QuickView::BrowseDirection::IDLE);
+        if (g_mainHwnd) {
+            SendMessageW(g_mainHwnd, WM_DISPLAYCHANGE, 0, 0);
+            if (!g_imagePath.empty()) {
+                LoadImageAsync(g_mainHwnd, g_imagePath, false, QuickView::BrowseDirection::IDLE);
+            }
+        }
     };
     tabImage.items.push_back(itemAdvColor);
 

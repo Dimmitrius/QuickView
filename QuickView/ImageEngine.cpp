@@ -290,6 +290,11 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
                 e.metadata.Height = (cachedFrame->srcHeight > 0) ? cachedFrame->srcHeight : cachedFrame->height;
                 e.metadata.Format = info.format;
                 e.metadata.FileSize = info.fileSize;
+                e.metadata.FormatDetails = cachedFrame->formatDetails;
+                e.metadata.colorInfo = cachedFrame->colorInfo;
+                e.metadata.hdrMetadata = cachedFrame->hdrMetadata;
+                e.metadata.HasEmbeddedColorProfile =
+                    cachedFrame->colorInfo.hasEmbeddedIcc || !cachedFrame->iccProfile.empty();
                 
                 if (cachedFrame->IsSvg()) e.metadata.Format = L"SVG"; 
 
@@ -455,9 +460,10 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
         return; // JXL dispatched
     }
     
-    // 6. Specialized Dispatch for TIFF/HEIC/HEIF/AVIF/PSD/HDR/PIC/PCX/EXR (30ms budget optimization)
+    // 6. Specialized Dispatch for TIFF/HEIC/HEIF/AVIF/PSD/HDR/PIC/PCX/EXR/JXR (30ms budget optimization)
     if (info.format == L"TIFF" || info.format == L"HEIC" || info.format == L"HEIF" || info.format == L"AVIF" ||
-        info.format == L"PSD"  || info.format == L"HDR"  || info.format == L"PIC"  || info.format == L"PCX" || info.format == L"EXR") {
+        info.format == L"PSD"  || info.format == L"HDR"  || info.format == L"PIC"  || info.format == L"PCX" ||
+        info.format == L"EXR"  || info.format == L"JXR") {
         uint64_t pixels = (uint64_t)info.width * info.height;
         bool isSmall = false;
 
@@ -488,9 +494,9 @@ void ImageEngine::DispatchImageLoad(const std::wstring& path, ImageID imageId, u
             isSmall = (pixels > 0 && pixels <= 2100000);
         }
         else {
-            // HEIC/HEIF/AVIF: < 2.1MP (FHD)
-            // Compute intensive. Limit to FHD for FastLane (target < 30ms).
-            // [Fix] Ensure pixels > 0. PeekHeader fails for HEIC (avifDecoder doesn't support HEVC), 
+            // HEIC/HEIF/AVIF/JXR: < 2.1MP (FHD)
+            // Compute intensive or WIC high-precision. Limit to FHD for FastLane.
+            // [Fix] Ensure pixels > 0. PeekHeader fails for some containers/codecs,
             // so width=0. We MUST treat unknown size as Large to prevent blocking UI.
             isSmall = (pixels > 0 && pixels <= 2100000);
         }
@@ -1118,8 +1124,7 @@ void ImageEngine::FastLane::QueueWorker() {
                     
                     // [CMS] Propagate color profile and HDR metadata
                     safeFrame->iccProfile = std::move(rawFrame.iccProfile);
-                    safeFrame->is_sRGB = rawFrame.is_sRGB;
-                    safeFrame->is_Linear_sRGB = rawFrame.is_Linear_sRGB;
+                    safeFrame->colorInfo = rawFrame.colorInfo;
                     safeFrame->hdrMetadata = rawFrame.hdrMetadata;
                     safeFrame->srcWidth = rawFrame.srcWidth;
                     safeFrame->srcHeight = rawFrame.srcHeight;
@@ -1151,6 +1156,10 @@ void ImageEngine::FastLane::QueueWorker() {
                 e.metadata.FormatDetails = rawFrame.formatDetails;
                 e.metadata.LoaderName = loaderName;
                 e.metadata.FileSize = info.fileSize;
+                e.metadata.colorInfo = rawFrame.colorInfo;
+                e.metadata.hdrMetadata = rawFrame.hdrMetadata;
+                e.metadata.HasEmbeddedColorProfile =
+                    rawFrame.colorInfo.hasEmbeddedIcc || !safeFrame->iccProfile.empty();
 
                 // [v5.3] Metadata is now populated by LoadToFrame (Unified path)
                 // We don't call LoadToFrame with pMetadata in FastLane currently, 
@@ -1497,8 +1506,7 @@ void ImageEngine::AddToCache(int index, const std::wstring& path, std::shared_pt
             
             // [CMS] Propagate color profile and HDR metadata
             cachedFrame->iccProfile = frame->iccProfile;
-            cachedFrame->is_sRGB = frame->is_sRGB;
-            cachedFrame->is_Linear_sRGB = frame->is_Linear_sRGB;
+            cachedFrame->colorInfo = frame->colorInfo;
             cachedFrame->hdrMetadata = frame->hdrMetadata;
         } else {
             // Raster: Deep copy pixels to heap
@@ -1520,8 +1528,7 @@ void ImageEngine::AddToCache(int index, const std::wstring& path, std::shared_pt
             
             // [CMS] Propagate color profile and HDR metadata
             cachedFrame->iccProfile = frame->iccProfile;
-            cachedFrame->is_sRGB = frame->is_sRGB;
-            cachedFrame->is_Linear_sRGB = frame->is_Linear_sRGB;
+            cachedFrame->colorInfo = frame->colorInfo;
             cachedFrame->hdrMetadata = frame->hdrMetadata;
         }
         
