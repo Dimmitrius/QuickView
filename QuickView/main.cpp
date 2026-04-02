@@ -4206,6 +4206,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"Image", L"EnableAdvancedColor", g_config.EnableAdvancedColor ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsDefaultFallback", std::to_wstring(g_config.CmsDefaultFallback).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsRenderingIntent", std::to_wstring(g_config.CmsRenderingIntent).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"Image", L"HdrToneMappingMode", std::to_wstring(g_config.HdrToneMappingMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CustomSoftProofProfile", g_config.CustomSoftProofProfile.c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"ForceRawDecode", g_config.ForceRawDecode ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"AlwaysSaveLossless", g_config.AlwaysSaveLossless ? L"1" : L"0", iniPath.c_str());
@@ -4336,6 +4337,7 @@ void LoadConfig() {
     g_config.EnableAdvancedColor = GetPrivateProfileIntW(L"Image", L"EnableAdvancedColor", 0, iniPath.c_str()) != 0;
     g_config.CmsDefaultFallback = GetPrivateProfileIntW(L"Image", L"CmsDefaultFallback", 0, iniPath.c_str());
     g_config.CmsRenderingIntent = GetPrivateProfileIntW(L"Image", L"CmsRenderingIntent", 1, iniPath.c_str());
+    g_config.HdrToneMappingMode = GetPrivateProfileIntW(L"Image", L"HdrToneMappingMode", 0, iniPath.c_str());
 
     wchar_t customProofPath[MAX_PATH];
     GetPrivateProfileStringW(L"Image", L"CustomSoftProofProfile", L"", customProofPath, MAX_PATH, iniPath.c_str());
