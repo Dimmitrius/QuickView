@@ -207,7 +207,7 @@ void CSToneMapHDR(uint3 id : SV_DispatchThreadID)
 // Constant Buffer (b0): GpuShaderPayload (16-byte aligned rows)
 // ============================================================================
 static const char* HLSL_ComposeGainMap = R"(
-Texture2D<unorm float4> SdrTex  : register(t0);  // BGRA8 SDR base
+Texture2D<float4> SdrTex        : register(t0);  // Unbounded float4 to support R32G32B32A32 input
 Texture2D<unorm float>  GainTex : register(t1);  // R8 Gain Map
 RWTexture2D<float4>     DstTex  : register(u0);  // FP16 output
 SamplerState LinearSampler      : register(s0);  // Bilinear filter
@@ -226,7 +226,7 @@ cbuffer GainMapParams : register(b0)
     uint   SdrWidth;
     uint   SdrHeight;
     uint   _pad5;
-    uint   _pad6;
+    uint   BaseIsLinear;  // Replace _pad6 for bit depth signaling
 };
 
 // sRGB EOTF (electrical → linear)
@@ -242,9 +242,12 @@ void CSComposeGainMap(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= SdrWidth || id.y >= SdrHeight) return;
 
-    // Read SDR pixel (D3D11 natively swizzles B8G8R8A8 into RGBA channels)
+    // Read SDR pixel (D3D11 natively swizzles B8G8R8A8 into RGBA channels, floats stay float)
     float4 sdrColor = SdrTex[id.xy];
-    float3 sdrLinear = SrgbToLinear(sdrColor.rgb);
+    float3 sdrLinear = sdrColor.rgb;
+    if (BaseIsLinear == 0) {
+        sdrLinear = SrgbToLinear(sdrColor.rgb);
+    }
 
     // Bilinear sample gain map at normalized UV (handles resolution mismatch)
     float2 uv = (float2(id.xy) + 0.5) / float2(SdrWidth, SdrHeight);
@@ -664,13 +667,13 @@ HRESULT ComputeEngine::ComposeGainMap(
         sdrW, sdrH, gainW, gainH, payload.targetHeadroom, payload.gainMapMax[0]);
     OutputDebugStringW(logBuf);
 
-    // 1. Upload SDR base layer (BGRA8 immutable texture)
+    // 1. Upload SDR base layer (Can be BGRA8 or R32G32B32A32_FLOAT)
     D3D11_TEXTURE2D_DESC sdrDesc = {};
     sdrDesc.Width = (UINT)sdrW;
     sdrDesc.Height = (UINT)sdrH;
     sdrDesc.MipLevels = 1;
     sdrDesc.ArraySize = 1;
-    sdrDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sdrDesc.Format = (sdrFormat == PixelFormat::R32G32B32A32_FLOAT) ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
     sdrDesc.SampleDesc.Count = 1;
     sdrDesc.Usage = D3D11_USAGE_IMMUTABLE;
     sdrDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -731,7 +734,11 @@ HRESULT ComputeEngine::ComposeGainMap(
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     hr = m_d3dContext->Map(m_gainMapConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     if (FAILED(hr)) return hr;
-    memcpy(mapped.pData, &payload, sizeof(GpuShaderPayload));
+    
+    GpuShaderPayload safePayload = payload;
+    safePayload._pad6 = (sdrFormat == PixelFormat::R32G32B32A32_FLOAT) ? 1 : 0;
+    
+    memcpy(mapped.pData, &safePayload, sizeof(GpuShaderPayload));
     m_d3dContext->Unmap(m_gainMapConstantBuffer.Get(), 0);
 
     // 6. Dispatch compute shader

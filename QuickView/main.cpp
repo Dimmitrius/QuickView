@@ -7771,6 +7771,13 @@ SKIP_EDGE_NAV:;
                     if (g_uiRenderer) g_uiRenderer->SetTileGridVisible(g_showTileGrid);
                     handled = true; 
                     break;
+                case '5':
+                    g_runtime.ForceHdrSimulation = !g_runtime.ForceHdrSimulation;
+                    OutputDebugStringW(g_runtime.ForceHdrSimulation ? L"Force HDR Sim: ON\n" : L"Force HDR Sim: OFF\n");
+                    handled = true;
+                    // Trigger full re-render because HDR simulation changes blendOp behavior and Info Panel attributes
+                    RefreshImageDisplay(hwnd);
+                    break;
                 case 'Y': // Ctrl+Y: Toggle Soft Proofing
                     SendMessageW(hwnd, WM_COMMAND, IDM_SOFT_PROOF_TOGGLE, 0);
                     handled = true;
