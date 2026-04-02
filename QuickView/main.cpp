@@ -202,11 +202,19 @@ struct ImageResource {
     bool isSvg = false;
     float svgW = 0, svgH = 0;
     
+    // [GPU Pipeline] Multi-layer composition
+    QuickView::GpuBlendOp blendOp = QuickView::GpuBlendOp::None;
+    QuickView::GpuShaderPayload shaderPayload = {};
+    std::unique_ptr<QuickView::AuxLayer> auxLayer;
+
     void Reset() {
         bitmap.Reset();
         svgDoc.Reset();
         isSvg = false;
         svgW = 0; svgH = 0;
+        blendOp = QuickView::GpuBlendOp::None;
+        shaderPayload = {};
+        auxLayer.reset();
     }
     
     D2D1_SIZE_F GetSize() const {
@@ -9569,7 +9577,7 @@ void ProcessEngineEvents(HWND hwnd) {
                 g_currentMetadata.hdrMetadata.hasGainMap = true;
 
                 // Force full pipeline rebuild to ensure the gain map gets uploaded to GPU
-                g_currentPipeline.flags.isInitialized = false;
+                g_isImageDirty = true;
 
                 // Trigger full repaint to composite the gain map
                 RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
