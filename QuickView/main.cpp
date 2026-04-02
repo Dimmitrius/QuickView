@@ -7775,11 +7775,8 @@ SKIP_EDGE_NAV:;
                     g_runtime.ForceHdrSimulation = !g_runtime.ForceHdrSimulation;
                     OutputDebugStringW(g_runtime.ForceHdrSimulation ? L"Force HDR Sim: ON\n" : L"Force HDR Sim: OFF\n");
                     handled = true;
-                    // Fully rebuild pipeline to swap between FP16 and 8bit UNORM surfaces
-                    if (g_compEngine) {
-                        g_compEngine->RefreshDisplayColorState(g_runtime.ForceHdrSimulation);
-                    }
-                    g_currentPipelineNeedsRebuild = true;
+                    // Re-evaluate display color state to trigger FP16/8-bit UNORM surface swap in CompositionEngine
+                    RefreshDisplayColorPipeline(hwnd, false);
                     RefreshImageDisplay(hwnd);
                     break;
                 case 'Y': // Ctrl+Y: Toggle Soft Proofing
