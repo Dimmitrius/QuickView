@@ -50,6 +50,10 @@ cbuffer ToneMapParams : register(b0)
     float DisplayPeakScRgb;
     float PaperWhiteScRgb;
     float Exposure;
+    uint ToneMappingMode;
+    float _pad0;
+    float _pad1;
+    float _pad2;
 };
 
 float3 LinearToSrgb(float3 value)
@@ -84,10 +88,17 @@ void CSToneMap(uint3 id : SV_DispatchThreadID)
     color.a = saturate(color.a);
 
     float paperWhite = max(PaperWhiteScRgb, 1.0);
-    // Use perceptual scale anchoring to system SDRWhiteLevel
     float sceneScale = Exposure * paperWhite;
+    float3 mapped = color.rgb * sceneScale;
 
-    float3 mapped = ToneMapAces(color.rgb * sceneScale);
+    if (ToneMappingMode == 1) {
+        // Colorimetric Mode: Hard clip at displayPeak/paperWhite
+        mapped = clamp(color.rgb / paperWhite, 0.0, 1.0);
+    } else {
+        // Perceptual Mode: Scale by Exposure*PaperWhite and apply ACES
+        mapped = ToneMapAces(mapped);
+    }
+
     float3 encoded = LinearToSrgb(mapped) * color.a;
 
     DstTex[id.xy] = float4(encoded.r, encoded.g, encoded.b, color.a);
@@ -104,39 +115,61 @@ cbuffer ToneMapParams : register(b0)
     float DisplayPeakScRgb;
     float PaperWhiteScRgb;
     float Exposure;
+    uint ToneMappingMode;
+    float _pad0;
+    float _pad1;
+    float _pad2;
 };
 
-// ACES-like curve for smooth roll-off mapping from ContentPeak to DisplayPeak
-float3 ToneMapHDR(float3 color, float contentPeak, float displayPeak)
+// Perceptual TMO: Brightens midtones and smoothly rolls off highlights
+float3 ToneMapHDR(float3 color, float contentPeak, float displayPeak, float paperWhite, uint mode)
 {
-    // If content peak is less than display peak, no roll-off is strictly needed,
-    // but we can apply exposure scale.
-    // Basic Spline or BT.2390 variant:
-    // Here we map [0, displayPeak] linearly and smoothly roll off up to contentPeak.
-
-    // We will do a simple smooth step for highlights.
-
-    // For now, let's use a Reinhard-like curve adapted for HDR:
-    // This allows keeping SDR values intact while compressing extreme highlights.
-
-    // If we have headroom, we map up to displayPeak.
     float L = max(color.r, max(color.g, color.b));
     if (L <= 0.0) return color;
 
-    // Only compress if we exceed a certain threshold (e.g., 0.5 * displayPeak)
-    float threshold = displayPeak * 0.7;
-
-    if (L <= threshold || contentPeak <= displayPeak) {
-        return color;
+    // Colorimetric Mode (1): Strict 80 nits mapping, hard clipping
+    if (mode == 1) {
+        if (L <= displayPeak) return color;
+        return color * (displayPeak / L); // Hard clip at display peak
     }
 
-    // Roll-off region
-    float t = (L - threshold) / (contentPeak - threshold);
-    t = saturate(t);
-    // Smooth step
-    float compressed = threshold + (displayPeak - threshold) * (t * (2.0 - t));
+    // Perceptual Mode (0):
+    // 1. Normalize relative to paper white
+    float normL = L / paperWhite;
+    float normDisplayPeak = displayPeak / paperWhite;
 
-    return color * (compressed / L);
+    // 2. Brighten midtones (Toe)
+    // Map [0, 1] (SDR range) using a power curve
+    float toe = pow(min(normL, 1.0), 0.85);
+
+    // 3. Smooth roll-off (Shoulder)
+    float compressedL = toe;
+    if (normL > 1.0) {
+        // Asymptotic roll-off for highlights > paperWhite
+        float overbright = normL - 1.0;
+        float headroom = normDisplayPeak - 1.0;
+
+        if (headroom > 0.0) {
+            // Simple exponential roll-off
+            // compressedL = 1.0 + headroom * (1.0 - exp(-overbright / headroom));
+
+            // Rational curve for smoother highlight preservation
+            float t = overbright / headroom;
+            float rollOff = headroom * t / (1.0 + t);
+            compressedL = 1.0 + rollOff;
+        } else {
+            // No headroom, hard clip to paper white
+            compressedL = 1.0;
+        }
+    }
+
+    // 4. Denormalize
+    float targetL = compressedL * paperWhite;
+
+    // Avoid exceeding display peak
+    targetL = min(targetL, displayPeak);
+
+    return color * (targetL / L);
 }
 
 [numthreads(8, 8, 1)]
@@ -159,7 +192,7 @@ void CSToneMapHDR(uint3 id : SV_DispatchThreadID)
     color.rgb *= Exposure;
 
     // Tone Map high dynamic range into display's actual peak
-    color.rgb = ToneMapHDR(color.rgb, contentPeak * Exposure, displayPeak);
+    color.rgb = ToneMapHDR(color.rgb, contentPeak * Exposure, displayPeak, PaperWhiteScRgb, ToneMappingMode);
 
     DstTex[id.xy] = color;
 }
@@ -301,7 +334,7 @@ HRESULT ComputeEngine::CompileShaders() {
     // Constant Buffers
     D3D11_BUFFER_DESC cbDesc = {};
     cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    cbDesc.ByteWidth = 16;
+    cbDesc.ByteWidth = 32;
     cbDesc.Usage = D3D11_USAGE_DYNAMIC;
     cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     hr = m_d3dDevice->CreateBuffer(&cbDesc, nullptr, &m_toneMapConstantBuffer);
@@ -470,13 +503,25 @@ HRESULT ComputeEngine::ToneMapHdrToSdr(const uint8_t* srcPixels, int width, int 
     hr = m_d3dContext->Map(m_toneMapConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     if (FAILED(hr)) return hr;
 
-    const float params[4] = {
+    struct CBParams {
+        float contentPeakScRgb;
+        float displayPeakScRgb;
+        float paperWhiteScRgb;
+        float exposure;
+        uint32_t toneMappingMode;
+        float _pad0;
+        float _pad1;
+        float _pad2;
+    };
+    CBParams params = {
         settings.contentPeakScRgb,
         settings.displayPeakScRgb,
         settings.paperWhiteScRgb,
-        settings.exposure
+        settings.exposure,
+        (uint32_t)settings.toneMappingMode,
+        0.0f, 0.0f, 0.0f
     };
-    memcpy(mapped.pData, params, sizeof(params));
+    memcpy(mapped.pData, &params, sizeof(params));
     m_d3dContext->Unmap(m_toneMapConstantBuffer.Get(), 0);
 
     m_d3dContext->CSSetShader(m_csToneMapHdrToSdr.Get(), nullptr, 0);
@@ -547,13 +592,25 @@ HRESULT ComputeEngine::ToneMapHdrToHdr(const uint8_t* srcPixels, int width, int 
     hr = m_d3dContext->Map(m_toneMapConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     if (FAILED(hr)) return hr;
 
-    const float params[4] = {
+    struct CBParams {
+        float contentPeakScRgb;
+        float displayPeakScRgb;
+        float paperWhiteScRgb;
+        float exposure;
+        uint32_t toneMappingMode;
+        float _pad0;
+        float _pad1;
+        float _pad2;
+    };
+    CBParams params = {
         settings.contentPeakScRgb,
         settings.displayPeakScRgb,
         settings.paperWhiteScRgb,
-        settings.exposure
+        settings.exposure,
+        (uint32_t)settings.toneMappingMode,
+        0.0f, 0.0f, 0.0f
     };
-    memcpy(mapped.pData, params, sizeof(params));
+    memcpy(mapped.pData, &params, sizeof(params));
     m_d3dContext->Unmap(m_toneMapConstantBuffer.Get(), 0);
 
     m_d3dContext->CSSetShader(m_csToneMapHdrToHdr.Get(), nullptr, 0);

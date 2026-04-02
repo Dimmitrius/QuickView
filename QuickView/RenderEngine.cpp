@@ -8,6 +8,7 @@
 #include "RenderEngine.h"
 #include "EditState.h"
 #include "ImageTypes.h" // [Direct D2D] RawImageFrame
+#include "SIMDUtils.h"
 
 
 // 核心修复：引入 DirectX GUID 定义库 与 必要库
@@ -172,24 +173,11 @@ float EstimateFramePeakScRgb(const QuickView::RawImageFrame &frame) {
     return 1.0f;
   }
 
-  const int stepX = (std::max)(1, frame.width / 64);
-  const int stepY = (std::max)(1, frame.height / 64);
-  float peak = 1.0f;
-
-  for (int y = 0; y < frame.height; y += stepY) {
-    const float *row = reinterpret_cast<const float *>(
-        frame.pixels + static_cast<size_t>(y) * frame.stride);
-    for (int x = 0; x < frame.width; x += stepX) {
-      const float r = row[x * 4 + 0];
-      const float g = row[x * 4 + 1];
-      const float b = row[x * 4 + 2];
-      peak = (peak > r ? peak : r);
-      peak = (peak > g ? peak : g);
-      peak = (peak > b ? peak : b);
-    }
-  }
-
-  return peak;
+  // [Universe's Strongest] Blazing fast SIMD full image scan.
+  // Replaces 64x64 sampling with 100% accurate peak retrieval using AVX2/AVX512.
+  return SIMDUtils::FindPeak_R32G32B32A32_FLOAT(
+      reinterpret_cast<const float *>(frame.pixels),
+      static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height));
 }
 
 QuickView::ToneMapSettings
@@ -243,6 +231,7 @@ BuildToneMapSettings(const QuickView::RawImageFrame &frame,
   settings.contentPeakScRgb = (contentPeakScRgb > 1.0f ? contentPeakScRgb : 1.0f);
   settings.displayPeakScRgb = displayPeakScRgb;
   settings.paperWhiteScRgb = paperWhiteScRgb;
+  settings.toneMappingMode = g_config.HdrToneMappingMode;
 
   const float headroom = settings.displayPeakScRgb / settings.paperWhiteScRgb;
   settings.exposure = 1.0f;
@@ -793,9 +782,18 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         const float a_raw = srcRow[x * 4 + 3];
         const float a = (a_raw < 0.0f) ? 0.0f : (a_raw > 1.0f ? 1.0f : a_raw);
 
-        const float premulR = ToneMapAces(r) * a;
-        const float premulG = ToneMapAces(g) * a;
-        const float premulB = ToneMapAces(b) * a;
+        float premulR = 0.0f, premulG = 0.0f, premulB = 0.0f;
+        if (toneMapSettings.toneMappingMode == 1) {
+             // Colorimetric Mode: Hard clip
+             premulR = (r > 1.0f ? 1.0f : r) * a;
+             premulG = (g > 1.0f ? 1.0f : g) * a;
+             premulB = (b > 1.0f ? 1.0f : b) * a;
+        } else {
+             // Perceptual Mode: ACES
+             premulR = ToneMapAces(r) * a;
+             premulG = ToneMapAces(g) * a;
+             premulB = ToneMapAces(b) * a;
+        }
 
         dstRow[x * 4 + 0] = EncodeLinearToSdr8(premulB);
         dstRow[x * 4 + 1] = EncodeLinearToSdr8(premulG);

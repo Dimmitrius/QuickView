@@ -220,6 +220,9 @@ const wchar_t *Settings_Label_NavIndicator = nullptr;
 const wchar_t *Settings_Label_AutoRotate = nullptr;
 const wchar_t *Settings_Label_CMS = nullptr;
 const wchar_t *Settings_Label_AdvancedColor = nullptr;
+const wchar_t *Settings_Label_HdrToneMapping = nullptr;
+const wchar_t *Settings_Option_HdrPerceptual = nullptr;
+const wchar_t *Settings_Option_HdrColorimetric = nullptr;
 const wchar_t *Settings_Label_CmsFallback = nullptr;
 const wchar_t *Settings_Label_CustomProof = nullptr;
 const wchar_t *Context_SoftProofing = nullptr;
@@ -630,6 +633,9 @@ struct EN {
       L"Auto Rotate (EXIF)";
   static constexpr const wchar_t *Settings_Label_CMS = L"Color Management";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"Advanced Color (HDR)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"HDR Tone Mapping";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"Perceptual (Dynamic Midtones)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"Colorimetric (Strict 80 nits)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"Untagged Image Fallback";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"Soft Proof Profile (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"Soft Proofing Preview";
@@ -941,6 +947,9 @@ struct CN {
       L"自动旋转 (EXIF)";
   static constexpr const wchar_t *Settings_Label_CMS = L"色彩管理 (CMS)";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"高级色彩与 HDR (scRGB)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"HDR 色调映射";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"感知 (动态中间调)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"色度 (严格 80 尼特)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"无配置图片的默认回退";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"自定义软打样配置 (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"软打样预览";
@@ -1470,6 +1479,9 @@ struct TW {
       L"自動旋轉 (EXIF)";
   static constexpr const wchar_t *Settings_Label_CMS = L"色彩管理 (CMS)";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"高級色彩與 HDR (scRGB)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"HDR 色調映射";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"感知 (動態中間調)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"色度 (嚴格 80 尼特)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"無配置圖片的預設回退";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"自訂軟打樣配置 (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"軟打樣預覽";
@@ -1906,6 +1918,9 @@ struct JA {
       L"自動回転 (EXIF)";
   static constexpr const wchar_t *Settings_Label_CMS = L"カラー管理 (CMS)";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"高度な色とHDR (scRGB)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"HDR トーンマッピング";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"知覚的 (動的ミッドトーン)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"測色 (厳密な80 nits)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"プロファイルなし画像のフォールバック";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"ソフトプルーフプロファイル (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"ソフトプルーフプレビュー";
@@ -2372,6 +2387,9 @@ struct RU {
   static constexpr const wchar_t *Settings_Label_CMS =
       L"Управление цветом (CMS)";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"Расширенный цвет (HDR)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"Тональная компрессия HDR";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"Перцептивная (динамические полутона)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"Колориметрическая (строго 80 нит)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"Запасной профиль без тегов";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"Профиль цветопробы (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"Предпросмотр цветопробы";
@@ -2839,6 +2857,9 @@ struct DE {
       L"Automatisch drehen (EXIF)";
   static constexpr const wchar_t *Settings_Label_CMS = L"Farbmanagement (CMS)";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"Erweiterte Farbe (HDR)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"HDR-Tonzuordnung";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"Perzeptiv (Dynamische Mitteltöne)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"Farbmetrisch (Strikt 80 nits)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"Fallback für Bilder ohne Tags";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"Softproof-Profil (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"Softproof-Vorschau";
@@ -3307,6 +3328,9 @@ struct ES {
   static constexpr const wchar_t *Settings_Label_CMS =
       L"Gestión de color (CMS)";
   static constexpr const wchar_t *Settings_Label_AdvancedColor = L"Color avanzado (HDR)";
+  static constexpr const wchar_t *Settings_Label_HdrToneMapping = L"Mapeo de tonos HDR";
+  static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"Perceptual (Tonos medios dinámicos)";
+  static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"Colorimétrico (Estricto 80 nits)";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"Perfil alternativo sin etiquetas";
   static constexpr const wchar_t *Settings_Label_CustomProof = L"Perfil de prueba en pantalla (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"Vista previa de prueba en pantalla";
@@ -3696,6 +3720,9 @@ template <typename T> void ApplyT() {
   Settings_Label_AutoRotate = T::Settings_Label_AutoRotate;
   Settings_Label_CMS = T::Settings_Label_CMS;
   Settings_Label_AdvancedColor = T::Settings_Label_AdvancedColor;
+  Settings_Label_HdrToneMapping = T::Settings_Label_HdrToneMapping;
+  Settings_Option_HdrPerceptual = T::Settings_Option_HdrPerceptual;
+  Settings_Option_HdrColorimetric = T::Settings_Option_HdrColorimetric;
   Settings_Label_CmsFallback = T::Settings_Label_CmsFallback;
   Settings_Label_CustomProof = T::Settings_Label_CustomProof;
   Context_SoftProofing = T::Context_SoftProofing;

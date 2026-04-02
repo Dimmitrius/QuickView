@@ -4206,6 +4206,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"Image", L"EnableAdvancedColor", g_config.EnableAdvancedColor ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsDefaultFallback", std::to_wstring(g_config.CmsDefaultFallback).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsRenderingIntent", std::to_wstring(g_config.CmsRenderingIntent).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"Image", L"HdrToneMappingMode", std::to_wstring(g_config.HdrToneMappingMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CustomSoftProofProfile", g_config.CustomSoftProofProfile.c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CustomEditorPath", g_config.CustomEditorPath.c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"ForceRawDecode", g_config.ForceRawDecode ? L"1" : L"0", iniPath.c_str());
@@ -4337,6 +4338,7 @@ void LoadConfig() {
     g_config.EnableAdvancedColor = GetPrivateProfileIntW(L"Image", L"EnableAdvancedColor", 0, iniPath.c_str()) != 0;
     g_config.CmsDefaultFallback = GetPrivateProfileIntW(L"Image", L"CmsDefaultFallback", 0, iniPath.c_str());
     g_config.CmsRenderingIntent = GetPrivateProfileIntW(L"Image", L"CmsRenderingIntent", 1, iniPath.c_str());
+    g_config.HdrToneMappingMode = GetPrivateProfileIntW(L"Image", L"HdrToneMappingMode", 0, iniPath.c_str());
 
     wchar_t customProofPath[MAX_PATH];
     GetPrivateProfileStringW(L"Image", L"CustomSoftProofProfile", L"", customProofPath, MAX_PATH, iniPath.c_str());
@@ -4800,6 +4802,39 @@ void AdjustWindowToImage(HWND hwnd) {
     } else {
         ShowWindow(hwnd, SW_RESTORE);
         SetWindowPos(hwnd, nullptr, newLeft, newTop, windowW, windowH, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+// [v10.1] Refresh Current Image Display (Direct GPU Re-upload from cache)
+// Used for instant settings updates like Tone Mapping, CMS toggle, etc.
+void RefreshImageDisplay(HWND hwnd) {
+    if (!g_pImageEngine || !g_renderEngine || g_imagePath.empty()) return;
+
+    // 1. Get current frame from cache (Linear Raw Pixels)
+    auto frame = g_pImageEngine->GetCachedImage(g_imagePath);
+    if (frame && frame->IsValid()) {
+        ComPtr<ID2D1Bitmap> bitmap;
+        // 2. Direct GPU Re-upload (Applies new Tone Mapping / CMS settings)
+        if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*frame, &bitmap))) {
+            g_imageResource.bitmap = bitmap;
+            
+            // 3. Update DComp Surface for Composition Engine
+            if (!IsCompareModeActive()) {
+                extern bool RenderImageToDComp(HWND hwnd, ImageResource & res, bool isFastUpgrade);
+                RenderImageToDComp(hwnd, g_imageResource, false);
+            } else {
+                // In Compare Mode, we need a full composite update
+                extern bool RenderCompareComposite(HWND hwnd);
+                RenderCompareComposite(hwnd);
+            }
+
+            // 4. Force UI Repaint
+            RequestRepaint(PaintLayer::Image | PaintLayer::Static);
+        }
+    } else {
+        // Fallback: If not in cache, do a full asynchronous reload
+        void ReloadCurrentImage(HWND hwnd);
+        ReloadCurrentImage(hwnd);
     }
 }
 
