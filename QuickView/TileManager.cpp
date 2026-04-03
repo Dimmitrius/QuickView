@@ -452,6 +452,13 @@ namespace QuickView {
         m_viewportTilesActive = false;
     }
     
+    void TileManager::InvalidateGpuTiles() {
+        std::lock_guard lock(m_mutex);
+        for (auto& layer : m_layers) {
+            if (layer) layer->InvalidateGpuTiles();
+        }
+    }
+    
     int TileManager::GetTotalCount() const {
         return (int)m_lru.size(); // Approximate
     }

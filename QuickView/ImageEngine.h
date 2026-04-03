@@ -117,6 +117,7 @@ public:
     std::shared_ptr<QuickView::TileManager> GetTileManager() { return m_tileManager; }
     bool IsTitanModeEnabled() const;
     void UpdateTileViewport(QuickView::RegionRect viewport, float scale, int imageW, int imageH, float basePreviewRatio, float velocityX = 0, float velocityY = 0);
+    void InvalidateGpuTiles();
 
     // The Main Output: Poll this every frame (or via timer)
     // Yields events as they happen.

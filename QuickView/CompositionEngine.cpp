@@ -3,6 +3,7 @@
 #include <dxgi1_6.h>
 #include "TileManager.h"
 #include "TileTypes.h"
+#include "RenderEngine.h"
 
 // ============================================================================
 // CompositionEngine Implementation - Visual Ping-Pong Architecture
@@ -212,6 +213,8 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
     // Create Context if needed
     if (!m_pendingContext) {
         m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_pendingContext);
+        m_pendingContext->SetDpi(96.0f, 96.0f);
+        m_pendingContext->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
     }
 
     tileManager->ForEachReadyTile(scanArea, [&](const QuickView::TileKey& key, QuickView::TileState* tile) {
@@ -297,14 +300,10 @@ HRESULT CompositionEngine::UpdateVirtualTiles(QuickView::TileManager* tileManage
             (float)(offset.y - updateRect.top)
         ));
         
-        // Upload Pixels
-        D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
-             D2D1::PixelFormat(m_surfaceFormat, D2D1_ALPHA_MODE_PREMULTIPLIED)
-        );
-        
+        // Upload Pixels (CMS/Soft Proofing Applied)
+        extern CRenderEngine* g_pRenderEngine;
         ComPtr<ID2D1Bitmap> srcBitmap;
-        HRESULT hrBmp = m_pendingContext->CreateBitmap(D2D1::SizeU(bitmapSize, bitmapSize), 
-            tile->frame->pixels, tile->frame->stride, &bmpProps, &srcBitmap);
+        HRESULT hrBmp = g_pRenderEngine->UploadRawFrameToGPU(*tile->frame, &srcBitmap);
         
         // [Fix14a] GPU OOM / Device Lost → srcBitmap is NULL → skip tile, defer to next frame
         if (FAILED(hrBmp) || !srcBitmap) {

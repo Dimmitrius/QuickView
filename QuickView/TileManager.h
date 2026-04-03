@@ -51,6 +51,7 @@ namespace QuickView {
         // Stats & Logic
         uint32_t GetGenerationID() const { return m_generationId; }
         void InvalidateAll();
+        void InvalidateGpuTiles();
         int CalculateBestLOD(float zoom, float basePreviewRatio = 0.0f);
         
         // [Refactor] Replacement for GetLoadedTiles

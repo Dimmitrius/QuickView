@@ -1830,3 +1830,7 @@ void ImageEngine::UpdateTileViewport(QuickView::RegionRect viewport, float scale
     }
 }
 
+void ImageEngine::InvalidateGpuTiles() {
+    if (m_tileManager) m_tileManager->InvalidateGpuTiles();
+}
+

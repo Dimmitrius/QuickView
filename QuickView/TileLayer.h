@@ -44,6 +44,7 @@ namespace QuickView {
         // Reset Logic
         virtual void ResetQueueStatus() = 0;
         virtual void Clear() = 0;
+        virtual void InvalidateGpuTiles() = 0;
         
         // Dimensions
         virtual int GetWidth() const = 0;
@@ -93,6 +94,15 @@ namespace QuickView {
         void Clear() override {
             m_grid.clear();
             m_grid.resize((size_t)m_width * m_height);
+        }
+
+        void InvalidateGpuTiles() override {
+            for (auto& entry : m_grid) {
+                if (entry.data) {
+                    entry.data->uploaded = false;
+                    entry.data->bitmap = nullptr;
+                }
+            }
         }
 
         int GetWidth() const override { return m_width; }
@@ -158,6 +168,16 @@ namespace QuickView {
         void Clear() override {
             std::lock_guard<std::mutex> lock(m_mutex);
             m_map.clear();
+        }
+
+        void InvalidateGpuTiles() override {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (auto& kv : m_map) {
+                if (kv.second && kv.second->data) {
+                    kv.second->data->uploaded = false;
+                    kv.second->data->bitmap = nullptr;
+                }
+            }
         }
 
         int GetWidth() const override { return m_width; }

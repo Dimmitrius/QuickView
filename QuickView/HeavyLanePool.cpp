@@ -1171,9 +1171,24 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
               // --- Standard Decode (Full/Scaled) ---
               int targetW = 0, targetH = 0;
               if (!job.isFullDecode) {
-                  targetW = GetSystemMetrics(SM_CXSCREEN);
-                  targetH = GetSystemMetrics(SM_CYSCREEN);
-              }
+                   int screenW = GetSystemMetrics(SM_CXSCREEN);
+                   int screenH = GetSystemMetrics(SM_CYSCREEN);
+                   
+                   float srcRatio = (float)m_titanSrcW / (float)m_titanSrcH;
+                   float screenRatio = (float)screenW / (float)screenH;
+                   
+                   if (srcRatio > screenRatio) {
+                       targetW = screenW;
+                       targetH = (int)(screenW / srcRatio);
+                   } else {
+                       targetH = screenH;
+                       targetW = (int)(screenH * srcRatio);
+                   }
+                   
+                   // SIMD Alignment (8-pixel boundary)
+                   targetW = (targetW + 7) & ~7;
+                   targetH = (targetH + 7) & ~7;
+               }
               
               // [Phase 3] Titan Mode: Route Base Layer to killable subprocess
               if (m_isTitanMode && !job.isFullDecode && targetW > 0 && targetH > 0) {

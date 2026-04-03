@@ -716,6 +716,10 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
   }
 
   D2D1_BITMAP_PROPERTIES1 props = GetDefaultBitmapProps(dxgiFormat, alphaMode);
+  bool applyCms = false;
+  ComPtr<ID2D1ColorContext> srcContext;
+  ComPtr<ID2D1Bitmap1> rawBitmap;
+  int effectiveCmsMode = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
 
   if (frame.format == QuickView::PixelFormat::R32G32B32A32_FLOAT) {
       BuildLinearScRgbFloatBuffer(frame, linearScRgbPixels, &uploadPixels, &uploadStride);
@@ -736,151 +740,118 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
                       D2D1_BITMAP_PROPERTIES1 hdrProps = GetDefaultBitmapProps(
                           DXGI_FORMAT_R16G16B16A16_FLOAT, D2D1_ALPHA_MODE_STRAIGHT);
                       hdrProps.colorContext = scRgbContext.Get();
-                      return m_d2dContext->CreateBitmapFromDxgiSurface(
-                          dxgiSurface.Get(), &hdrProps,
-                          reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
+                      m_d2dContext->CreateBitmapFromDxgiSurface(
+                          dxgiSurface.Get(), &hdrProps, &rawBitmap);
                   }
               }
           }
-          D2D1_BITMAP_PROPERTIES1 hdrProps = GetDefaultBitmapProps(
-              DXGI_FORMAT_R32G32B32A32_FLOAT, D2D1_ALPHA_MODE_STRAIGHT);
-          hdrProps.colorContext = scRgbContext.Get();
-          return m_d2dContext->CreateBitmap(
-              D2D1::SizeU(static_cast<UINT32>(frame.width),
-                          static_cast<UINT32>(frame.height)),
-              uploadPixels, uploadStride, &hdrProps,
-              reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
+          if (!rawBitmap) {
+              D2D1_BITMAP_PROPERTIES1 hdrProps = GetDefaultBitmapProps(
+                  DXGI_FORMAT_R32G32B32A32_FLOAT, D2D1_ALPHA_MODE_STRAIGHT);
+              hdrProps.colorContext = scRgbContext.Get();
+              m_d2dContext->CreateBitmap(
+                  D2D1::SizeU(static_cast<UINT32>(frame.width),
+                              static_cast<UINT32>(frame.height)),
+                  uploadPixels, uploadStride, &hdrProps, &rawBitmap);
+          }
+          srcContext = scRgbContext; // For FLOAT, always scRGB source in CMS
       } else {
           // SDR Environment (Fallback Tone Mapping)
           if (m_computeEngine && m_computeEngine->IsAvailable()) {
-      ComPtr<ID3D11Texture2D> pTex;
-      const QuickView::ToneMapSettings toneMapSettings =
-          BuildToneMapSettings(frame, m_displayColorState);
-      if (SUCCEEDED(m_computeEngine->ToneMapHdrToSdr(
-              uploadPixels, static_cast<int>(frame.width),
-              static_cast<int>(frame.height), static_cast<int>(uploadStride),
-              toneMapSettings, &pTex))) {
-        ComPtr<IDXGISurface> dxgiSurface;
-        if (SUCCEEDED(pTex.As(&dxgiSurface))) {
-          D2D1_BITMAP_PROPERTIES1 sdrProps = GetDefaultBitmapProps(
-              DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-          return m_d2dContext->CreateBitmapFromDxgiSurface(
-              dxgiSurface.Get(), &sdrProps,
-              reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
-        }
+              ComPtr<ID3D11Texture2D> pTex;
+              const QuickView::ToneMapSettings toneMapSettings =
+                  BuildToneMapSettings(frame, m_displayColorState);
+              if (SUCCEEDED(m_computeEngine->ToneMapHdrToSdr(
+                      uploadPixels, static_cast<int>(frame.width),
+                      static_cast<int>(frame.height), static_cast<int>(uploadStride),
+                      toneMapSettings, &pTex))) {
+                  ComPtr<IDXGISurface> dxgiSurface;
+                  if (SUCCEEDED(pTex.As(&dxgiSurface))) {
+                      D2D1_BITMAP_PROPERTIES1 sdrProps = GetDefaultBitmapProps(
+                          DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+                      m_d2dContext->CreateBitmapFromDxgiSurface(
+                          dxgiSurface.Get(), &sdrProps, &rawBitmap);
+                  }
+              }
+          }
+          if (!rawBitmap) {
+              std::vector<uint8_t> sdrPixels(static_cast<size_t>(frame.width) * frame.height * 4);
+              const QuickView::ToneMapSettings toneMapSettings = BuildToneMapSettings(frame, m_displayColorState);
+              const float sceneScale = toneMapSettings.exposure * toneMapSettings.paperWhiteScRgb;
+              for (int y = 0; y < frame.height; ++y) {
+                  const float *srcRow = reinterpret_cast<const float *>(uploadPixels + static_cast<size_t>(y) * uploadStride);
+                  uint8_t *dstRow = sdrPixels.data() + static_cast<size_t>(y) * frame.width * 4;
+                  for (int x = 0; x < frame.width; ++x) {
+                      const float r = srcRow[x * 4 + 0] * sceneScale;
+                      const float g = srcRow[x * 4 + 1] * sceneScale;
+                      const float b = srcRow[x * 4 + 2] * sceneScale;
+                      const float a = std::clamp(srcRow[x * 4 + 3], 0.0f, 1.0f);
+                      float premulR, premulG, premulB;
+                      if (toneMapSettings.toneMappingMode == 1) { // Colorimetric
+                          premulR = std::min(1.0f, r) * a; premulG = std::min(1.0f, g) * a; premulB = std::min(1.0f, b) * a;
+                      } else { // Perceptual
+                          premulR = ToneMapAces(r) * a; premulG = ToneMapAces(g) * a; premulB = ToneMapAces(b) * a;
+                      }
+                      dstRow[x * 4 + 0] = EncodeLinearToSdr8(premulB);
+                      dstRow[x * 4 + 1] = EncodeLinearToSdr8(premulG);
+                      dstRow[x * 4 + 2] = EncodeLinearToSdr8(premulR);
+                      dstRow[x * 4 + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
+                  }
+              }
+              D2D1_BITMAP_PROPERTIES1 sdrProps = GetDefaultBitmapProps(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+              m_d2dContext->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(frame.width), static_cast<UINT32>(frame.height)),
+                  sdrPixels.data(), static_cast<UINT32>(frame.width * 4), &sdrProps, &rawBitmap);
+          }
+          // After tone mapping to SDR, the source for the next CMS step is sRGB
+          m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
       }
-    }
-
-    std::vector<uint8_t> sdrPixels(static_cast<size_t>(frame.width) *
-                                   frame.height * 4);
-    const QuickView::ToneMapSettings toneMapSettings =
-        BuildToneMapSettings(frame, m_displayColorState);
-    const float sceneScale =
-        toneMapSettings.exposure * toneMapSettings.paperWhiteScRgb;
-    for (int y = 0; y < frame.height; ++y) {
-      const float *srcRow = reinterpret_cast<const float *>(
-          uploadPixels + static_cast<size_t>(y) * uploadStride);
-      uint8_t *dstRow =
-          sdrPixels.data() + static_cast<size_t>(y) * frame.width * 4;
-      for (int x = 0; x < frame.width; ++x) {
-        const float r = srcRow[x * 4 + 0] * sceneScale;
-        const float g = srcRow[x * 4 + 1] * sceneScale;
-        const float b = srcRow[x * 4 + 2] * sceneScale;
-        const float a_raw = srcRow[x * 4 + 3];
-        const float a = (a_raw < 0.0f) ? 0.0f : (a_raw > 1.0f ? 1.0f : a_raw);
-
-        float premulR = 0.0f, premulG = 0.0f, premulB = 0.0f;
-        if (toneMapSettings.toneMappingMode == 1) {
-             // Colorimetric Mode: Hard clip
-             premulR = (r > 1.0f ? 1.0f : r) * a;
-             premulG = (g > 1.0f ? 1.0f : g) * a;
-             premulB = (b > 1.0f ? 1.0f : b) * a;
-        } else {
-             // Perceptual Mode: ACES
-             premulR = ToneMapAces(r) * a;
-             premulG = ToneMapAces(g) * a;
-             premulB = ToneMapAces(b) * a;
-        }
-
-        dstRow[x * 4 + 0] = EncodeLinearToSdr8(premulB);
-        dstRow[x * 4 + 1] = EncodeLinearToSdr8(premulG);
-        dstRow[x * 4 + 2] = EncodeLinearToSdr8(premulR);
-        dstRow[x * 4 + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
-      }
-    }
-
-    D2D1_BITMAP_PROPERTIES1 sdrProps = GetDefaultBitmapProps(
-        DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-    return m_d2dContext->CreateBitmap(
-        D2D1::SizeU(static_cast<UINT32>(frame.width),
-                    static_cast<UINT32>(frame.height)),
-        sdrPixels.data(), static_cast<UINT32>(frame.width * 4), &sdrProps,
-        reinterpret_cast<ID2D1Bitmap1 **>(outBitmap));
-    }
   }
 
   // [ CMS Re-architected ] 
-  // Step 1: Determine CMS mode and resolve source context BEFORE bitmap creation.
-  // This ensures ALL non-HDR paths (BGRA, RGBA, BGRX) converge into the CMS chain.
-  extern RuntimeConfig g_runtime;
-  extern AppConfig g_config;
-  int effectiveCmsMode = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
-  ComPtr<ID2D1ColorContext> srcContext;
-
-  // Master Switch Logic: 
-  // 1. If mode is Unmanaged (0), always false.
-  // 2. If mode is Manual (>1), always true (override).
-  // 3. If mode is Auto (1), respect the Global Toggle (g_config.ColorManagement).
-  bool applyCms = false;
-  if (effectiveCmsMode == 0) {
-      applyCms = false;
-  } else if (effectiveCmsMode == 1) {
-      applyCms = g_config.ColorManagement;
-  } else {
-      applyCms = true; // Manual Overrides (sRGB, ProPhoto, etc)
+  // Step 1: Pre-calculate CMS requirements if not already handled by FLOAT path
+  if (!rawBitmap) {
+    // 1. If mode is Unmanaged (0), always false.
+    // 2. If mode is Manual (>1), always true (override).
+    // 3. If mode is Auto (1), respect the Global Toggle (g_config.ColorManagement).
+    applyCms = (effectiveCmsMode == 0) ? false : (effectiveCmsMode == 1 ? g_config.ColorManagement : true);
+    ResolveSourceColorContext(frame, effectiveCmsMode, &srcContext);
   }
 
-  ResolveSourceColorContext(frame, effectiveCmsMode, &srcContext);
   if (!srcContext)
     m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SRGB, nullptr, 0, &srcContext);
 
-  D2D1_BITMAP_PROPERTIES1 propsWithContext = props;
-  propsWithContext.colorContext = srcContext.Get();
-
-  // Step 2: Create raw bitmap via GPU compute or direct upload
-  ComPtr<ID2D1Bitmap1> rawBitmap;
-
-  // [Optimization] GPU Compute for non-native format conversion (RGBA/BGRX)
-  // [Fix] No longer returns early - falls through to CMS effect chain below.
-  if (m_computeEngine && m_computeEngine->IsAvailable() &&
-      frame.format != QuickView::PixelFormat::BGRA8888 &&
-      frame.format != QuickView::PixelFormat::R32G32B32A32_FLOAT &&
-      frame.pixels) {
-    ComPtr<ID3D11Texture2D> pTex;
-    if (SUCCEEDED(m_computeEngine->UploadAndConvert(
-            frame.pixels, (int)frame.width, (int)frame.height, frame.format,
-            &pTex))) {
-      ComPtr<IDXGISurface> dxgiSurface;
-      if (SUCCEEDED(pTex.As(&dxgiSurface))) {
-        D2D1_BITMAP_PROPERTIES1 computeProps = propsWithContext;
-        computeProps.pixelFormat.format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        computeProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
-        m_d2dContext->CreateBitmapFromDxgiSurface(
-            dxgiSurface.Get(), &computeProps, &rawBitmap);
+  if (!rawBitmap) {
+    D2D1_BITMAP_PROPERTIES1 propsWithContext = props;
+    propsWithContext.colorContext = srcContext.Get();
+    // [Optimization] GPU Compute for non-native format conversion (RGBA/BGRX)
+    if (m_computeEngine && m_computeEngine->IsAvailable() &&
+        frame.format != QuickView::PixelFormat::BGRA8888 &&
+        frame.pixels) {
+      ComPtr<ID3D11Texture2D> pTex;
+      if (SUCCEEDED(m_computeEngine->UploadAndConvert(
+              frame.pixels, (int)frame.width, (int)frame.height, frame.format,
+              &pTex))) {
+        ComPtr<IDXGISurface> dxgiSurface;
+        if (SUCCEEDED(pTex.As(&dxgiSurface))) {
+          D2D1_BITMAP_PROPERTIES1 computeProps = propsWithContext;
+          computeProps.pixelFormat.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+          computeProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+          m_d2dContext->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &computeProps, &rawBitmap);
+        }
+      }
+    }
+    // Fallback: Direct pixel upload
+    if (!rawBitmap) {
+      if (FAILED(m_d2dContext->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(frame.width), static_cast<UINT32>(frame.height)),
+                  frame.pixels, static_cast<UINT32>(frame.stride), &propsWithContext, &rawBitmap))) {
+          return E_FAIL;
       }
     }
   }
 
-  // Fallback: Direct pixel upload (BGRA8888 or if compute path failed)
-  if (!rawBitmap) {
-    HRESULT hr = m_d2dContext->CreateBitmap(
-        D2D1::SizeU(static_cast<UINT32>(frame.width),
-                    static_cast<UINT32>(frame.height)),
-        frame.pixels, static_cast<UINT32>(frame.stride), &propsWithContext, &rawBitmap);
-    if (FAILED(hr)) return hr;
-  }
-
-  if (applyCms && effectiveCmsMode != 0) { // Mode 0 = Unmanaged (Force bypass)
+  // Step 3: Apply CMS and Soft Proofing
+  const bool enableSoftProofing = g_runtime.EnableSoftProofing && !g_runtime.SoftProofProfilePath.empty();
+  if ((applyCms && effectiveCmsMode != 0) || enableSoftProofing) {
     // Find destination context (Monitor or scRGB)
     ComPtr<ID2D1ColorContext> dstContext;
 
@@ -952,12 +923,23 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
         if (SUCCEEDED(m_d2dContext->CreateBitmap(targetSize, nullptr, 0, &targetProps, &managedBitmap))) {
           ComPtr<ID2D1Image> oldTarget;
           m_d2dContext->GetTarget(&oldTarget);
+          float oldDpiX, oldDpiY;
+          m_d2dContext->GetDpi(&oldDpiX, &oldDpiY);
+          m_d2dContext->SetDpi(96.0f, 96.0f);
+          auto oldUnitMode = m_d2dContext->GetUnitMode();
+          m_d2dContext->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
+
           m_d2dContext->SetTarget(managedBitmap.Get());
           m_d2dContext->BeginDraw();
           m_d2dContext->Clear(D2D1::ColorF(0, 0, 0, 0));
+
+          // Render raw frame into CMS-aware target
           m_d2dContext->DrawImage(cmsOutput.Get());
+
           HRESULT endDrawHr = m_d2dContext->EndDraw();
           m_d2dContext->SetTarget(oldTarget.Get());
+          m_d2dContext->SetDpi(oldDpiX, oldDpiY);
+          m_d2dContext->SetUnitMode(oldUnitMode);
 
           if (SUCCEEDED(endDrawHr)) {
             *outBitmap = managedBitmap.Detach();

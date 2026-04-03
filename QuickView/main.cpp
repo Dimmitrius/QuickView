@@ -191,6 +191,7 @@ ImageEngine* g_pImageEngine = nullptr; // [v3.1] Global Accessor for UIRenderer
 static CompositionEngine* g_compEngine = nullptr; // [Fix] Raw pointer to avoid unique_ptr include hell
 static std::unique_ptr<UIRenderer> g_uiRenderer;  // 鐙珛 UI 灞傛覆鏌撳櫒
 static InputController g_inputController;  // Quantum Stream: 杈撳叆鐘舵€佹満
+CRenderEngine* g_pRenderEngine = nullptr; // Global raw alias for linker compatibility
 
 // [Fix] Fullscreen State Tracking
 bool g_isFullScreen = false;
@@ -4870,6 +4871,11 @@ void RefreshImageDisplay(HWND hwnd) {
             if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*frame, &bitmap))) {
                 g_imageResource.bitmap = bitmap;
                 g_isImageDirty = false; // [v10.3.1] Force refresh consumed, preventing redundant OnPaint cycle
+                
+                // [Titan] Invalidate tiles to trigger CMS re-upload
+                if (g_pImageEngine && g_pImageEngine->IsTitanModeEnabled()) {
+                    g_pImageEngine->InvalidateGpuTiles();
+                }
                 needsRepaint = true;
             }
         }
@@ -5741,8 +5747,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
             }
         });
     }
-    
-    // Apply Window Corner Preference
     ApplyWindowCornerPreference(hwnd, g_config.RoundedCorners);
     
     // Set global hwnd for RequestRepaint system
@@ -5752,7 +5756,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     // Just sync runtime state
     g_runtime.SyncFrom(g_config);
 
-    g_renderEngine = std::make_unique<CRenderEngine>(); g_renderEngine->Initialize(hwnd);
+    g_renderEngine = std::make_unique<CRenderEngine>();
+    g_pRenderEngine = g_renderEngine.get();
+    g_renderEngine->Initialize(hwnd);
     g_imageLoader = std::make_unique<CImageLoader>(); g_imageLoader->Initialize(g_renderEngine->GetWICFactory());
     g_imageEngine = std::make_unique<ImageEngine>(g_imageLoader.get());
     g_pImageEngine = g_imageEngine.get(); // [v3.1] Init Global Accessor
