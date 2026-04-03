@@ -2515,8 +2515,8 @@ void RequestRepaint(PaintLayer layer) {
 static void RefreshDisplayColorPipeline(HWND hwnd, bool requestFullRepaint) {
     if (!g_compEngine) return;
 
-    g_compEngine->SetAdvancedColorEnabled(g_config.EnableAdvancedColor);
     const bool changed = g_compEngine->RefreshDisplayColorState(g_runtime.ForceHdrSimulation);
+    g_compEngine->SetAdvancedColorEnabled(g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorSupported));
     const float displayHdrHeadroomStops = GetCurrentDisplayHdrHeadroomStops();
     if (g_renderEngine) {
         g_renderEngine->SetAdvancedColorMode(g_compEngine->IsAdvancedColor());
@@ -4248,7 +4248,7 @@ void SaveConfig() {
     // Image
     WritePrivateProfileStringW(L"Image", L"AutoRotate", std::to_wstring(g_config.AutoRotate).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"ColorManagement", g_config.ColorManagement ? L"1" : L"0", iniPath.c_str());
-    WritePrivateProfileStringW(L"Image", L"EnableAdvancedColor", g_config.EnableAdvancedColor ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"Image", L"AdvancedColorMode", std::to_wstring(g_config.AdvancedColorMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsDefaultFallback", std::to_wstring(g_config.CmsDefaultFallback).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsRenderingIntent", std::to_wstring(g_config.CmsRenderingIntent).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"HdrToneMappingMode", std::to_wstring(g_config.HdrToneMappingMode).c_str(), iniPath.c_str());
@@ -4380,7 +4380,7 @@ void LoadConfig() {
     // Image
     g_config.AutoRotate = GetPrivateProfileIntW(L"Image", L"AutoRotate", 1, iniPath.c_str()) != 0;
     g_config.ColorManagement = GetPrivateProfileIntW(L"Image", L"ColorManagement", 1, iniPath.c_str()) != 0;
-    g_config.EnableAdvancedColor = GetPrivateProfileIntW(L"Image", L"EnableAdvancedColor", 0, iniPath.c_str()) != 0;
+    g_config.AdvancedColorMode = GetPrivateProfileIntW(L"Image", L"AdvancedColorMode", 2, iniPath.c_str());
     g_config.CmsDefaultFallback = GetPrivateProfileIntW(L"Image", L"CmsDefaultFallback", 0, iniPath.c_str());
     g_config.CmsRenderingIntent = GetPrivateProfileIntW(L"Image", L"CmsRenderingIntent", 1, iniPath.c_str());
     g_config.HdrToneMappingMode = GetPrivateProfileIntW(L"Image", L"HdrToneMappingMode", 0, iniPath.c_str());
@@ -4869,6 +4869,7 @@ void RefreshImageDisplay(HWND hwnd) {
             ComPtr<ID2D1Bitmap> bitmap;
             if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*frame, &bitmap))) {
                 g_imageResource.bitmap = bitmap;
+                g_isImageDirty = false; // [v10.3.1] Force refresh consumed, preventing redundant OnPaint cycle
                 needsRepaint = true;
             }
         }
@@ -5793,8 +5794,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     // Initialize DirectComposition (Visual Ping-Pong Architecture)
     // g_compEngine = std::make_unique<CompositionEngine>();
     g_compEngine = new CompositionEngine();
-    g_compEngine->SetAdvancedColorEnabled(g_config.EnableAdvancedColor);
     if (SUCCEEDED(g_compEngine->Initialize(hwnd, g_renderEngine->GetD3DDevice(), g_renderEngine->GetD2DDevice()))) {
+        g_compEngine->RefreshDisplayColorState(g_runtime.ForceHdrSimulation);
+        g_compEngine->SetAdvancedColorEnabled(g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorActive));
         g_renderEngine->SetAdvancedColorMode(g_compEngine->IsAdvancedColor());
         g_renderEngine->SetDisplayColorState(g_compEngine->GetDisplayColorState());
         // Pure DComp architecture: Surfaces are managed by CompositionEngine
@@ -9230,6 +9232,14 @@ void ProcessEngineEvents(HWND hwnd) {
                          g_debugMetrics.lastUploadChannel.store(1);
                          g_imageResource.Reset();
                          g_imageResource.bitmap = bitmap;
+                         g_isImageDirty = false; // [v10.3.1] Force refresh consumed, preventing redundant OnPaint cycle
+                         
+                         // [v10.3.1] Restore AuxLayer from frame if present (ensures UI/Renderer consistency)
+                         if (evt.rawFrame && evt.rawFrame->auxLayer) {
+                             g_imageResource.blendOp = evt.rawFrame->blendOp;
+                             g_imageResource.shaderPayload = evt.rawFrame->shaderPayload;
+                             g_imageResource.auxLayer = evt.rawFrame->auxLayer->Clone();
+                         }
                          resourceReady = true;
                     }
                 }
@@ -9614,23 +9624,38 @@ void ProcessEngineEvents(HWND hwnd) {
 
     case EventType::AuxLayerReady:
         if (evt.imageId == g_currentImageId.load() && evt.auxLayer) {
-            if (g_config.EnableAdvancedColor) {
-                // Update active resource with the gain map
-                g_imageResource.blendOp = evt.blendOp;
-                g_imageResource.shaderPayload = evt.shaderPayload;
-                g_imageResource.auxLayer.reset(evt.auxLayer.release());
+            // [v10.3.1] Use Resolved Advanced Color State (Off / On / Auto)
+            // Simulation Mode (Ctrl+5) still respects this gate, but Auto mode will trigger if Sim is active.
+            if (g_compEngine && g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorActive)) {
+                // 1. Update Core Cache (Critical for navigation & Ctrl+5 refresh)
+                if (g_pImageEngine) {
+                    auto cachedFrame = g_pImageEngine->GetCachedImage(evt.filePath);
+                    if (cachedFrame) {
+                        cachedFrame->blendOp = evt.blendOp;
+                        cachedFrame->shaderPayload = evt.shaderPayload;
+                        // Move ownership to cache as primary storage
+                        cachedFrame->auxLayer = std::move(evt.auxLayer);
+                        
+                        // [v10.3.1] Propagate hasGainMap to metadata so simulation knows to bake
+                        g_currentMetadata.hdrMetadata.hasGainMap = true;
+                        cachedFrame->hdrMetadata.hasGainMap = true;
+                    }
+                }
 
-                // Set HDR metadata flag so renderer knows it has a gain map
-                g_currentMetadata.hdrMetadata.hasGainMap = true;
+                // 2. Update Active Runtime Resource (for immediate repaint)
+                auto cachedFrame = (g_pImageEngine) ? g_pImageEngine->GetCachedImage(evt.filePath) : nullptr;
+                if (cachedFrame && cachedFrame->auxLayer) {
+                    g_imageResource.blendOp = cachedFrame->blendOp;
+                    g_imageResource.shaderPayload = cachedFrame->shaderPayload;
+                    g_imageResource.auxLayer = cachedFrame->auxLayer->Clone();
+                }
 
-                // Force full pipeline rebuild to ensure the gain map gets uploaded to GPU
-                g_isImageDirty = true;
-
-                // Trigger full repaint to composite the gain map
-                RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
+                // 3. Trigger GPU Re-upload and Bake (Binds base layer + new gain map)
+                // This ensures the HDR effect appears as soon as the auxiliary layer is ready.
+                RefreshImageDisplay(hwnd);
 
                 wchar_t debugBuf[256];
-                swprintf_s(debugBuf, L"[Main] AuxLayerReady: Gain Map applied dynamically!\n");
+                swprintf_s(debugBuf, L"[Main] AuxLayerReady: Gain Map applied via Auto-Gate and GPU Bake triggered\n");
                 OutputDebugStringW(debugBuf);
             }
         }

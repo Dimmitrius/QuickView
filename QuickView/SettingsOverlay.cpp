@@ -1205,7 +1205,7 @@ void SettingsOverlay::BuildMenu() {
     };
     tabImage.items.push_back(itemCmsIntent);
 
-    SettingsItem itemAdvColor = { AppStrings::Settings_Label_AdvancedColor, OptionType::Toggle, &g_config.EnableAdvancedColor };
+    SettingsItem itemAdvColor = { AppStrings::Settings_Label_AdvancedColor, OptionType::Segment, nullptr, nullptr, &g_config.AdvancedColorMode, nullptr, 0, 0, {AppStrings::Settings_Option_Off, AppStrings::Settings_Option_On, AppStrings::Settings_Option_Auto} };
     itemAdvColor.tooltipText = AppStrings::Settings_Tooltip_AdvancedColor;
     itemAdvColor.onChange = []() {
         SaveConfig();
