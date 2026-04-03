@@ -234,6 +234,7 @@ namespace AppStrings {
     extern const wchar_t* Settings_Option_Custom;
     extern const wchar_t* Settings_Option_ZoomAuto;
     extern const wchar_t* Settings_Option_Off;
+    extern const wchar_t* Settings_Option_On;
     extern const wchar_t* Settings_Option_Lite;
     extern const wchar_t* Settings_Option_Full;
     extern const wchar_t* Settings_Option_LargeOnly;

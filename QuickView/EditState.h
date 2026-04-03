@@ -145,7 +145,7 @@ struct AppConfig {
     bool ColorManagement = true;         // Master toggle for Color Management System
     int CmsRenderingIntent = 1;          // 0=Perceptual, 1=Relative Colorimetric
     int HdrToneMappingMode = 0;          // 0=Perceptual, 1=Colorimetric
-    bool EnableAdvancedColor = false;    // HDR / FP16 scRGB pipeline toggle
+    int AdvancedColorMode = 2;           // 0=Off, 1=On, 2=Auto (HDR / FP16 scRGB pipeline)
     int CmsDefaultFallback = 0;          // Fallback for untagged images: 0=sRGB, 1=P3, 2=AdobeRGB, 3=ProPhoto
     std::wstring CustomSoftProofProfile; // Path to user-selected ICC file for soft proofing
     std::wstring CustomEditorPath;       // Path to user-selected custom image editor executable
@@ -170,6 +170,11 @@ struct AppConfig {
     bool ForceRawDecode = false;         
     bool RenderRAW = false;
     
+    /// <summary>
+    bool IsAdvancedColorEnabled(bool systemSupportsHdr) const {
+        return AdvancedColorMode == 1 || (AdvancedColorMode == 2 && systemSupportsHdr);
+    }
+
     /// <summary>
     /// Should auto-save for given quality?
     /// </summary>

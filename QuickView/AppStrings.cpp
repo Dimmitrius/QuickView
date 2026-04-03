@@ -285,6 +285,7 @@ const wchar_t *Settings_Option_White = nullptr;
 const wchar_t *Settings_Option_Grid = nullptr;
 const wchar_t *Settings_Option_Custom = nullptr;
 const wchar_t *Settings_Option_Off = nullptr;
+const wchar_t *Settings_Option_On = nullptr;
 const wchar_t *Settings_Option_Lite = nullptr;
 const wchar_t *Settings_Option_Full = nullptr;
 const wchar_t *Settings_Option_LargeOnly = nullptr;
@@ -709,6 +710,7 @@ struct EN {
   static constexpr const wchar_t *Settings_Option_Grid = L"Grid";
   static constexpr const wchar_t *Settings_Option_Custom = L"Custom";
   static constexpr const wchar_t *Settings_Option_Off = L"Off";
+  static constexpr const wchar_t *Settings_Option_On = L"On";
   static constexpr const wchar_t *Settings_Option_Lite = L"Lite";
   static constexpr const wchar_t *Settings_Option_Full = L"Full";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"Large Only";
@@ -1008,6 +1010,7 @@ struct CN {
   static constexpr const wchar_t *Settings_Option_Grid = L"网格";
   static constexpr const wchar_t *Settings_Option_Custom = L"自定义";
   static constexpr const wchar_t *Settings_Option_Off = L"关闭";
+  static constexpr const wchar_t *Settings_Option_On = L"开启";
   static constexpr const wchar_t *Settings_Option_Lite = L"简略";
   static constexpr const wchar_t *Settings_Option_Full = L"详细";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"仅大图";
@@ -1556,6 +1559,7 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_Grid = L"網格";
   static constexpr const wchar_t *Settings_Option_Custom = L"自訂";
   static constexpr const wchar_t *Settings_Option_Off = L"關閉";
+  static constexpr const wchar_t *Settings_Option_On = L"開啟";
   static constexpr const wchar_t *Settings_Option_Lite = L"簡略";
   static constexpr const wchar_t *Settings_Option_Full = L"詳細";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"僅大圖";
@@ -1989,6 +1993,7 @@ struct JA {
   static constexpr const wchar_t *Settings_Option_Grid = L"グリッド";
   static constexpr const wchar_t *Settings_Option_Custom = L"カスタム";
   static constexpr const wchar_t *Settings_Option_Off = L"オフ";
+  static constexpr const wchar_t *Settings_Option_On = L"オン";
   static constexpr const wchar_t *Settings_Option_Lite = L"簡易";
   static constexpr const wchar_t *Settings_Option_Full = L"詳細";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"大きい画像のみ";
@@ -2482,6 +2487,7 @@ struct RU {
   static constexpr const wchar_t *Settings_Option_Grid = L"Сетка";
   static constexpr const wchar_t *Settings_Option_Custom = L"Свой";
   static constexpr const wchar_t *Settings_Option_Off = L"Выкл";
+  static constexpr const wchar_t *Settings_Option_On = L"Вкл";
   static constexpr const wchar_t *Settings_Option_Lite = L"Кратко";
   static constexpr const wchar_t *Settings_Option_Full = L"Полностью";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"Только большие";
@@ -2936,6 +2942,7 @@ struct DE {
   static constexpr const wchar_t *Settings_Option_Grid = L"Raster";
   static constexpr const wchar_t *Settings_Option_Custom = L"Benutzerdefiniert";
   static constexpr const wchar_t *Settings_Option_Off = L"Aus";
+  static constexpr const wchar_t *Settings_Option_On = L"Ein";
   static constexpr const wchar_t *Settings_Option_Lite = L"Kompakt";
   static constexpr const wchar_t *Settings_Option_Full = L"Vollständig";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"Nur Große";
@@ -3416,6 +3423,7 @@ struct ES {
   static constexpr const wchar_t *Settings_Option_Grid = L"Cuadrícula";
   static constexpr const wchar_t *Settings_Option_Custom = L"Personalizado";
   static constexpr const wchar_t *Settings_Option_Off = L"Desactivado";
+  static constexpr const wchar_t *Settings_Option_On = L"Activado";
   static constexpr const wchar_t *Settings_Option_Lite = L"Compacto";
   static constexpr const wchar_t *Settings_Option_Full = L"Completo";
   static constexpr const wchar_t *Settings_Option_LargeOnly = L"Solo grandes";
@@ -3802,6 +3810,7 @@ template <typename T> void ApplyT() {
   Settings_Option_Grid = T::Settings_Option_Grid;
   Settings_Option_Custom = T::Settings_Option_Custom;
   Settings_Option_Off = T::Settings_Option_Off;
+  Settings_Option_On = T::Settings_Option_On;
   Settings_Option_Lite = T::Settings_Option_Lite;
   Settings_Option_Full = T::Settings_Option_Full;
   Settings_Option_LargeOnly = T::Settings_Option_LargeOnly;

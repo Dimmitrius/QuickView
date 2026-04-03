@@ -493,7 +493,7 @@ HRESULT CRenderEngine::ResolveDestinationColorContext(
     return E_INVALIDARG;
   *outContext = nullptr;
 
-  if (m_isAdvancedColor && g_config.EnableAdvancedColor) {
+  if (m_isAdvancedColor && g_config.IsAdvancedColorEnabled(m_displayColorState.advancedColorSupported)) {
     return m_d2dContext->CreateColorContext(D2D1_COLOR_SPACE_SCRGB, nullptr, 0,
                                             outContext);
   }
@@ -624,7 +624,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
       case QuickView::GpuBlendOp::UltraHdrGainMap: {
           // Fill target headroom from current display state
           QuickView::GpuShaderPayload payload = frame.shaderPayload;
-          if (m_isAdvancedColor && g_config.EnableAdvancedColor) {
+          if (m_isAdvancedColor && g_config.IsAdvancedColorEnabled(m_displayColorState.advancedColorSupported)) {
               payload.targetHeadroom = m_displayColorState.GetHdrHeadroomStops();
           } else {
               payload.targetHeadroom = 0.0f; // SDR: no gain applied
@@ -719,7 +719,7 @@ CRenderEngine::UploadRawFrameToGPU(const QuickView::RawImageFrame &frame,
       ComPtr<ID2D1ColorContext> scRgbContext;
       CreateScRgbColorContext(m_d2dContext.Get(), &scRgbContext);
 
-      if (m_isAdvancedColor && g_config.EnableAdvancedColor) {
+      if (m_isAdvancedColor && g_config.IsAdvancedColorEnabled(m_displayColorState.advancedColorSupported)) {
           // Pure HDR Environment (Roll-off)
           const QuickView::ToneMapSettings toneMapSettings = BuildToneMapSettings(frame, m_displayColorState);
           if (m_computeEngine && m_computeEngine->IsAvailable() && toneMapSettings.contentPeakScRgb > (toneMapSettings.displayPeakScRgb > 1.0f ? toneMapSettings.displayPeakScRgb : 1.0f)) {
