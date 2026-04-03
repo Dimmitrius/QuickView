@@ -848,7 +848,34 @@ void SettingsOverlay::BuildMenu() {
     
     // Pro Habits
     tabGeneral.items.push_back({ AppStrings::Settings_Group_Habits, OptionType::Header });
-    tabGeneral.items.push_back({ AppStrings::Settings_Label_LoopNav, OptionType::Toggle, &g_config.LoopNavigation });
+
+    SettingsItem itemNavLoop = { AppStrings::Settings_Label_NavLoopMode, OptionType::ComboBox, nullptr, nullptr, &g_config.NavLoopMode };
+    itemNavLoop.options = { AppStrings::Settings_Option_NavLoop, AppStrings::Settings_Option_NavStop, AppStrings::Settings_Option_NavThrough };
+    itemNavLoop.onChange = []() {
+        g_runtime.NavLoopMode = g_config.NavLoopMode;
+        SaveConfig();
+    };
+    tabGeneral.items.push_back(itemNavLoop);
+
+    SettingsItem itemSortOrder = { AppStrings::Settings_Label_SortOrder, OptionType::ComboBox, nullptr, nullptr, &g_config.SortOrder };
+    itemSortOrder.options = {
+        AppStrings::Settings_Option_SortAuto, AppStrings::Settings_Option_SortName,
+        AppStrings::Settings_Option_SortModified, AppStrings::Settings_Option_SortDateTaken,
+        AppStrings::Settings_Option_SortSize, AppStrings::Settings_Option_SortType
+    };
+    itemSortOrder.onChange = []() {
+        g_runtime.SortOrder = g_config.SortOrder;
+        SaveConfig();
+    };
+    tabGeneral.items.push_back(itemSortOrder);
+
+    SettingsItem itemSortDesc = { AppStrings::Settings_Label_SortDescending, OptionType::Toggle, &g_config.SortDescending };
+    itemSortDesc.onChange = []() {
+        g_runtime.SortDescending = g_config.SortDescending;
+        SaveConfig();
+    };
+    tabGeneral.items.push_back(itemSortDesc);
+
     tabGeneral.items.push_back({ AppStrings::Settings_Label_ConfirmDel, OptionType::Toggle, &g_config.ConfirmDelete });
     
     // [Phase 2] Cross-Monitor

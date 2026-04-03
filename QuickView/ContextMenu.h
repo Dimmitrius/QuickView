@@ -62,6 +62,20 @@ enum ContextMenuCommand : UINT {
     IDM_ABOUT,
     IDM_EXIT,
 
+    // [Sorting & Navigation] Options
+    IDM_SORT_AUTO,
+    IDM_SORT_NAME,
+    IDM_SORT_MODIFIED,
+    IDM_SORT_DATE_TAKEN,
+    IDM_SORT_SIZE,
+    IDM_SORT_TYPE,
+    IDM_SORT_ASCENDING,
+    IDM_SORT_DESCENDING,
+
+    IDM_NAV_LOOP,
+    IDM_NAV_STOP,
+    IDM_NAV_THROUGH,
+
     // [CMS] Color Space Options
     IDM_CMS_UNMANAGED,
     IDM_CMS_AUTO,

@@ -79,6 +79,10 @@ namespace AppStrings {
     extern const wchar_t* Context_Rename;
     extern const wchar_t* Context_FixExtension;
     extern const wchar_t* Context_Delete;
+    extern const wchar_t* Context_SortBy;
+    extern const wchar_t* Context_NavOrder;
+    extern const wchar_t* Context_SortAscending;
+    extern const wchar_t* Context_SortDescending;
     extern const wchar_t* Context_Settings;
     extern const wchar_t* Context_About;
     extern const wchar_t* Context_CompareMode; // New
@@ -178,7 +182,9 @@ namespace AppStrings {
     extern const wchar_t* Settings_Label_Language;
     extern const wchar_t* Settings_Label_SingleInstance;
     extern const wchar_t* Settings_Label_CheckUpdates;
-    extern const wchar_t* Settings_Label_LoopNav;
+    extern const wchar_t* Settings_Label_NavLoopMode;
+    extern const wchar_t* Settings_Label_SortOrder;
+    extern const wchar_t* Settings_Label_SortDescending;
     extern const wchar_t* Settings_Label_ConfirmDel;
     extern const wchar_t* Settings_Label_Portable;
     extern const wchar_t* Settings_Label_SpanDisplays;
@@ -264,6 +270,20 @@ namespace AppStrings {
     extern const wchar_t* Settings_Option_Arrow;
     extern const wchar_t* Settings_Option_Cursor;
     extern const wchar_t* Settings_Option_Manual;
+
+    // Sort Options
+    extern const wchar_t* Settings_Option_SortAuto;
+    extern const wchar_t* Settings_Option_SortName;
+    extern const wchar_t* Settings_Option_SortModified;
+    extern const wchar_t* Settings_Option_SortDateTaken;
+    extern const wchar_t* Settings_Option_SortSize;
+    extern const wchar_t* Settings_Option_SortType;
+
+    // Nav Options
+    extern const wchar_t* Settings_Option_NavLoop;
+    extern const wchar_t* Settings_Option_NavStop;
+    extern const wchar_t* Settings_Option_NavThrough;
+
     extern const wchar_t* Settings_Option_Linear;
     extern const wchar_t* Settings_Option_Nearest;
     extern const wchar_t* Settings_Option_HighQualityCubic;
