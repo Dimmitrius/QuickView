@@ -2515,8 +2515,8 @@ void RequestRepaint(PaintLayer layer) {
 static void RefreshDisplayColorPipeline(HWND hwnd, bool requestFullRepaint) {
     if (!g_compEngine) return;
 
-    g_compEngine->SetAdvancedColorEnabled(g_config.EnableAdvancedColor);
     const bool changed = g_compEngine->RefreshDisplayColorState(g_runtime.ForceHdrSimulation);
+    g_compEngine->SetAdvancedColorEnabled(g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorSupported));
     const float displayHdrHeadroomStops = GetCurrentDisplayHdrHeadroomStops();
     if (g_renderEngine) {
         g_renderEngine->SetAdvancedColorMode(g_compEngine->IsAdvancedColor());
@@ -4248,7 +4248,7 @@ void SaveConfig() {
     // Image
     WritePrivateProfileStringW(L"Image", L"AutoRotate", std::to_wstring(g_config.AutoRotate).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"ColorManagement", g_config.ColorManagement ? L"1" : L"0", iniPath.c_str());
-    WritePrivateProfileStringW(L"Image", L"EnableAdvancedColor", g_config.EnableAdvancedColor ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"Image", L"AdvancedColorMode", std::to_wstring(g_config.AdvancedColorMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsDefaultFallback", std::to_wstring(g_config.CmsDefaultFallback).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"CmsRenderingIntent", std::to_wstring(g_config.CmsRenderingIntent).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Image", L"HdrToneMappingMode", std::to_wstring(g_config.HdrToneMappingMode).c_str(), iniPath.c_str());
@@ -4380,7 +4380,7 @@ void LoadConfig() {
     // Image
     g_config.AutoRotate = GetPrivateProfileIntW(L"Image", L"AutoRotate", 1, iniPath.c_str()) != 0;
     g_config.ColorManagement = GetPrivateProfileIntW(L"Image", L"ColorManagement", 1, iniPath.c_str()) != 0;
-    g_config.EnableAdvancedColor = GetPrivateProfileIntW(L"Image", L"EnableAdvancedColor", 0, iniPath.c_str()) != 0;
+    g_config.AdvancedColorMode = GetPrivateProfileIntW(L"Image", L"AdvancedColorMode", 2, iniPath.c_str());
     g_config.CmsDefaultFallback = GetPrivateProfileIntW(L"Image", L"CmsDefaultFallback", 0, iniPath.c_str());
     g_config.CmsRenderingIntent = GetPrivateProfileIntW(L"Image", L"CmsRenderingIntent", 1, iniPath.c_str());
     g_config.HdrToneMappingMode = GetPrivateProfileIntW(L"Image", L"HdrToneMappingMode", 0, iniPath.c_str());
@@ -5776,8 +5776,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     // Initialize DirectComposition (Visual Ping-Pong Architecture)
     // g_compEngine = std::make_unique<CompositionEngine>();
     g_compEngine = new CompositionEngine();
-    g_compEngine->SetAdvancedColorEnabled(g_config.EnableAdvancedColor);
     if (SUCCEEDED(g_compEngine->Initialize(hwnd, g_renderEngine->GetD3DDevice(), g_renderEngine->GetD2DDevice()))) {
+        g_compEngine->RefreshDisplayColorState(g_runtime.ForceHdrSimulation);
+        g_compEngine->SetAdvancedColorEnabled(g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorSupported));
         g_renderEngine->SetAdvancedColorMode(g_compEngine->IsAdvancedColor());
         g_renderEngine->SetDisplayColorState(g_compEngine->GetDisplayColorState());
         // Pure DComp architecture: Surfaces are managed by CompositionEngine
@@ -9614,8 +9615,9 @@ void ProcessEngineEvents(HWND hwnd) {
 
     case EventType::AuxLayerReady:
         if (evt.imageId == g_currentImageId.load() && evt.auxLayer) {
-            // [v10.3.1] Adhere to global setting even in simulation mode (Simulation only mocks display info)
-            if (g_config.EnableAdvancedColor) {
+            // [v10.3.1] Use Resolved Advanced Color State (Off / On / Auto)
+            // Simulation Mode (Ctrl+5) still respects this gate, but Auto mode will trigger if Sim is active.
+            if (g_compEngine && g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorSupported)) {
                 // 1. Update Core Cache (Critical for navigation & Ctrl+5 refresh)
                 if (g_pImageEngine) {
                     auto cachedFrame = g_pImageEngine->GetCachedImage(evt.filePath);
@@ -9632,7 +9634,7 @@ void ProcessEngineEvents(HWND hwnd) {
                 }
 
                 // 2. Update Active Runtime Resource (for immediate repaint)
-                auto cachedFrame = g_pImageEngine ? g_pImageEngine->GetCachedImage(evt.filePath) : nullptr;
+                auto cachedFrame = (g_pImageEngine) ? g_pImageEngine->GetCachedImage(evt.filePath) : nullptr;
                 if (cachedFrame && cachedFrame->auxLayer) {
                     g_imageResource.blendOp = cachedFrame->blendOp;
                     g_imageResource.shaderPayload = cachedFrame->shaderPayload;
@@ -9644,7 +9646,7 @@ void ProcessEngineEvents(HWND hwnd) {
                 RefreshImageDisplay(hwnd);
 
                 wchar_t debugBuf[256];
-                swprintf_s(debugBuf, L"[Main] AuxLayerReady: Gain Map applied and GPU Bake triggered\n");
+                swprintf_s(debugBuf, L"[Main] AuxLayerReady: Gain Map applied via Auto-Gate and GPU Bake triggered\n");
                 OutputDebugStringW(debugBuf);
             }
         }

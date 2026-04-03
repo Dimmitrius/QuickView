@@ -1961,7 +1961,7 @@ namespace {
                                              const QuickView::DisplayColorState& displayState) {
         const bool hdrContent = IsHdrLikeContent(metadata);
         if (hdrContent) {
-            if (displayState.advancedColorActive && g_config.EnableAdvancedColor) {
+            if (displayState.advancedColorActive && g_config.IsAdvancedColorEnabled(displayState.advancedColorSupported)) {
                 return L"[HDR Direct] DirectComposition scRGB (FP16)";
             }
             return L"[SDR Fallback] GPU Tone Mapped to SDR";
