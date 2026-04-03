@@ -155,6 +155,27 @@ void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix,
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     // ========================================================
+    // [Sorting & Navigation] Group
+    // ========================================================
+    HMENU hSortMenu = CreatePopupMenu();
+    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 0 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_AUTO, AppStrings::Settings_Option_SortAuto);
+    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 1 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_NAME, AppStrings::Settings_Option_SortName);
+    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 2 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_MODIFIED, AppStrings::Settings_Option_SortModified);
+    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 3 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_DATE_TAKEN, AppStrings::Settings_Option_SortDateTaken);
+    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 4 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_SIZE, AppStrings::Settings_Option_SortSize);
+    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 5 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_TYPE, AppStrings::Settings_Option_SortType);
+    AppendMenuW(hSortMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(hSortMenu, (!g_runtime.SortDescending ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_ASCENDING, AppStrings::Context_SortAscending);
+    AppendMenuW(hSortMenu, (g_runtime.SortDescending ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_DESCENDING, AppStrings::Context_SortDescending);
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, AppStrings::Context_SortBy);
+
+    HMENU hNavMenu = CreatePopupMenu();
+    AppendMenuW(hNavMenu, (g_runtime.NavLoop ? MF_CHECKED : 0) | MF_STRING, IDM_NAV_LOOP, AppStrings::Settings_Option_NavLoop);
+    AppendMenuW(hNavMenu, (g_runtime.NavTraverse ? MF_CHECKED : 0) | MF_STRING, IDM_NAV_THROUGH, AppStrings::Settings_Option_NavThrough);
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hNavMenu, AppStrings::Context_NavOrder);
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+
+    // ========================================================
     // [Settings] Group
     // ========================================================
     AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, AppStrings::Context_Settings);

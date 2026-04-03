@@ -48,7 +48,9 @@ const wchar_t *Settings_Group_Habits = nullptr;
 const wchar_t *Settings_Label_Language = nullptr;
 const wchar_t *Settings_Label_SingleInstance = nullptr;
 const wchar_t *Settings_Label_CheckUpdates = nullptr;
-const wchar_t *Settings_Label_LoopNav = nullptr;
+const wchar_t *Settings_Label_NavLoopMode = nullptr;
+const wchar_t *Settings_Label_SortOrder = nullptr;
+const wchar_t *Settings_Label_SortDescending = nullptr;
 const wchar_t *Settings_Label_ConfirmDel = nullptr;
 const wchar_t *Settings_Label_Portable = nullptr;
 const wchar_t *Settings_Label_SpanDisplays = nullptr;
@@ -97,6 +99,10 @@ const wchar_t *Context_SetAsWallpaper = nullptr;
 const wchar_t *Context_Rename = nullptr;
 const wchar_t *Context_FixExtension = nullptr;
 const wchar_t *Context_Delete = nullptr;
+const wchar_t *Context_SortBy = nullptr;
+const wchar_t *Context_NavOrder = nullptr;
+const wchar_t *Context_SortAscending = nullptr;
+const wchar_t *Context_SortDescending = nullptr;
 const wchar_t *Context_Settings = nullptr;
 const wchar_t *Context_About = nullptr;
 const wchar_t *Context_CompareMode = nullptr; // New
@@ -297,6 +303,14 @@ const wchar_t *Settings_Option_Exit = nullptr;
 const wchar_t *Settings_Option_Arrow = nullptr;
 const wchar_t *Settings_Option_Cursor = nullptr;
 const wchar_t *Settings_Option_Manual = nullptr;
+const wchar_t *Settings_Option_SortAuto = nullptr;
+const wchar_t *Settings_Option_SortName = nullptr;
+const wchar_t *Settings_Option_SortModified = nullptr;
+const wchar_t *Settings_Option_SortDateTaken = nullptr;
+const wchar_t *Settings_Option_SortSize = nullptr;
+const wchar_t *Settings_Option_SortType = nullptr;
+const wchar_t *Settings_Option_NavLoop = nullptr;
+const wchar_t *Settings_Option_NavThrough = nullptr;
 const wchar_t *Settings_Option_Linear = nullptr;
 const wchar_t *Settings_Option_Nearest = nullptr;
 const wchar_t *Settings_Option_HighQualityCubic = nullptr;
@@ -415,7 +429,9 @@ struct EN {
       L"Single Instance";
   static constexpr const wchar_t *Settings_Label_CheckUpdates =
       L"Check Updates";
-  static constexpr const wchar_t *Settings_Label_LoopNav = L"Loop Navigation";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"Loop";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"Sort Order";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"Descending";
   static constexpr const wchar_t *Settings_Label_ConfirmDel = L"Confirm Delete";
   static constexpr const wchar_t *Settings_Label_Portable = L"Portable Mode";
   static constexpr const wchar_t *Settings_Label_SpanDisplays =
@@ -550,6 +566,10 @@ struct EN {
   static constexpr const wchar_t *Context_Rename = L"Rename\tF2";
   static constexpr const wchar_t *Context_FixExtension = L"Fix Extension";
   static constexpr const wchar_t *Context_Delete = L"Delete\tDel";
+  static constexpr const wchar_t *Context_SortBy = L"Sort By";
+  static constexpr const wchar_t *Context_NavOrder = L"Navigation Order";
+  static constexpr const wchar_t *Context_SortAscending = L"Ascending";
+  static constexpr const wchar_t *Context_SortDescending = L"Descending";
   static constexpr const wchar_t *Context_Settings = L"Settings...";
   static constexpr const wchar_t *Context_About = L"About QuickView";
   static constexpr const wchar_t *Context_CompareMode = L"Compare Mode\tC";
@@ -722,6 +742,15 @@ struct EN {
   static constexpr const wchar_t *Settings_Option_Arrow = L"Arrow";
   static constexpr const wchar_t *Settings_Option_Cursor = L"Cursor";
   static constexpr const wchar_t *Settings_Option_Manual = L"Manual";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"Auto (Explorer)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"Name";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"Date Modified";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Date Taken (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"Size";
+  static constexpr const wchar_t *Settings_Option_SortType = L"Type";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"Loop";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"Through subfolders";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"Linear: Basic smoothing";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -870,7 +899,9 @@ struct CN {
   static constexpr const wchar_t *Settings_Label_Language = L"语言";
   static constexpr const wchar_t *Settings_Label_SingleInstance = L"单实例模式";
   static constexpr const wchar_t *Settings_Label_CheckUpdates = L"检查更新";
-  static constexpr const wchar_t *Settings_Label_LoopNav = L"循环导航";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"循环播放";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"列表排序方式";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"降序";
   static constexpr const wchar_t *Settings_Label_ConfirmDel = L"删除确认";
   static constexpr const wchar_t *Settings_Label_Portable = L"便携模式";
   static constexpr const wchar_t *Settings_Label_SpanDisplays =
@@ -1022,6 +1053,15 @@ struct CN {
   static constexpr const wchar_t *Settings_Option_Arrow = L"箭头";
   static constexpr const wchar_t *Settings_Option_Cursor = L"光标";
   static constexpr const wchar_t *Settings_Option_Manual = L"手动";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"自动 (资源管理器)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"文件名";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"修改时间";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"拍摄时间 (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"大小";
+  static constexpr const wchar_t *Settings_Option_SortType = L"类型";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"循环播放";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"穿透子文件夹";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"线性 (Linear)：基础平滑";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -1097,6 +1137,10 @@ struct CN {
   static constexpr const wchar_t *Context_Rename = L"重命名\tF2";
   static constexpr const wchar_t *Context_FixExtension = L"修复扩展名";
   static constexpr const wchar_t *Context_Delete = L"删除\tDel";
+  static constexpr const wchar_t *Context_SortBy = L"排序方式";
+  static constexpr const wchar_t *Context_NavOrder = L"导航顺序";
+  static constexpr const wchar_t *Context_SortAscending = L"升序";
+  static constexpr const wchar_t *Context_SortDescending = L"降序";
   static constexpr const wchar_t *Context_Settings = L"设置...";
   static constexpr const wchar_t *Context_About = L"关于 QuickView";
   static constexpr const wchar_t *Context_CompareMode = L"对比模式\tC";
@@ -1298,7 +1342,9 @@ struct TW {
   static constexpr const wchar_t *Settings_Label_SingleInstance =
       L"單一實例模式";
   static constexpr const wchar_t *Settings_Label_CheckUpdates = L"檢查更新";
-  static constexpr const wchar_t *Settings_Label_LoopNav = L"循環導覽";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"循環導覽";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"排序方式";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"降冪";
   static constexpr const wchar_t *Settings_Label_ConfirmDel = L"刪除確認";
   static constexpr const wchar_t *Settings_Label_Portable = L"可攜式模式";
   static constexpr const wchar_t *Settings_Label_SpanDisplays =
@@ -1414,6 +1460,10 @@ struct TW {
   static constexpr const wchar_t *Context_Rename = L"重新命名\tF2";
   static constexpr const wchar_t *Context_FixExtension = L"修復副檔名";
   static constexpr const wchar_t *Context_Delete = L"刪除\tDel";
+  static constexpr const wchar_t *Context_SortBy = L"排序方式";
+  static constexpr const wchar_t *Context_NavOrder = L"導覽順序";
+  static constexpr const wchar_t *Context_SortAscending = L"升冪";
+  static constexpr const wchar_t *Context_SortDescending = L"降冪";
   static constexpr const wchar_t *Context_Settings = L"設定...";
   static constexpr const wchar_t *Context_About = L"關於 QuickView";
   static constexpr const wchar_t *Context_CompareMode = L"對比模式\tC";
@@ -1571,6 +1621,16 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_Arrow = L"箭頭";
   static constexpr const wchar_t *Settings_Option_Cursor = L"游標";
   static constexpr const wchar_t *Settings_Option_Manual = L"手動";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"自動 (檔案總管)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"檔案名稱";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"修改時間";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"拍攝時間 (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"大小";
+  static constexpr const wchar_t *Settings_Option_SortType = L"類型";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"資料夾內循環";
+  static constexpr const wchar_t *Settings_Option_NavStop = L"到達末尾停止";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"穿透子資料夾";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"線性 (Linear)：基礎平滑";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -1717,8 +1777,9 @@ struct JA {
   static constexpr const wchar_t *Settings_Label_SingleInstance =
       L"単一インスタンス";
   static constexpr const wchar_t *Settings_Label_CheckUpdates = L"更新確認";
-  static constexpr const wchar_t *Settings_Label_LoopNav =
-      L"ループナビゲーション";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"ループナビゲーション";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"並べ替え順序";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"降順";
   static constexpr const wchar_t *Settings_Label_ConfirmDel = L"削除確認";
   static constexpr const wchar_t *Settings_Label_Portable = L"ポータブルモード";
   static constexpr const wchar_t *Settings_Label_SpanDisplays =
@@ -1848,6 +1909,10 @@ struct JA {
   static constexpr const wchar_t *Context_Rename = L"名前の変更\tF2";
   static constexpr const wchar_t *Context_FixExtension = L"拡張子を修正";
   static constexpr const wchar_t *Context_Delete = L"削除\tDel";
+  static constexpr const wchar_t *Context_SortBy = L"並べ替え";
+  static constexpr const wchar_t *Context_NavOrder = L"ナビゲーション順序";
+  static constexpr const wchar_t *Context_SortAscending = L"昇順";
+  static constexpr const wchar_t *Context_SortDescending = L"降順";
   static constexpr const wchar_t *Context_Settings = L"設定...";
   static constexpr const wchar_t *Context_About = L"QuickViewについて";
   static constexpr const wchar_t *Context_CompareMode = L"比較モード\tC";
@@ -2005,6 +2070,16 @@ struct JA {
   static constexpr const wchar_t *Settings_Option_Arrow = L"矢印";
   static constexpr const wchar_t *Settings_Option_Cursor = L"カーソル";
   static constexpr const wchar_t *Settings_Option_Manual = L"手動";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"自動 (エクスプローラー)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"名前";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"更新日時";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"撮影日時 (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"サイズ";
+  static constexpr const wchar_t *Settings_Option_SortType = L"種類";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"フォルダー内でループ";
+  static constexpr const wchar_t *Settings_Option_NavStop = L"末尾で停止";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"サブフォルダーを貫通";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"線形: 基本的な平滑化";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -2167,8 +2242,9 @@ struct RU {
       L"Один экземпляр";
   static constexpr const wchar_t *Settings_Label_CheckUpdates =
       L"Проверка обновлений";
-  static constexpr const wchar_t *Settings_Label_LoopNav =
-      L"Циклическая навигация";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"Циклическая навигация";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"Порядок сортировки";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"По убыванию";
   static constexpr const wchar_t *Settings_Label_ConfirmDel =
       L"Подтверждение удаления";
   static constexpr const wchar_t *Settings_Label_Portable =
@@ -2312,6 +2388,10 @@ struct RU {
   static constexpr const wchar_t *Context_FixExtension =
       L"Исправить расширение";
   static constexpr const wchar_t *Context_Delete = L"Удалить\tDel";
+  static constexpr const wchar_t *Context_SortBy = L"Сортировка";
+  static constexpr const wchar_t *Context_NavOrder = L"Порядок навигации";
+  static constexpr const wchar_t *Context_SortAscending = L"По возрастанию";
+  static constexpr const wchar_t *Context_SortDescending = L"По убыванию";
   static constexpr const wchar_t *Context_Settings = L"Настройки...";
   static constexpr const wchar_t *Context_About = L"О программе QuickView";
   static constexpr const wchar_t *Context_CompareMode = L"Режим сравнения\tC";
@@ -2499,6 +2579,16 @@ struct RU {
   static constexpr const wchar_t *Settings_Option_Arrow = L"Стрелка";
   static constexpr const wchar_t *Settings_Option_Cursor = L"Курсор";
   static constexpr const wchar_t *Settings_Option_Manual = L"Вручную";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"Авто (Проводник)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"Имя";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"Дата изменения";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Дата съемки (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"Размер";
+  static constexpr const wchar_t *Settings_Option_SortType = L"Тип";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"Цикл в папке";
+  static constexpr const wchar_t *Settings_Option_NavStop = L"Остановка в конце";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"Через вложенные папки";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"Линейный (простое сглаживание)";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -2651,7 +2741,9 @@ struct DE {
       L"Einzelinstanz";
   static constexpr const wchar_t *Settings_Label_CheckUpdates =
       L"Updates prüfen";
-  static constexpr const wchar_t *Settings_Label_LoopNav = L"Endlosnavigation";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"Endlosnavigation";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"Sortierreihenfolge";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"Absteigend";
   static constexpr const wchar_t *Settings_Label_ConfirmDel =
       L"Löschen bestätigen";
   static constexpr const wchar_t *Settings_Label_Portable = L"Portabler Modus";
@@ -2793,6 +2885,10 @@ struct DE {
   static constexpr const wchar_t *Context_FixExtension =
       L"Erweiterung reparieren";
   static constexpr const wchar_t *Context_Delete = L"Löschen\tEntf";
+  static constexpr const wchar_t *Context_SortBy = L"Sortieren nach";
+  static constexpr const wchar_t *Context_NavOrder = L"Navigationsreihenfolge";
+  static constexpr const wchar_t *Context_SortAscending = L"Aufsteigend";
+  static constexpr const wchar_t *Context_SortDescending = L"Absteigend";
   static constexpr const wchar_t *Context_Settings = L"Einstellungen...";
   static constexpr const wchar_t *Context_About = L"Über QuickView";
   static constexpr const wchar_t *Context_CompareMode = L"Vergleichsmodus\tC";
@@ -2954,6 +3050,16 @@ struct DE {
   static constexpr const wchar_t *Settings_Option_Arrow = L"Pfeil";
   static constexpr const wchar_t *Settings_Option_Cursor = L"Cursor";
   static constexpr const wchar_t *Settings_Option_Manual = L"Manuell";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"Auto (Explorer)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"Name";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"Änderungsdatum";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Aufnahmedatum (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"Größe";
+  static constexpr const wchar_t *Settings_Option_SortType = L"Typ";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"Schleife im Ordner";
+  static constexpr const wchar_t *Settings_Option_NavStop = L"Am Ende stoppen";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"Durch Unterordner";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"Linear: Grundglättung";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -3115,8 +3221,9 @@ struct ES {
       L"Instancia única";
   static constexpr const wchar_t *Settings_Label_CheckUpdates =
       L"Buscar actualizaciones";
-  static constexpr const wchar_t *Settings_Label_LoopNav =
-      L"Navegación en bucle";
+  static constexpr const wchar_t *Settings_Label_NavLoopMode = L"Navegación en bucle";
+  static constexpr const wchar_t *Settings_Label_SortOrder = L"Orden de clasificación";
+  static constexpr const wchar_t *Settings_Label_SortDescending = L"Descendente";
   static constexpr const wchar_t *Settings_Label_ConfirmDel =
       L"Confirmar eliminación";
   static constexpr const wchar_t *Settings_Label_Portable = L"Modo portátil";
@@ -3262,6 +3369,10 @@ struct ES {
   static constexpr const wchar_t *Context_Rename = L"Renombrar\tF2";
   static constexpr const wchar_t *Context_FixExtension = L"Corregir extensión";
   static constexpr const wchar_t *Context_Delete = L"Eliminar\tSupr";
+  static constexpr const wchar_t *Context_SortBy = L"Ordenar por";
+  static constexpr const wchar_t *Context_NavOrder = L"Orden de navegación";
+  static constexpr const wchar_t *Context_SortAscending = L"Ascendente";
+  static constexpr const wchar_t *Context_SortDescending = L"Descendente";
   static constexpr const wchar_t *Context_Settings = L"Configuración...";
   static constexpr const wchar_t *Context_About = L"Acerca de QuickView";
   static constexpr const wchar_t *Context_CompareMode = L"Modo comparación\tC";
@@ -3435,6 +3546,16 @@ struct ES {
   static constexpr const wchar_t *Settings_Option_Arrow = L"Flecha";
   static constexpr const wchar_t *Settings_Option_Cursor = L"Cursor";
   static constexpr const wchar_t *Settings_Option_Manual = L"Manual";
+  static constexpr const wchar_t *Settings_Option_SortAuto = L"Auto (Explorador)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"Nombre";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"Fecha de modificación";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Fecha de captura (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortSize = L"Tamaño";
+  static constexpr const wchar_t *Settings_Option_SortType = L"Tipo";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"Bucle en carpeta";
+  static constexpr const wchar_t *Settings_Option_NavStop = L"Detener al final";
+  static constexpr const wchar_t *Settings_Option_NavThrough = L"A través de subcarpetas";
+
   static constexpr const wchar_t *Settings_Option_Linear =
       L"Lineal: Suavizado básico";
   static constexpr const wchar_t *Settings_Option_Nearest =
@@ -3585,7 +3706,9 @@ template <typename T> void ApplyT() {
   Settings_Label_Language = T::Settings_Label_Language;
   Settings_Label_SingleInstance = T::Settings_Label_SingleInstance;
   Settings_Label_CheckUpdates = T::Settings_Label_CheckUpdates;
-  Settings_Label_LoopNav = T::Settings_Label_LoopNav;
+  Settings_Label_NavLoopMode = T::Settings_Label_NavLoopMode;
+  Settings_Label_SortOrder = T::Settings_Label_SortOrder;
+  Settings_Label_SortDescending = T::Settings_Label_SortDescending;
   Settings_Label_ConfirmDel = T::Settings_Label_ConfirmDel;
   Settings_Label_Portable = T::Settings_Label_Portable;
   Settings_Label_SpanDisplays = T::Settings_Label_SpanDisplays;
@@ -3632,6 +3755,10 @@ template <typename T> void ApplyT() {
   Context_Rename = T::Context_Rename;
   Context_FixExtension = T::Context_FixExtension;
   Context_Delete = T::Context_Delete;
+  Context_SortBy = T::Context_SortBy;
+  Context_NavOrder = T::Context_NavOrder;
+  Context_SortAscending = T::Context_SortAscending;
+  Context_SortDescending = T::Context_SortDescending;
   Context_Settings = T::Context_Settings;
   Context_About = T::Context_About;
   Context_CompareMode = T::Context_CompareMode;
@@ -3822,6 +3949,14 @@ template <typename T> void ApplyT() {
   Settings_Option_Arrow = T::Settings_Option_Arrow;
   Settings_Option_Cursor = T::Settings_Option_Cursor;
   Settings_Option_Manual = T::Settings_Option_Manual;
+  Settings_Option_SortAuto = T::Settings_Option_SortAuto;
+  Settings_Option_SortName = T::Settings_Option_SortName;
+  Settings_Option_SortModified = T::Settings_Option_SortModified;
+  Settings_Option_SortDateTaken = T::Settings_Option_SortDateTaken;
+  Settings_Option_SortSize = T::Settings_Option_SortSize;
+  Settings_Option_SortType = T::Settings_Option_SortType;
+  Settings_Option_NavLoop = T::Settings_Option_NavLoop;
+  Settings_Option_NavThrough = T::Settings_Option_NavThrough;
   Settings_Option_Linear = T::Settings_Option_Linear;
   Settings_Option_Nearest = T::Settings_Option_Nearest;
   Settings_Option_HighQualityCubic = T::Settings_Option_HighQualityCubic;

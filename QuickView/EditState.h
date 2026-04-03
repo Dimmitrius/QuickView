@@ -83,7 +83,10 @@ struct AppConfig {
     int Language = 0;                   // 0=Auto, 1=EN, 2=CN
     bool SingleInstance = false;
     bool CheckUpdates = true;
-    bool LoopNavigation = true;
+    bool NavLoop = true;                // Loop at limits (Global or Folder)
+    bool NavTraverse = false;           // Reach outside current folder (Subfolders)
+    int SortOrder = 0;                  // 0=Auto(Name), 1=Name, 2=Modified, 3=DateTaken, 4=Size, 5=Type
+    bool SortDescending = false;
     bool ConfirmDelete = true;
     bool PortableMode = false;
     int UIScalePreset = 0;               // 0=Auto(DPI), 1=90%, 2=100%, 3=110%, 4=125%
@@ -249,6 +252,12 @@ struct RuntimeConfig {
     int PixelArtModeOverride = 0; // 0=None, 1=Force ON, 2=Force OFF
     int CmsModeOverride = -1;     // -1=Auto, 0=Unmanaged, 1=Auto(Explicit), 2=sRGB, 3=P3, etc
 
+    // Navigation & Sort Session Overrides
+    bool NavLoop = true;          // Sync from AppConfig
+    bool NavTraverse = false;     // Sync from AppConfig
+    int SortOrder = 0;            // Sync from AppConfig
+    bool SortDescending = false;  // Sync from AppConfig
+
     // Soft Proofing (Temporary Session Flags)
     bool EnableSoftProofing = false;
     std::wstring SoftProofProfilePath; // Currently active proofing ICC path
@@ -279,6 +288,10 @@ struct RuntimeConfig {
         ForceRawDecode = cfg.ForceRawDecode;
         RenderRAW = cfg.RenderRAW;
         CrossMonitorMode = cfg.EnableCrossMonitor; // Init from config
+        NavLoop = cfg.NavLoop;
+        NavTraverse = cfg.NavTraverse;
+        SortOrder = cfg.SortOrder;
+        SortDescending = cfg.SortDescending;
     }
 };
 
