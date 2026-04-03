@@ -1070,6 +1070,16 @@ void ImageEngine::FastLane::QueueWorker() {
             // [Unified Logic] SVG uses target=0 like other formats (User Request: Remove 80% special case)
 
             // [Direct D2D] Load directly to RawImageFrame backed by Arena
+            rawFrame.onAuxLayerReady = [this, cmdPath = cmd.path, cmdId = cmd.id](std::unique_ptr<QuickView::AuxLayer> aux, QuickView::GpuBlendOp op, QuickView::GpuShaderPayload payload) {
+                EngineEvent ev;
+                ev.type = EventType::AuxLayerReady;
+                ev.filePath = cmdPath;
+                ev.imageId = cmdId;
+                ev.auxLayer = std::move(aux);
+                ev.blendOp = op;
+                ev.shaderPayload = payload;
+                this->m_parent->QueueEvent(std::move(ev));
+            };
             HRESULT hr = m_loader->LoadToFrame(cmd.path.c_str(), &rawFrame, &arena, targetW, targetH, &loaderName, nullptr, nullptr, true, false, cmd.targetHdrHeadroomStops);
             
             int decodeMs = (int)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count();
@@ -1131,23 +1141,9 @@ void ImageEngine::FastLane::QueueWorker() {
                     // [GPU Pipeline] Deep copy blend operation and payload
                     safeFrame->blendOp = rawFrame.blendOp;
                     safeFrame->shaderPayload = rawFrame.shaderPayload;
-                    if (rawFrame.auxLayer && rawFrame.auxLayer->pixels) {
-                        auto safeAux = std::make_unique<QuickView::AuxLayer>();
-                        safeAux->width = rawFrame.auxLayer->width;
-                        safeAux->height = rawFrame.auxLayer->height;
-                        safeAux->stride = rawFrame.auxLayer->stride;
-                        safeAux->bytesPerPixel = rawFrame.auxLayer->bytesPerPixel;
-                        
-                        size_t auxSize = (size_t)safeAux->stride * safeAux->height;
-                        uint8_t* auxHeap = new uint8_t[auxSize];
-                        memcpy(auxHeap, rawFrame.auxLayer->pixels, auxSize);
-                        safeAux->pixels = auxHeap;
-                        safeAux->deleter = [](uint8_t* p) { delete[] p; };
-                        safeFrame->auxLayer = std::move(safeAux);
-                    }
+                    if (rawFrame.auxLayer) safeFrame->auxLayer = rawFrame.auxLayer->Clone();
                 }
                 e.rawFrame = safeFrame;
-                
 
                 e.metadata.Width = rawFrame.width;
                 e.metadata.Height = rawFrame.height;
