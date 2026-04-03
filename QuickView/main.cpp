@@ -4868,6 +4868,7 @@ void RefreshImageDisplay(HWND hwnd) {
         // 2. Direct GPU Re-upload (Applies new Tone Mapping / CMS settings)
         if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*frame, &bitmap))) {
             g_imageResource.bitmap = bitmap;
+            g_isImageDirty = false; // [v10.3.1] Force refresh consumed, preventing redundant OnPaint cycle
             
             // 3. Update DComp Surface for Composition Engine
             if (!IsCompareModeActive()) {
@@ -9221,6 +9222,14 @@ void ProcessEngineEvents(HWND hwnd) {
                          g_debugMetrics.lastUploadChannel.store(1);
                          g_imageResource.Reset();
                          g_imageResource.bitmap = bitmap;
+                         g_isImageDirty = false; // [v10.3.1] Force refresh consumed, preventing redundant OnPaint cycle
+                         
+                         // [v10.3.1] Restore AuxLayer from frame if present (ensures UI/Renderer consistency)
+                         if (evt.rawFrame && evt.rawFrame->auxLayer) {
+                             g_imageResource.blendOp = evt.rawFrame->blendOp;
+                             g_imageResource.shaderPayload = evt.rawFrame->shaderPayload;
+                             g_imageResource.auxLayer = evt.rawFrame->auxLayer->Clone();
+                         }
                          resourceReady = true;
                     }
                 }
@@ -9605,23 +9614,37 @@ void ProcessEngineEvents(HWND hwnd) {
 
     case EventType::AuxLayerReady:
         if (evt.imageId == g_currentImageId.load() && evt.auxLayer) {
+            // [v10.3.1] Adhere to global setting even in simulation mode (Simulation only mocks display info)
             if (g_config.EnableAdvancedColor) {
-                // Update active resource with the gain map
-                g_imageResource.blendOp = evt.blendOp;
-                g_imageResource.shaderPayload = evt.shaderPayload;
-                g_imageResource.auxLayer.reset(evt.auxLayer.release());
+                // 1. Update Core Cache (Critical for navigation & Ctrl+5 refresh)
+                if (g_pImageEngine) {
+                    auto cachedFrame = g_pImageEngine->GetCachedImage(evt.filePath);
+                    if (cachedFrame) {
+                        cachedFrame->blendOp = evt.blendOp;
+                        cachedFrame->shaderPayload = evt.shaderPayload;
+                        // Move ownership to cache as primary storage
+                        cachedFrame->auxLayer = std::move(evt.auxLayer);
+                        
+                        // [v10.3.1] Propagate hasGainMap to metadata so simulation knows to bake
+                        g_currentMetadata.hdrMetadata.hasGainMap = true;
+                        cachedFrame->hdrMetadata.hasGainMap = true;
+                    }
+                }
 
-                // Set HDR metadata flag so renderer knows it has a gain map
-                g_currentMetadata.hdrMetadata.hasGainMap = true;
+                // 2. Update Active Runtime Resource (for immediate repaint)
+                auto cachedFrame = g_pImageEngine ? g_pImageEngine->GetCachedImage(evt.filePath) : nullptr;
+                if (cachedFrame && cachedFrame->auxLayer) {
+                    g_imageResource.blendOp = cachedFrame->blendOp;
+                    g_imageResource.shaderPayload = cachedFrame->shaderPayload;
+                    g_imageResource.auxLayer = cachedFrame->auxLayer->Clone();
+                }
 
-                // Force full pipeline rebuild to ensure the gain map gets uploaded to GPU
-                g_isImageDirty = true;
-
-                // Trigger full repaint to composite the gain map
-                RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
+                // 3. Trigger GPU Re-upload and Bake (Binds base layer + new gain map)
+                // This ensures the HDR effect appears as soon as the auxiliary layer is ready.
+                RefreshImageDisplay(hwnd);
 
                 wchar_t debugBuf[256];
-                swprintf_s(debugBuf, L"[Main] AuxLayerReady: Gain Map applied dynamically!\n");
+                swprintf_s(debugBuf, L"[Main] AuxLayerReady: Gain Map applied and GPU Bake triggered\n");
                 OutputDebugStringW(debugBuf);
             }
         }
