@@ -5778,7 +5778,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     g_compEngine = new CompositionEngine();
     if (SUCCEEDED(g_compEngine->Initialize(hwnd, g_renderEngine->GetD3DDevice(), g_renderEngine->GetD2DDevice()))) {
         g_compEngine->RefreshDisplayColorState(g_runtime.ForceHdrSimulation);
-        g_compEngine->SetAdvancedColorEnabled(g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorSupported));
+        g_compEngine->SetAdvancedColorEnabled(g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorActive));
         g_renderEngine->SetAdvancedColorMode(g_compEngine->IsAdvancedColor());
         g_renderEngine->SetDisplayColorState(g_compEngine->GetDisplayColorState());
         // Pure DComp architecture: Surfaces are managed by CompositionEngine
@@ -9617,7 +9617,7 @@ void ProcessEngineEvents(HWND hwnd) {
         if (evt.imageId == g_currentImageId.load() && evt.auxLayer) {
             // [v10.3.1] Use Resolved Advanced Color State (Off / On / Auto)
             // Simulation Mode (Ctrl+5) still respects this gate, but Auto mode will trigger if Sim is active.
-            if (g_compEngine && g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorSupported)) {
+            if (g_compEngine && g_config.IsAdvancedColorEnabled(g_compEngine->GetDisplayColorState().advancedColorActive)) {
                 // 1. Update Core Cache (Critical for navigation & Ctrl+5 refresh)
                 if (g_pImageEngine) {
                     auto cachedFrame = g_pImageEngine->GetCachedImage(evt.filePath);

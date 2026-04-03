@@ -171,8 +171,8 @@ struct AppConfig {
     bool RenderRAW = false;
     
     /// <summary>
-    bool IsAdvancedColorEnabled(bool systemSupportsHdr) const {
-        return AdvancedColorMode == 1 || (AdvancedColorMode == 2 && systemSupportsHdr);
+    bool IsAdvancedColorEnabled(bool isSystemHdrActive) const {
+        return AdvancedColorMode == 1 || (AdvancedColorMode == 2 && isSystemHdrActive);
     }
 
     /// <summary>
