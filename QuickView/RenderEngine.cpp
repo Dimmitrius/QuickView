@@ -1,6 +1,5 @@
 #include "pch.h"
 #include <initguid.h>
-#include <immintrin.h>
 #include <map>
 #include <mutex>
 #include <vector>
@@ -8,7 +7,7 @@
 #include "RenderEngine.h"
 #include "EditState.h"
 #include "ImageTypes.h" // [Direct D2D] RawImageFrame
-#include "SIMDUtils.h"
+#include "ImageLoaderSimd.h"
 
 
 // 核心修复：引入 DirectX GUID 定义库 与 必要库
@@ -137,14 +136,15 @@ bool BuildLinearScRgbFloatBuffer(const QuickView::RawImageFrame &frame,
   memcpy(convertedPixels.data(), frame.pixels,
          static_cast<size_t>(frame.stride) * frame.height);
 
-  for (int y = 0; y < frame.height; ++y) {
-    float *row = reinterpret_cast<float *>(
-        convertedPixels.data() + static_cast<size_t>(y) * frame.stride);
-    for (int x = 0; x < frame.width; ++x) {
-      TransformLinearPixelToScRgb(matrix, row[x * 4 + 0], row[x * 4 + 1],
-                                  row[x * 4 + 2]);
-    }
-  }
+  // [Highway] Use ImageLoaderSimd for color matrix transformation
+  const float matrixArr[9] = {
+      matrix.m[0][0], matrix.m[0][1], matrix.m[0][2],
+      matrix.m[1][0], matrix.m[1][1], matrix.m[1][2],
+      matrix.m[2][0], matrix.m[2][1], matrix.m[2][2],
+  };
+  ImageLoaderSimd::TransformColorMatrix3x3(
+      reinterpret_cast<float*>(convertedPixels.data()),
+      frame.width, frame.height, frame.stride, matrixArr);
 
   *pixelsOut = convertedPixels.data();
   *strideOut = static_cast<UINT>(frame.stride);
@@ -175,7 +175,7 @@ float InternalEstimateFramePeakScRgb(const QuickView::RawImageFrame &frame) {
 
   // [Universe's Strongest] Blazing fast SIMD full image scan.
   // Replaces 64x64 sampling with 100% accurate peak retrieval using AVX2/AVX512.
-  return SIMDUtils::FindPeak_R32G32B32A32_FLOAT(
+  return ImageLoaderSimd::FindPeakFloat(
       reinterpret_cast<const float *>(frame.pixels),
       static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height));
 }

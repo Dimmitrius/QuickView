@@ -20,7 +20,9 @@
 #define WUFFS_CONFIG__STATIC_FUNCTIONS
 
 #ifdef _MSC_VER
+#if defined(_M_X64) || defined(_M_IX86)
 #define WUFFS_CONFIG__I_KNOW_THAT_WUFFS_MSVC_PERFORMS_BEST_WITH_ARCH_AVX2
+#endif
 #endif
 
 #define WUFFS_CONFIG__DST_PIXEL_FORMAT__ENABLE_ALLOWLIST
@@ -31,7 +33,7 @@
 #include "../third_party/wuffs/release/c/wuffs-v0.4.c"
 
 #include "WuffsLoader.h"
-#include "../third_party/vcpkg/packages/zlib-ng_x64-windows-static-opt/include/zlib.h"
+#include <zlib.h>
 
 #ifndef Bytef
 typedef unsigned char Bytef;

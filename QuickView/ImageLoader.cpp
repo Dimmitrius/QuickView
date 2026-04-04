@@ -29,27 +29,11 @@
 
 using namespace QuickView;
 #include "TinyExrLoader.h"
-#include <immintrin.h> // SIMD
-#include "SIMDUtils.h"
+#include "ImageLoaderSimd.h"
 #include <thread>
 #include <shobjidl.h> // [Add] for IShellItemImageFactory
 #include "MappedFile.h" // [Opt]
-#if defined(__has_include)
-#if __has_include(<simd>)
-#include <simd>
-#define QUICKVIEW_HAS_STD_SIMD 1
-#else
-#define QUICKVIEW_HAS_STD_SIMD 0
-#endif
-#else
-#define QUICKVIEW_HAS_STD_SIMD 0
-#endif
 
-#if QUICKVIEW_HAS_STD_SIMD && defined(__cpp_lib_simd) && (__cpp_lib_simd >= 202207L)
-#define QUICKVIEW_USE_STD_SIMD_HIST 1
-#else
-#define QUICKVIEW_USE_STD_SIMD_HIST 0
-#endif
 
 // Forward declaration
 static bool ReadFileToVector(LPCWSTR filePath, std::vector<uint8_t>& buffer);
@@ -1605,7 +1589,7 @@ static HRESULT LoadJpegRegion_V3(const uint8_t* buf, size_t bufSize, QuickView::
 
         // Software Resize
         // We resize into the top-left 'contentW x contentH' of the buffer.
-        SIMDUtils::ResizeBilinear(pDecodeBuf, tjScdW, tjScdH, 0 /*stride*/, outFrame->pixels, contentW, contentH, outFrame->stride);
+        ImageLoaderSimd::ResizeBilinear(pDecodeBuf, tjScdW, tjScdH, 0 /*stride*/, outFrame->pixels, contentW, contentH, outFrame->stride);
 
         // [CMS] Extract ICC Profile from TurboJPEG (Software Resized)
         uint8_t* iccBuf = nullptr;
@@ -1865,7 +1849,7 @@ HRESULT CImageLoader::FullDecodeFromMemory(const uint8_t* data, size_t size,
         }
 
         // RGBA → BGRA swizzle (SIMD)
-        SIMDUtils::SwizzleRGBA_to_BGRA_Premul(outBuf, (size_t)info.xsize * info.ysize);
+        ImageLoaderSimd::SwizzleRGBAToBGRA(outBuf, (size_t)info.xsize * info.ysize);
 
         outFrame->pixels = outBuf;
         outFrame->width = (int)info.xsize;
@@ -2015,7 +1999,7 @@ HRESULT CImageLoader::FullDecodeToMMF(const uint8_t* data, size_t size,
 
         // Final RGBA → BGRA swizzle for the full-quality image
         // (DC was already swizzled above, but full decode overwrites with RGBA again)
-        SIMDUtils::SwizzleRGBA_to_BGRA_Premul(mmfBuf, (size_t)info.xsize * info.ysize);
+        ImageLoaderSimd::SwizzleRGBAToBGRA(mmfBuf, (size_t)info.xsize * info.ysize);
 
         *outW = (int)info.xsize;
         *outH = (int)info.ysize;
@@ -2223,7 +2207,7 @@ HRESULT CImageLoader::LoadRegionGeneric_StrategyB(LPCWSTR filePath, QuickView::R
     }
 
     // Resize/Crop from Full Image to Out Frame
-    SIMDUtils::ResizeBilinear(
+    ImageLoaderSimd::ResizeBilinear(
         fullFrame.pixels + (size_t)plan.cropY * fullFrame.stride + (size_t)plan.cropX * 4,
         plan.cropW, plan.cropH, (int)fullFrame.stride,
         outFrame->pixels, plan.contentW, plan.contentH, outFrame->stride);
@@ -2326,7 +2310,7 @@ HRESULT CImageLoader::LoadWebPRegionToFrame(LPCWSTR filePath, QuickView::RegionR
 
     // WebP returns un-premultiplied. We use Premultiplied visually.
     if (config.input.has_alpha) {
-        SIMDUtils::PremultiplyAlpha_BGRA(outFrame->pixels, plan.contentW, plan.contentH, outFrame->stride);
+        ImageLoaderSimd::PremultiplyAlpha(outFrame->pixels, plan.contentW, plan.contentH, outFrame->stride);
     }
 
     return S_OK;
@@ -2531,9 +2515,9 @@ HRESULT CImageLoader::LoadJxlRegionToFrame(LPCWSTR filePath, QuickView::RegionRe
 
     // Resize (or direct copy if scale == 1.0)
     // Remember libjxl outputs RGBA, we need BGRA
-    SIMDUtils::SwizzleRGBA_to_BGRA_Premul(tempBuf, (size_t)plan.cropW * plan.cropH);
+    ImageLoaderSimd::SwizzleRGBAToBGRA(tempBuf, (size_t)plan.cropW * plan.cropH);
     
-    SIMDUtils::ResizeBilinear(tempBuf, plan.cropW, plan.cropH, tempStride, 
+    ImageLoaderSimd::ResizeBilinear(tempBuf, plan.cropW, plan.cropH, tempStride, 
                               outFrame->pixels, plan.contentW, plan.contentH, outFrame->stride);
 
     // Cleanup
@@ -2893,7 +2877,7 @@ static HRESULT DownscaleThumbDataIfNeeded(CImageLoader::ThumbData* pData, int ta
     int finalStride = CalculateAlignedStride(finalW, 4);
     std::vector<uint8_t> resized(static_cast<size_t>(finalStride) * finalH);
 
-    SIMDUtils::ResizeBilinear(
+    ImageLoaderSimd::ResizeBilinear(
         pData->pixels.data(),
         pData->width,
         pData->height,
@@ -3844,7 +3828,7 @@ static void PopulateMetadataFromEasyExif(const easyexif::EXIFInfo& exif, CImageL
                                 }
 
                                 if (config.input.has_alpha) {
-                                    SIMDUtils::PremultiplyAlpha_BGRA(pixels, w, h, stride);
+                                    ImageLoaderSimd::PremultiplyAlpha(pixels, w, h, stride);
                                 }
 
                                 result.pixels = pixels;
@@ -3927,7 +3911,7 @@ static void PopulateMetadataFromEasyExif(const easyexif::EXIFInfo& exif, CImageL
 
                 // In-Place Premultiply
                 if (config.input.has_alpha) {
-                    SIMDUtils::PremultiplyAlpha_BGRA(pixels, finalW, finalH, stride);
+                    ImageLoaderSimd::PremultiplyAlpha(pixels, finalW, finalH, stride);
                 }
 
                 result.pixels = pixels;
@@ -4286,12 +4270,12 @@ HRESULT CImageLoader::LoadJXL(LPCWSTR filePath, IWICBitmap** ppBitmap, ImageMeta
     if (SUCCEEDED(hr)) {
         if (!pixels.empty()) {
              // Fallback: Intermediate buffer used
-             SIMDUtils::SwizzleRGBA_to_BGRA_Premul(pixels.data(), (size_t)info.xsize * info.ysize);
+             ImageLoaderSimd::SwizzleRGBAToBGRA(pixels.data(), (size_t)info.xsize * info.ysize);
              hr = CreateWICBitmapFromMemory(info.xsize, info.ysize, GUID_WICPixelFormat32bppPBGRA, info.xsize * 4, (UINT)pixels.size(), pixels.data(), ppBitmap);
         } else if (pWicBitmap) {
              // Optimization: Direct WIC buffer used
              // In-place Swizzle
-             SIMDUtils::SwizzleRGBA_to_BGRA_Premul(pWicBuf, (size_t)info.xsize * info.ysize);
+             ImageLoaderSimd::SwizzleRGBAToBGRA(pWicBuf, (size_t)info.xsize * info.ysize);
              pLock.Reset(); // Unlock
              *ppBitmap = pWicBitmap.Detach();
         }
@@ -5737,7 +5721,7 @@ namespace QuickView {
                             }
                             
                             JxlDecoderDestroy(dec);
-                            SIMDUtils::SwizzleRGBA_to_BGRA_Premul(pixels, downW * downH);
+                            ImageLoaderSimd::SwizzleRGBAToBGRA(pixels, downW * downH);
                             
                             result.pixels = pixels;
                             result.width = (int)downW;
@@ -5870,7 +5854,7 @@ namespace QuickView {
                             result.metadata.hdrMetadata.isSceneLinear = true;
                         } else {
                             // [v8.6] Fix: JXL outputs RGBA Straight, D2D needs BGRA Premultiplied.
-                            SIMDUtils::SwizzleRGBA_to_BGRA_Premul(pixels, (size_t)finalW * finalH);
+                            ImageLoaderSimd::SwizzleRGBAToBGRA(pixels, (size_t)finalW * finalH);
                             result.stride = finalW * 4;
                             result.format = PixelFormat::BGRA8888;
                         }
@@ -9454,101 +9438,10 @@ void CImageLoader::ComputeHistogramFromFrame(const QuickView::RawImageFrame& fra
     // Assume BGRA8888 (standard for RawImageFrame)
     for (UINT y = 0; y < frame.height; y += stepY) {
         const uint8_t* row = ptr + (UINT64)y * stride;
-        UINT x = 0;
-    
-        // Process 8 pixels per iteration.
-        const UINT width8 = frame.width & ~7u;
-
-#if QUICKVIEW_USE_STD_SIMD_HIST
-        using u32x8 = std::simd<uint32_t, std::simd_abi::fixed_size<8>>;
-        alignas(32) uint32_t bLane[8];
-        alignas(32) uint32_t gLane[8];
-        alignas(32) uint32_t rLane[8];
-        alignas(32) uint32_t lLane[8];
-
-        for (; x < width8; x += 8) {
-            const uint8_t* p = row + x * 4;
-            for (int i = 0; i < 8; ++i) {
-                const uint8_t* px = p + i * 4;
-                const uint32_t b = px[0];
-                const uint32_t g = px[1];
-                const uint32_t r = px[2];
-                bLane[i] = b;
-                gLane[i] = g;
-                rLane[i] = r;
-                pMetadata->HistB[b]++;
-                pMetadata->HistG[g]++;
-                pMetadata->HistR[r]++;
-            }
-
-            u32x8 vb;
-            u32x8 vg;
-            u32x8 vr;
-            vb.copy_from(bLane, std::element_aligned);
-            vg.copy_from(gLane, std::element_aligned);
-            vr.copy_from(rLane, std::element_aligned);
-
-            const u32x8 vl = (vr * 299u + vg * 587u + vb * 114u + 500u) / 1000u;
-            vl.copy_to(lLane, std::element_aligned);
-
-            for (int i = 0; i < 8; ++i) {
-                pMetadata->HistL[lLane[i]]++;
-            }
-        }
-#else
-        // [AVX2] SIMD Optimization for Luminance Calculation
-        const __m256i vCoeffs = _mm256_set1_epi64x(0x0000012B024B0072);
-        // Multiply by 8389 and shift by 23: 8389 / 2^23 = 8389 / 8388608 ≈ 0.000999999
-        // Max Luma = 255 * 1000 = 255000. Max mult = 255000 * 8389 = 2,139,195,000 < 2^31
-        const __m256i vMul = _mm256_set1_epi32(8389);
-
-        for (; x < width8; x += 8) {
-            __m256i vPixels = _mm256_loadu_si256((const __m256i*)(row + x * 4));
-            __m256i vPix03 = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(vPixels));
-            __m256i vPix47 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(vPixels, 1));
-            __m256i vSum03 = _mm256_madd_epi16(vPix03, vCoeffs);
-            __m256i vSum47 = _mm256_madd_epi16(vPix47, vCoeffs);
-            __m256i vLuma03 = _mm256_hadd_epi32(vSum03, vSum03);
-            __m256i vLuma47 = _mm256_hadd_epi32(vSum47, vSum47);
-            __m256i vDiv03 = _mm256_srli_epi32(_mm256_mullo_epi32(vLuma03, vMul), 23);
-            __m256i vDiv47 = _mm256_srli_epi32(_mm256_mullo_epi32(vLuma47, vMul), 23);
-
-            uint32_t l0 = _mm256_cvtsi256_si32(vDiv03);
-            uint32_t l1 = _mm256_extract_epi32(vDiv03, 1);
-            uint32_t l2 = _mm256_extract_epi32(vDiv03, 4);
-            uint32_t l3 = _mm256_extract_epi32(vDiv03, 5);
-            uint32_t l4 = _mm256_cvtsi256_si32(vDiv47);
-            uint32_t l5 = _mm256_extract_epi32(vDiv47, 1);
-            uint32_t l6 = _mm256_extract_epi32(vDiv47, 4);
-            uint32_t l7 = _mm256_extract_epi32(vDiv47, 5);
-
-            const uint8_t* p = row + x * 4;
-            pMetadata->HistB[p[0]]++; pMetadata->HistG[p[1]]++; pMetadata->HistR[p[2]]++; pMetadata->HistL[l0]++;
-            pMetadata->HistB[p[4]]++; pMetadata->HistG[p[5]]++; pMetadata->HistR[p[6]]++; pMetadata->HistL[l1]++;
-            pMetadata->HistB[p[8]]++; pMetadata->HistG[p[9]]++; pMetadata->HistR[p[10]]++; pMetadata->HistL[l2]++;
-            pMetadata->HistB[p[12]]++; pMetadata->HistG[p[13]]++; pMetadata->HistR[p[14]]++; pMetadata->HistL[l3]++;
-            pMetadata->HistB[p[16]]++; pMetadata->HistG[p[17]]++; pMetadata->HistR[p[18]]++; pMetadata->HistL[l4]++;
-            pMetadata->HistB[p[20]]++; pMetadata->HistG[p[21]]++; pMetadata->HistR[p[22]]++; pMetadata->HistL[l5]++;
-            pMetadata->HistB[p[24]]++; pMetadata->HistG[p[25]]++; pMetadata->HistR[p[26]]++; pMetadata->HistL[l6]++;
-            pMetadata->HistB[p[28]]++; pMetadata->HistG[p[29]]++; pMetadata->HistR[p[30]]++; pMetadata->HistL[l7]++;
-        }
-#endif
-
-    for (; x < frame.width; x++) {
-        // Unrolling or SIMD could be added here, but scalar is fast enough with skip sampling.
-        // Layout: B, G, R, A
-        uint8_t b = row[x * 4 + 0];
-        uint8_t g = row[x * 4 + 1];
-        uint8_t r = row[x * 4 + 2];
-        
-        pMetadata->HistB[b]++;
-        pMetadata->HistG[g]++;
-        pMetadata->HistR[r]++;
-            
-            // Luminance (approx)
-            uint8_t l = (uint8_t)((r * 299 + g * 587 + b * 114) / 1000);
-            pMetadata->HistL[l]++;
-        }
+        // [Highway] Delegate histogram + luminance computation to dynamic dispatch
+        ImageLoaderSimd::ComputeHistogramRow(row, frame.width,
+            pMetadata->HistR.data(), pMetadata->HistG.data(),
+            pMetadata->HistB.data(), pMetadata->HistL.data());
     }
 
     // Laplacian Sharpness (sampled)
@@ -10040,7 +9933,7 @@ HRESULT CImageLoader::LoadThumbJXL_DC(const uint8_t* pFile, size_t fileSize, Thu
                 // Optimized Premultiply & Swizzle (RGBA -> BGRA) using SIMD
                 uint8_t* p = pData->pixels.data();
                 size_t pxCount = bufferSize / 4;
-                SIMDUtils::SwizzleRGBA_to_BGRA_Premul(p, pxCount);
+                ImageLoaderSimd::SwizzleRGBAToBGRA(p, pxCount);
                  
                 foundDC = true;
                 return cleanup(S_OK); // Success!
@@ -11103,7 +10996,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
             
             if (resizedPixels) {
                 // Perform Resize
-                SIMDUtils::ResizeBilinear(res.pixels, res.width, res.height, res.stride, 
+                ImageLoaderSimd::ResizeBilinear(res.pixels, res.width, res.height, res.stride, 
                                           resizedPixels, finalW, finalH, finalStride);
                                           
                 // Free the original huge buffer
@@ -11598,7 +11491,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
         // Resize directly from WIC memory lock
         if (isFloat) {
             // Very simple fallback for resizing float buffers if needed.
-            // Ideally SIMDUtils should support it, but for WIC fallback resize we can just nearest-neighbor or skip.
+            // Ideally ImageLoaderSimd should support it, but for WIC fallback resize we can just nearest-neighbor or skip.
             // Using a simple row/col mapping for floats:
             float* dst = (float*)pixels;
             float* src = (float*)wicData;
@@ -11615,7 +11508,7 @@ HRESULT CImageLoader::LoadToFrame(LPCWSTR filePath, QuickView::RawImageFrame* ou
                 }
             }
         } else {
-            SIMDUtils::ResizeBilinear(wicData, wicWidth, wicHeight, wicStride,
+            ImageLoaderSimd::ResizeBilinear(wicData, wicWidth, wicHeight, wicStride,
                                       pixels, finalW, finalH, outStride);
         }
     } else {

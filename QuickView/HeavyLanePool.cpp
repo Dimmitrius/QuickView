@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "HeavyLanePool.h"
 #include "ImageEngine.h"
-#include "SIMDUtils.h"
+#include "ImageLoaderSimd.h"
 #include "TileManager.h"
 #include "ToolProcessProtocol.h"
 #include <turbojpeg.h>
@@ -1218,7 +1218,7 @@ void HeavyLanePool::PerformDecode(int workerId, const JobInfo& job, std::stop_to
                             uint8_t* dstBuf = (uint8_t*)_aligned_malloc(dstSize, 32);
                             
                             if (dstBuf) {
-                                SIMDUtils::ResizeBilinear(masterView, mW, mH, mS,
+                                ImageLoaderSimd::ResizeBilinear(masterView, mW, mH, mS,
                                                           dstBuf, targetW, targetH, (int)dstStride);
                                 
                                 rawFrame.pixels = dstBuf;
@@ -2771,7 +2771,7 @@ HRESULT HeavyLanePool::FullDecodeAndCacheLOD(Worker& worker, const JobInfo& job,
                 if (!dstBuf) {
                     hr = E_OUTOFMEMORY;
                 } else {
-                    SIMDUtils::ResizeBilinear(masterPixelsView, masterW, masterH,
+                    ImageLoaderSimd::ResizeBilinear(masterPixelsView, masterW, masterH,
                                               masterStride, dstBuf, targetW, targetH, (int)dstStride);
                     
                     fullFrame.pixels = dstBuf;
@@ -2862,7 +2862,7 @@ HRESULT HeavyLanePool::FullDecodeAndCacheLOD(Worker& worker, const JobInfo& job,
                     
                     if (dstBuf) {
                         if (lod > 0) {
-                            SIMDUtils::ResizeBilinear(masterView, mW, mH, mS,
+                            ImageLoaderSimd::ResizeBilinear(masterView, mW, mH, mS,
                                                       dstBuf, targetW, targetH, (int)dstStride);
                         } else {
                             for (int y = 0; y < targetH; ++y) {
@@ -2985,7 +2985,7 @@ HRESULT HeavyLanePool::FullDecodeAndCacheLOD(Worker& worker, const JobInfo& job,
                         if (!dstBuf) {
                             hr = E_OUTOFMEMORY;
                         } else {
-                            SIMDUtils::ResizeBilinear(frameSharedPtr.get(), fullFrame.width, fullFrame.height,
+                            ImageLoaderSimd::ResizeBilinear(frameSharedPtr.get(), fullFrame.width, fullFrame.height,
                                                       fullFrame.stride, dstBuf, targetW, targetH, (int)dstStride);
                             
                             fullFrame.pixels = dstBuf;

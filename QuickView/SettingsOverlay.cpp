@@ -13,6 +13,7 @@
 #include <shellapi.h>
 #include <wincodec.h>
 #include "CoroutineTypes.h"
+#include "ImageLoaderSimd.h"
 
 // Windows headers
 #pragma comment(lib, "version.lib")
@@ -61,13 +62,7 @@ static std::wstring GetAppVersion() {
     return L"2.1.0"; // Fallback
 }
 
-static bool CheckAVX2() {
-    int cpuInfo[4];
-    __cpuid(cpuInfo, 0);
-    if (cpuInfo[0] < 7) return false;
-    __cpuidex(cpuInfo, 7, 0);
-    return (cpuInfo[1] & (1 << 5)) != 0; 
-}
+
 
 // Helper to get Real Windows Version via RtlGetVersion
 typedef LONG (WINAPI *RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
@@ -122,9 +117,12 @@ std::wstring GetSystemInfo() {
     SYSTEM_INFO si; GetNativeSystemInfo(&si);
     if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64) arch = L"ARM64";
 
-    // 3. SIMD
-    std::wstring simd = L"SIMD: AVX2 [Active]"; // Default checked
-    if (!CheckAVX2()) simd = L"SIMD: SSE2";
+    // 3. SIMD (via Highway runtime dispatch)
+    const char* hwTarget = ImageLoaderSimd::GetActiveTargetName();
+    int len = MultiByteToWideChar(CP_UTF8, 0, hwTarget, -1, nullptr, 0);
+    std::wstring targetW(len > 0 ? len - 1 : 0, L'\0');
+    if (len > 0) MultiByteToWideChar(CP_UTF8, 0, hwTarget, -1, targetW.data(), len);
+    std::wstring simd = L"SIMD: Highway " + targetW + L" [Active]";
 
     return osVer + L" | " + arch + L" | " + simd;
 }
@@ -2014,16 +2012,17 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
                 
                  D2D1_RECT_F textRect = D2D1::RectF(contentX, sysY, contentX + contentW, sysY + 20);
                  
-                 // Highlight "AVX2 [Active]" in Green
-                 size_t pos = item.label.find(L"SIMD: AVX2 [Active]");
+                 // Highlight "Highway ... [Active]" in Green
+                 size_t pos = item.label.find(L"SIMD: Highway");
                  if (pos != std::wstring::npos) {
                      // Draw first part Gray
                      std::wstring part1 = item.label.substr(0, pos);
                      pRT->DrawText(part1.c_str(), (UINT32)part1.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
                      
-                     // Draw active part Green (Approx offset)
+                     // Draw SIMD part Green
+                     std::wstring simdPart = item.label.substr(pos);
                      D2D1_RECT_F avxRect = D2D1::RectF(contentX + 225.0f * s, sysY, contentX + contentW, sysY + 20.0f * s);
-                     pRT->DrawText(L"SIMD: AVX2 [Active]", 19, m_textFormatItem.Get(), avxRect, m_brushSuccess.Get());
+                     pRT->DrawText(simdPart.c_str(), (UINT32)simdPart.length(), m_textFormatItem.Get(), avxRect, m_brushSuccess.Get());
                  } else {
                      pRT->DrawText(item.label.c_str(), (UINT32)item.label.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
                  }

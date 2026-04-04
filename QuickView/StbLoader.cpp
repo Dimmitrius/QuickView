@@ -11,7 +11,7 @@
 // Keep PSD, HDR, PIC, PNM (stb handles these, Wuffs doesn't fully)
 
 #include "../third_party/stb/stb_image.h"
-#include "../third_party/vcpkg/packages/zlib-ng_x64-windows-static-opt/include/zlib.h"
+#include <zlib.h>
 
 #ifndef Bytef
 typedef unsigned char Bytef;
