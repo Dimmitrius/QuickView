@@ -188,6 +188,7 @@ public:
 
     uint32_t GetTotalFrames() const override { return m_totalFrames; }
     bool IsAnimated() const override { return true; }
+    bool SupportsDirtyRect() const override { return true; }
 
 private:
     std::shared_ptr<QuickView::MappedFile> m_mappedFile;

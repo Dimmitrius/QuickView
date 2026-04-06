@@ -889,7 +889,7 @@ void Toolbar::SetCompareRawState(bool anyRaw, bool selectedIsRaw, bool isFullDec
   }
 }
 
-void Toolbar::SetAnimationMode(bool enabled, bool playing, bool dirtyRect) {
+void Toolbar::SetAnimationMode(bool enabled, bool playing, bool dirtyRect, bool supportsDirtyRect) {
   m_animMode = enabled;
   m_animPlaying = playing;
   m_animDirtyRect = dirtyRect;
@@ -898,8 +898,12 @@ void Toolbar::SetAnimationMode(bool enabled, bool playing, bool dirtyRect) {
       btn.iconChar = playing ? ICON_PAUSE[0] : ICON_PLAY[0];
       btn.isToggled = playing;
     }
+    if (btn.id == ToolbarButtonID::AnimPrevFrame || btn.id == ToolbarButtonID::AnimNextFrame) {
+      btn.isEnabled = !playing;
+    }
     if (btn.id == ToolbarButtonID::AnimDirtyRect) {
       btn.isToggled = dirtyRect;
+      btn.isEnabled = supportsDirtyRect;
     }
   }
 }

@@ -11246,12 +11246,18 @@ void OnPaint(HWND hwnd) {
             animState.FitScale = g_lastFitScale;
             animState.FitOffsetX = g_lastFitOffset.x;
             animState.FitOffsetY = g_lastFitOffset.y;
+            animState.ImageWidth = g_imageResource.GetSize().width;
+            animState.ImageHeight = g_imageResource.GetSize().height;
+            RECT rcT; GetClientRect(hwnd, &rcT);
+            animState.WindowWidth = (float)(rcT.right - rcT.left);
+            animState.WindowHeight = (float)(rcT.bottom - rcT.top);
         }
         g_uiRenderer->UpdateAnimationState(animState);
         
         // [v10.5] Sync Toolbar animation mode
         bool hasAnim = (g_imageResource.animator != nullptr);
-        g_toolbar.SetAnimationMode(hasAnim, hasAnim && g_animPlaying, g_showAnimDirtyRect);
+        bool supportsDirtyRect = hasAnim ? g_imageResource.animator->SupportsDirtyRect() : false;
+        g_toolbar.SetAnimationMode(hasAnim, hasAnim && g_animPlaying, g_showAnimDirtyRect, supportsDirtyRect);
         if (hasAnim && animState.TotalFrames > 1) {
             float progress = (float)animState.CurrentFrameIndex / (float)(animState.TotalFrames - 1);
             g_toolbar.SetAnimProgress(progress);

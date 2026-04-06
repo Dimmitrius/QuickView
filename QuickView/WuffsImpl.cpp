@@ -802,6 +802,7 @@ public:
 
     uint32_t GetTotalFrames() const override { return m_knownTotalFrames; }
     bool IsAnimated() const override { return m_isAnimated; }
+    bool SupportsDirtyRect() const override { return true; }
 
 private:
     struct Snapshot {

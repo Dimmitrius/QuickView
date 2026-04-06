@@ -710,12 +710,18 @@ void UIRenderer::RenderDynamicLayer(ID2D1DeviceContext* dc, HWND hwnd) {
             float zoom = m_viewState.Zoom;
             float panX = m_viewState.PanX;
             float panY = m_viewState.PanY;
-            
-            float sx = (m_animState.DirtyRcLeft * fScale + fOfsX) * zoom + panX;
-            float sy = (m_animState.DirtyRcTop * fScale + fOfsY) * zoom + panY;
-            float ex = (m_animState.DirtyRcRight * fScale + fOfsX) * zoom + panX;
-            float ey = (m_animState.DirtyRcBottom * fScale + fOfsY) * zoom + panY;
-            
+
+            // Correct projection: Match DComp Transform Chain (Scale -> Translate to Center -> Pan)
+            float targetScaleX = fScale * zoom;
+            float targetScaleY = fScale * zoom;
+
+            float cx = m_animState.WindowWidth / 2.0f;
+            float cy = m_animState.WindowHeight / 2.0f;
+
+            float sx = (m_animState.DirtyRcLeft - m_animState.ImageWidth / 2.0f) * targetScaleX + cx + panX;
+            float sy = (m_animState.DirtyRcTop - m_animState.ImageHeight / 2.0f) * targetScaleY + cy + panY;
+            float ex = (m_animState.DirtyRcRight - m_animState.ImageWidth / 2.0f) * targetScaleX + cx + panX;
+            float ey = (m_animState.DirtyRcBottom - m_animState.ImageHeight / 2.0f) * targetScaleY + cy + panY;            
             D2D1_RECT_F dirtyRect = D2D1::RectF(sx, sy, ex, ey);
             
             // Pulsing alpha (breathing effect)

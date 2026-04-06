@@ -86,7 +86,7 @@ public:
     float GetCompareZoomStepPercent() const { return m_compareZoomStepPercent; }
     
     // [v10.5] Animation Mode
-    void SetAnimationMode(bool enabled, bool playing = true, bool dirtyRect = false);
+    void SetAnimationMode(bool enabled, bool playing = true, bool dirtyRect = false, bool supportsDirtyRect = true);
     bool IsAnimationMode() const { return m_animMode; }
     void SetAnimProgress(float progress) { m_animProgress = progress; }
     float GetAnimSpeedMultiplier() const { return m_animSpeedMult; }

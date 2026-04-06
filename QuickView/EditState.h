@@ -261,6 +261,12 @@ struct AnimationPlaybackState {
     float FitOffsetX = 0.0f;
     float FitOffsetY = 0.0f;
     
+    // Original dimensions for DComp projection mapping
+    float ImageWidth = 0.0f;
+    float ImageHeight = 0.0f;
+    float WindowWidth = 0.0f;
+    float WindowHeight = 0.0f;
+    
     void Reset() {
         IsAnimated = false;
         IsPlaying = true;
@@ -274,9 +280,11 @@ struct AnimationPlaybackState {
         ScrubberHoverPercent = -1.0f;
         DirtyRcLeft = DirtyRcTop = DirtyRcRight = DirtyRcBottom = 0;
         HasDirtyRect = false;
+
         FitScale = 1.0f;
         FitOffsetX = FitOffsetY = 0.0f;
-    }
+        ImageWidth = ImageHeight = WindowWidth = WindowHeight = 0.0f;
+        }
 };
 extern AnimationPlaybackState g_animationState;
 

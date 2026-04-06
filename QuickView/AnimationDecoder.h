@@ -26,6 +26,9 @@ public:
 
     /// Check if this source is truly animated (multiple frames with delays).
     virtual bool IsAnimated() const = 0;
+
+    /// Return true if the decoder produces valid partial frame updates (dirty rects)
+    virtual bool SupportsDirtyRect() const { return false; }
 };
 
 // Factory to spawn the appropriate decoder implementation
