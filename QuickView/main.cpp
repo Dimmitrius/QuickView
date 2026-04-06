@@ -7690,7 +7690,7 @@ SKIP_EDGE_NAV:;
                                     RequestRepaint(PaintLayer::Dynamic);
                                 }
                             }
-                            g_osd.Show(hwnd, L"[Animation] Paused (Inspector Mode: Alt+Left/Right to Seek)", true);
+                            g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
                         }
                     }
                     break;
@@ -8119,7 +8119,7 @@ SKIP_EDGE_NAV:;
                     g_osd.Show(hwnd, L"[Animation] Playing", true);
                 } else {
                     KillTimer(hwnd, IDT_ANIMATION);
-                    g_osd.Show(hwnd, L"[Animation] Paused (Inspector Mode: Alt+Left/Right to Seek)", true);
+                    g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
                 }
                 RequestRepaint(PaintLayer::Dynamic);
             } else if (CheckUnsavedChanges(hwnd)) {

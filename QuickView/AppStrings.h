@@ -123,6 +123,12 @@ namespace AppStrings {
     extern const wchar_t* Toolbar_Tooltip_CompareSyncPanOn;
     extern const wchar_t* Toolbar_Tooltip_CompareSyncPanOff;
     extern const wchar_t* Toolbar_Tooltip_CompareExit;
+    extern const wchar_t* Toolbar_Tooltip_AnimPlay;
+    extern const wchar_t* Toolbar_Tooltip_AnimPause;
+    extern const wchar_t* Toolbar_Tooltip_AnimPrev;
+    extern const wchar_t* Toolbar_Tooltip_AnimNext;
+    extern const wchar_t* Toolbar_Tooltip_AnimDirtyOn;
+    extern const wchar_t* Toolbar_Tooltip_AnimDirtyOff;
 
     // OSD Messages
     extern const wchar_t* OSD_Copied;
@@ -146,6 +152,10 @@ namespace AppStrings {
     extern const wchar_t* OSD_LastImage;
     extern const wchar_t* OSD_HD; // High Definition / Full Load
     extern const wchar_t* OSD_ZoomPrefix;
+    extern const wchar_t* OSD_AnimPlaying;
+    extern const wchar_t* OSD_AnimPaused;
+    extern const wchar_t* OSD_AnimDirtyOn;
+    extern const wchar_t* OSD_AnimDirtyOff;
 
     extern const wchar_t* Context_ColorSpace;
     

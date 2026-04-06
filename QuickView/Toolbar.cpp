@@ -433,6 +433,14 @@ const wchar_t *GetTooltipText(const ToolbarButton &btn) {
     return btn.isToggled ? AppStrings::Toolbar_Tooltip_CompareSyncPanOn : AppStrings::Toolbar_Tooltip_CompareSyncPanOff;
   case ToolbarButtonID::CompareExit:
     return AppStrings::Toolbar_Tooltip_CompareExit;
+  case ToolbarButtonID::AnimPlayPause:
+    return btn.isToggled ? AppStrings::Toolbar_Tooltip_AnimPause : AppStrings::Toolbar_Tooltip_AnimPlay;
+  case ToolbarButtonID::AnimPrevFrame:
+    return AppStrings::Toolbar_Tooltip_AnimPrev;
+  case ToolbarButtonID::AnimNextFrame:
+    return AppStrings::Toolbar_Tooltip_AnimNext;
+  case ToolbarButtonID::AnimDirtyRect:
+    return btn.isToggled ? AppStrings::Toolbar_Tooltip_AnimDirtyOn : AppStrings::Toolbar_Tooltip_AnimDirtyOff;
   default:
     return nullptr;
   }

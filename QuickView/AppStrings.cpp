@@ -146,6 +146,13 @@ const wchar_t *Toolbar_Tooltip_CompareSyncZoomOff = nullptr;
 const wchar_t *Toolbar_Tooltip_CompareSyncPanOn = nullptr;
 const wchar_t *Toolbar_Tooltip_CompareSyncPanOff = nullptr;
 const wchar_t *Toolbar_Tooltip_CompareExit = nullptr;
+const wchar_t *Toolbar_Tooltip_AnimPlay = nullptr;
+const wchar_t *Toolbar_Tooltip_AnimPause = nullptr;
+const wchar_t *Toolbar_Tooltip_AnimPrev = nullptr;
+const wchar_t *Toolbar_Tooltip_AnimNext = nullptr;
+const wchar_t *Toolbar_Tooltip_AnimDirtyOn = nullptr;
+const wchar_t *Toolbar_Tooltip_AnimDirtyOff = nullptr;
+
 
 const wchar_t *OSD_Copied = nullptr;
 const wchar_t *OSD_CoordinatesCopied = nullptr;
@@ -168,6 +175,11 @@ const wchar_t *OSD_FirstImage = nullptr;
 const wchar_t *OSD_LastImage = nullptr;
 const wchar_t *OSD_HD = nullptr;
 const wchar_t *OSD_ZoomPrefix = nullptr;
+const wchar_t *OSD_AnimPlaying = nullptr;
+const wchar_t *OSD_AnimPaused = nullptr;
+const wchar_t *OSD_AnimDirtyOn = nullptr;
+const wchar_t *OSD_AnimDirtyOff = nullptr;
+
 const wchar_t *OSD_SpanOn = nullptr;
 const wchar_t *OSD_SpanOff = nullptr;
 
@@ -497,6 +509,13 @@ struct EN {
   static constexpr const wchar_t *Toolbar_Tooltip_CompareSyncPanOff =
       L"Pan Sync: OFF";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit = L"Exit Compare";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"Play Animation";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"Pause Animation";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"Previous Frame";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"Next Frame";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"Dirty Rect Debug: ON";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"Dirty Rect Debug: OFF";
+
 
   // OSD
   static constexpr const wchar_t *OSD_Copied = L"Copied!";
@@ -524,6 +543,11 @@ struct EN {
   static constexpr const wchar_t *OSD_LastImage = L"Last image";
   static constexpr const wchar_t *OSD_HD = L"HD";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"Zoom: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"Playing";
+  static constexpr const wchar_t *OSD_AnimPaused = L"Paused (Inspector Mode: Alt+Left/Right to Seek)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"Dirty Rect: ON";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"Dirty Rect: OFF";
+
 
   // Context Menu
   static constexpr const wchar_t *Context_Open = L"Open...\tCtrl+O";
@@ -1196,6 +1220,13 @@ struct CN {
   static constexpr const wchar_t *Toolbar_Tooltip_CompareSyncPanOff =
       L"平移同步: 关";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit = L"退出对比";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"播放动画";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"暂停动画";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"上一帧";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"下一帧";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"脏矩形调试: 开";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"脏矩形调试: 关";
+
 
   // OSD
   static constexpr const wchar_t *OSD_Copied = L"已复制!";
@@ -1220,6 +1251,11 @@ struct CN {
   static constexpr const wchar_t *OSD_LastImage = L"已是最后一张";
   static constexpr const wchar_t *OSD_HD = L"全高清";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"缩放: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"播放中";
+  static constexpr const wchar_t *OSD_AnimPaused = L"已暂停 (检查模式: Alt+左右方向键逐帧查看)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"脏矩形: 开";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"脏矩形: 关";
+
 
   // static constexpr const wchar_t* Help_Action_Zoom = L"缩放";
   static constexpr const wchar_t *Help_Desc_Copy = L"复制图像";
@@ -1400,6 +1436,13 @@ struct TW {
   static constexpr const wchar_t *Toolbar_Tooltip_CompareSyncPanOff =
       L"平移同步: 關";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit = L"退出對比";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"播放動畫";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"暫停動畫";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"上一幀";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"下一幀";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"髒矩形偵錯: 開";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"髒矩形偵錯: 關";
+
   static constexpr const wchar_t *OSD_Copied = L"已複製!";
   static constexpr const wchar_t *OSD_CoordinatesCopied = L"座標已複製!";
   static constexpr const wchar_t *OSD_FilePathCopied = L"檔案路徑已複製!";
@@ -1422,6 +1465,11 @@ struct TW {
   static constexpr const wchar_t *OSD_LastImage = L"已是最後一張";
   static constexpr const wchar_t *OSD_HD = L"高畫質";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"縮放: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"播放中";
+  static constexpr const wchar_t *OSD_AnimPaused = L"已暫停 (檢查模式: Alt+左右方向鍵逐幀查看)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"髒矩形: 開";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"髒矩形: 關";
+
   static constexpr const wchar_t *Context_Open = L"開啟...\tCtrl+O";
   static constexpr const wchar_t *Context_OpenWith = L"開啟方式...";
   static constexpr const wchar_t *Context_Edit = L"編輯\tE";
@@ -1840,6 +1888,13 @@ struct JA {
   static constexpr const wchar_t *Toolbar_Tooltip_CompareSyncPanOff =
       L"移動同期: オフ";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit = L"比較を終了";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"アニメーション再生";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"アニメーション一時停止";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"前のフレーム";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"次のフレーム";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"ダーティ領域デバッグ: オン";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"ダーティ領域デバッグ: オフ";
+
   static constexpr const wchar_t *OSD_Copied = L"コピーしました!";
   static constexpr const wchar_t *OSD_CoordinatesCopied =
       L"座標をコピーしました!";
@@ -1865,6 +1920,11 @@ struct JA {
   static constexpr const wchar_t *OSD_LastImage = L"最後の画像";
   static constexpr const wchar_t *OSD_HD = L"HD";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"ズーム: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"再生中";
+  static constexpr const wchar_t *OSD_AnimPaused = L"一時停止 (Alt+左右でシーク)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"ダーティ領域: オン";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"ダーティ領域: オフ";
+
   static constexpr const wchar_t *Context_Open = L"開く...\tCtrl+O";
   static constexpr const wchar_t *Context_OpenWith = L"プログラムから開く...";
   static constexpr const wchar_t *Context_Edit = L"編集\tE";
@@ -2313,6 +2373,13 @@ struct RU {
       L"Синхр. панорамирования: НЕТ";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit =
       L"Выйти из сравнения";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"Воспроизвести анимацию";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"Приостановить анимацию";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"Предыдущий кадр";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"Следующий кадр";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"Отладка Dirty Rect: ВКЛ";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"Отладка Dirty Rect: ВЫКЛ";
+
   static constexpr const wchar_t *OSD_Copied = L"Скопировано!";
   static constexpr const wchar_t *OSD_CoordinatesCopied =
       L"Координаты скопированы!";
@@ -2339,6 +2406,11 @@ struct RU {
   static constexpr const wchar_t *OSD_LastImage = L"Последнее изображение";
   static constexpr const wchar_t *OSD_HD = L"HD";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"Масштаб: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"Воспроизведение";
+  static constexpr const wchar_t *OSD_AnimPaused = L"Пауза (Alt+Влево/Вправо для покадрового просмотра)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"Dirty Rect: ВКЛ";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"Dirty Rect: ВЫКЛ";
+
   static constexpr const wchar_t *Context_Open = L"Открыть...\tCtrl+O";
   static constexpr const wchar_t *Context_OpenWith = L"Открыть с помощью...";
   static constexpr const wchar_t *Context_Edit = L"Изменить\tE";
@@ -2811,6 +2883,13 @@ struct DE {
       L"Pan-Sync: AUS";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit =
       L"Vergleich beenden";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"Animation abspielen";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"Animation pausieren";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"Vorheriger Frame";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"Nächster Frame";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"Dirty Rect Debug: AN";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"Dirty Rect Debug: AUS";
+
   static constexpr const wchar_t *OSD_Copied = L"Kopiert!";
   static constexpr const wchar_t *OSD_CoordinatesCopied =
       L"Koordinaten kopiert!";
@@ -2839,6 +2918,11 @@ struct DE {
   static constexpr const wchar_t *OSD_LastImage = L"Letztes Bild";
   static constexpr const wchar_t *OSD_HD = L"HD";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"Zoom: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"Spielt ab";
+  static constexpr const wchar_t *OSD_AnimPaused = L"Pausiert (Alt+Links/Rechts zum Suchen)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"Dirty Rect: AN";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"Dirty Rect: AUS";
+
   static constexpr const wchar_t *Context_Open = L"Öffnen...\tStrg+O";
   static constexpr const wchar_t *Context_OpenWith = L"Öffnen mit...";
   static constexpr const wchar_t *Context_Edit = L"Bearbeiten\tE";
@@ -3295,6 +3379,13 @@ struct ES {
       L"Sincronizar panorámica: DESACTIVADO";
   static constexpr const wchar_t *Toolbar_Tooltip_CompareExit =
       L"Salir de comparación";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPlay = L"Reproducir animación";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPause = L"Pausar animación";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimPrev = L"Marco anterior";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimNext = L"Marco siguiente";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOn = L"Depuración de Dirty Rect: ACTIVADO";
+  static constexpr const wchar_t *Toolbar_Tooltip_AnimDirtyOff = L"Depuración de Dirty Rect: DESACTIVADO";
+
   static constexpr const wchar_t *OSD_Copied = L"¡Copiado!";
   static constexpr const wchar_t *OSD_CoordinatesCopied =
       L"¡Coordenadas copiadas!";
@@ -3324,6 +3415,11 @@ struct ES {
   static constexpr const wchar_t *OSD_LastImage = L"Última imagen";
   static constexpr const wchar_t *OSD_HD = L"HD";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"Zoom: ";
+  static constexpr const wchar_t *OSD_AnimPlaying = L"Reproduciendo";
+  static constexpr const wchar_t *OSD_AnimPaused = L"Pausado (Alt+Izquierda/Derecha para buscar)";
+  static constexpr const wchar_t *OSD_AnimDirtyOn = L"Dirty Rect: ACTIVADO";
+  static constexpr const wchar_t *OSD_AnimDirtyOff = L"Dirty Rect: DESACTIVADO";
+
   static constexpr const wchar_t *Context_Open = L"Abrir...\tCtrl+O";
   static constexpr const wchar_t *Context_OpenWith = L"Abrir con...";
   static constexpr const wchar_t *Context_Edit = L"Editar\tE";
@@ -3797,6 +3893,13 @@ template <typename T> void ApplyT() {
   Toolbar_Tooltip_CompareSyncPanOn = T::Toolbar_Tooltip_CompareSyncPanOn;
   Toolbar_Tooltip_CompareSyncPanOff = T::Toolbar_Tooltip_CompareSyncPanOff;
   Toolbar_Tooltip_CompareExit = T::Toolbar_Tooltip_CompareExit;
+  Toolbar_Tooltip_AnimPlay = T::Toolbar_Tooltip_AnimPlay;
+  Toolbar_Tooltip_AnimPause = T::Toolbar_Tooltip_AnimPause;
+  Toolbar_Tooltip_AnimPrev = T::Toolbar_Tooltip_AnimPrev;
+  Toolbar_Tooltip_AnimNext = T::Toolbar_Tooltip_AnimNext;
+  Toolbar_Tooltip_AnimDirtyOn = T::Toolbar_Tooltip_AnimDirtyOn;
+  Toolbar_Tooltip_AnimDirtyOff = T::Toolbar_Tooltip_AnimDirtyOff;
+
 
   OSD_Copied = T::OSD_Copied;
   OSD_CoordinatesCopied = T::OSD_CoordinatesCopied;
@@ -3819,6 +3922,11 @@ template <typename T> void ApplyT() {
   OSD_LastImage = T::OSD_LastImage;
   OSD_HD = T::OSD_HD;
   OSD_ZoomPrefix = T::OSD_ZoomPrefix;
+  OSD_AnimPlaying = T::OSD_AnimPlaying;
+  OSD_AnimPaused = T::OSD_AnimPaused;
+  OSD_AnimDirtyOn = T::OSD_AnimDirtyOn;
+  OSD_AnimDirtyOff = T::OSD_AnimDirtyOff;
+
   Context_SpanDisplays = T::Context_SpanDisplays;
 
   Settings_Header_PoweredBy = T::Settings_Header_PoweredBy;
