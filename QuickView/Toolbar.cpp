@@ -322,7 +322,7 @@ void Toolbar::UpdateLayout(float winW, float winH) {
   bool speedInserted = false;
   
   if (m_animMode) {
-      m_animProgressRect = D2D1::RectF(m_bgRect.rect.left + 20.0f * m_uiScale, m_bgRect.rect.top - 4.0f * m_uiScale, m_bgRect.rect.right - 20.0f * m_uiScale, m_bgRect.rect.top + 4.0f * m_uiScale);
+      m_animProgressRect = D2D1::RectF(m_bgRect.rect.left + 20.0f * m_uiScale, m_bgRect.rect.top - 6.0f * m_uiScale, m_bgRect.rect.right - 20.0f * m_uiScale, m_bgRect.rect.top + 2.0f * m_uiScale);
   }
 
   for (auto &btn : m_buttons) {
@@ -458,6 +458,9 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
   if (SUCCEEDED(pRT->CreateLayer(&layer))) {
     D2D1_LAYER_PARAMETERS params = D2D1::LayerParameters();
     params.contentBounds = m_bgRect.rect;
+    if (m_animMode) {
+      params.contentBounds.top -= 10.0f * m_uiScale; // Expand layer bounds upwards to prevent clipping the progress bar
+    }
     params.opacity = m_opacity;
 
     pRT->PushLayer(params, layer.Get());
@@ -469,7 +472,7 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
     if (m_animMode && m_animProgress >= 0.0f) {
       float barLeft = m_bgRect.rect.left + 20.0f * m_uiScale;
       float barRight = m_bgRect.rect.right - 20.0f * m_uiScale;
-      float barY = m_bgRect.rect.top;
+      float barY = m_bgRect.rect.top - 1.0f * m_uiScale; // Draw outside the background rectangle
       if (m_animProgressHover) barY -= 1.0f * m_uiScale; // Shift up slightly when hovered
       float barW = barRight - barLeft;
       float fillW = barW * m_animProgress;
@@ -769,6 +772,13 @@ bool Toolbar::OnMouseMove(float x, float y) {
 
 bool Toolbar::OnClick(float x, float y, ToolbarButtonID &outId) {
   if (m_windowTooNarrow || !IsVisible()) return false;
+
+  // Progress bar click
+  if (m_animMode && m_animProgressHover) {
+    outId = ToolbarButtonID::AnimSeek;
+    return true;
+  }
+
   if (HitTest(x, y)) {
     if (m_compareMode && m_compareStepRect.right > m_compareStepRect.left) {
       if (x >= m_compareStepUpRect.left && x < m_compareStepUpRect.right && y >= m_compareStepUpRect.top && y < m_compareStepUpRect.bottom) {
