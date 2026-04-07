@@ -899,7 +899,7 @@ void Toolbar::SetAnimationMode(bool enabled, bool playing, bool dirtyRect, bool 
       btn.isToggled = playing;
     }
     if (btn.id == ToolbarButtonID::AnimPrevFrame || btn.id == ToolbarButtonID::AnimNextFrame) {
-      btn.isEnabled = !playing;
+      btn.isEnabled = true;
     }
     if (btn.id == ToolbarButtonID::AnimDirtyRect) {
       btn.isToggled = dirtyRect;

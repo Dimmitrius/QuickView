@@ -165,6 +165,7 @@ static void SyncDCompState(HWND hwnd, float winW, float winH, bool animate);
 
 static const wchar_t* g_szClassName = L"QuickViewClass";
 static const wchar_t* g_szWindowTitle = L"QuickView 2026";
+void HandleAnimFrameStep(HWND hwnd, bool forward); // [v10.5] fwd decl
 static std::unique_ptr<CRenderEngine> g_renderEngine;
 static std::unique_ptr<CImageLoader> g_imageLoader;
 static std::unique_ptr<ImageEngine> g_imageEngine;
@@ -174,7 +175,6 @@ static std::unique_ptr<UIRenderer> g_uiRenderer;  // 鐙珛 UI 灞傛覆鏌�
 static InputController g_inputController;  // Quantum Stream: 杈撳叆鐘舵€佹満
 CRenderEngine* g_pRenderEngine = nullptr; // Global raw alias for linker compatibility
 
-// [Fix] Fullscreen State Tracking
 bool g_isFullScreen = false;
 static WINDOWPLACEMENT g_savedWindowPlacement = { sizeof(WINDOWPLACEMENT) };
 
@@ -7625,44 +7625,10 @@ SKIP_EDGE_NAV:;
                     }
                     break;
                 case ToolbarButtonID::AnimPrevFrame:
-                    if (g_imageResource.animator && !g_animPlaying) {
-                        uint32_t total = g_imageResource.animator->GetTotalFrames();
-                        if (total > 0) {
-                            uint32_t current = g_imageResource.frameMeta.index;
-                            uint32_t target = (current > 0) ? current - 1 : total - 1;
-                            auto nextFrame = g_imageResource.animator->SeekToFrame(target);
-                            if (nextFrame && nextFrame->pixels) {
-                                ComPtr<ID2D1Bitmap> newBitmap;
-                                if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
-                                    g_imageResource.bitmap = newBitmap;
-                                    g_imageResource.frameMeta = nextFrame->frameMeta;
-                                    RenderImageToDComp(hwnd, g_imageResource, true);
-                                    if (g_compEngine) { RECT rc; GetClientRect(hwnd, &rc); SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom); g_compEngine->Commit(); }
-                                    RequestRepaint(PaintLayer::Dynamic);
-                                }
-                            }
-                        }
-                    }
+                    HandleAnimFrameStep(hwnd, false);
                     break;
                 case ToolbarButtonID::AnimNextFrame:
-                    if (g_imageResource.animator && !g_animPlaying) {
-                        uint32_t total = g_imageResource.animator->GetTotalFrames();
-                        if (total > 0) {
-                            uint32_t current = g_imageResource.frameMeta.index;
-                            uint32_t target = (current + 1) % total;
-                            auto nextFrame = g_imageResource.animator->SeekToFrame(target);
-                            if (nextFrame && nextFrame->pixels) {
-                                ComPtr<ID2D1Bitmap> newBitmap;
-                                if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
-                                    g_imageResource.bitmap = newBitmap;
-                                    g_imageResource.frameMeta = nextFrame->frameMeta;
-                                    RenderImageToDComp(hwnd, g_imageResource, true);
-                                    if (g_compEngine) { RECT rc; GetClientRect(hwnd, &rc); SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom); g_compEngine->Commit(); }
-                                    RequestRepaint(PaintLayer::Dynamic);
-                                }
-                            }
-                        }
-                    }
+                    HandleAnimFrameStep(hwnd, true);
                     break;
                 case ToolbarButtonID::AnimDirtyRect:
                     if (g_imageResource.animator) {
@@ -8063,47 +8029,27 @@ SKIP_EDGE_NAV:;
         switch (wParam) {
         // Navigation
         case VK_LEFT: 
-            if (alt && g_imageResource.animator && !g_animPlaying) {
-                uint32_t total = g_imageResource.animator->GetTotalFrames();
-                if (total > 0) {
-                    uint32_t current = g_imageResource.frameMeta.index;
-                    uint32_t target = (current > 0) ? current - 1 : total - 1;
-                    auto nextFrame = g_imageResource.animator->SeekToFrame(target);
-                    if (nextFrame && nextFrame->pixels) {
-                        ComPtr<ID2D1Bitmap> newBitmap;
-                        if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
-                            g_imageResource.bitmap = newBitmap;
-                            g_imageResource.frameMeta = nextFrame->frameMeta;
-                            RenderImageToDComp(hwnd, g_imageResource, true);
-                            if (g_compEngine) { RECT rc; GetClientRect(hwnd, &rc); SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom); g_compEngine->Commit(); }
-                            RequestRepaint(PaintLayer::Dynamic);
-                        }
-                    }
-                }
+            if (alt && g_imageResource.animator) {
+                HandleAnimFrameStep(hwnd, false);
             } else if (CheckUnsavedChanges(hwnd)) {
                 Navigate(hwnd, -1);
             }
             break;
         case VK_RIGHT: 
-            if (alt && g_imageResource.animator && !g_animPlaying) {
-                uint32_t total = g_imageResource.animator->GetTotalFrames();
-                if (total > 0) {
-                    uint32_t current = g_imageResource.frameMeta.index;
-                    uint32_t target = (current + 1) % total;
-                    auto nextFrame = g_imageResource.animator->SeekToFrame(target);
-                    if (nextFrame && nextFrame->pixels) {
-                        ComPtr<ID2D1Bitmap> newBitmap;
-                        if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
-                            g_imageResource.bitmap = newBitmap;
-                            g_imageResource.frameMeta = nextFrame->frameMeta;
-                            RenderImageToDComp(hwnd, g_imageResource, true);
-                            if (g_compEngine) { RECT rc; GetClientRect(hwnd, &rc); SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom); g_compEngine->Commit(); }
-                            RequestRepaint(PaintLayer::Dynamic);
-                        }
-                    }
-                }
+            if (alt && g_imageResource.animator) {
+                HandleAnimFrameStep(hwnd, true);
             } else if (CheckUnsavedChanges(hwnd)) {
                 Navigate(hwnd, 1);
+            }
+            break;
+        case VK_OEM_COMMA: // Comma (,): Previous Frame
+            if (g_imageResource.animator) {
+                SendMessage(hwnd, WM_COMMAND, (WPARAM)ToolbarButtonID::AnimPrevFrame, 0);
+            }
+            break;
+        case VK_OEM_PERIOD: // Period (.): Next Frame
+            if (g_imageResource.animator) {
+                SendMessage(hwnd, WM_COMMAND, (WPARAM)ToolbarButtonID::AnimNextFrame, 0);
             }
             break;
         case VK_UP: SendMessage(hwnd, WM_KEYDOWN, VK_ADD, 0); break; // Up: Zoom In
@@ -10124,7 +10070,7 @@ static bool TryBuildPhase1WicEmbeddedFrame(const std::wstring& path, std::shared
     return CopyWicSourceToRawFrame(thumb.Get(), outFrame);
 }
 
-// With SIIGBF_THUMBNAILONLY the Shell API never returns icons.
+// With SIIGBF_THUMBNAILONLY the Shell API SIIGBF_THUMBNAILONLY the Shell API never returns icons.
 // This is a defensive-only check for typical Windows icon dimensions.
 static bool IsLikelyShellIconFallback(const std::shared_ptr<QuickView::RawImageFrame>& frame) {
     if (!frame || !frame->IsValid()) return false;
@@ -10219,11 +10165,11 @@ static void PrimePhase1Placeholder(HWND hwnd, const std::wstring& path, ImageID 
     UINT sourceH = 0;
     TryReadPhase1DimensionsFromHeader(path, &sourceW, &sourceH);
 
-    // [Fix] For non-Titan images, skip Shell/WIC thumbnail extraction entirely.
+    // [Phase 1 Optimization]
     // Non-Titan decoding is fast enough (<100ms typical) that showing a ~256px
     // Shell cached thumbnail as placeholder causes visible flicker instead of
     // helping perception. Only use skeleton placeholder so the full decode
-    // result appears directly. Titan images (>8192px or >50MP) still benefit
+    // (>8192px or >50MP) still benefit
     // from the placeholder chain because their decode can take 1-5 seconds.
     {
         bool isTitan = g_isNavigatingToTitan;
@@ -10238,12 +10184,8 @@ static void PrimePhase1Placeholder(HWND hwnd, const std::wstring& path, ImageID 
     // Shell thumbnail: multi-level cache-only extraction (no disk decode, safe for UI thread)
     std::shared_ptr<QuickView::RawImageFrame> shellFrame;
     if (TryBuildPhase1ShellCachedFrame(path, &shellFrame)) {
-        if (IsLikelyShellIconFallback(shellFrame)) {
-            OutputDebugStringW(L"[Phase1] Shell cache returned icon-like bitmap. Treat as cache miss.\n");
-        } else {
-            if (ApplyPhase1PlaceholderFrame(hwnd, path, imageId, shellFrame, sourceW, sourceH, L"Shell Cache Thumbnail")) {
-                return;
-            }
+        if (ApplyPhase1PlaceholderFrame(hwnd, path, imageId, shellFrame, sourceW, sourceH, L"Shell Cache Thumbnail")) {
+            return;
         }
     }
 
@@ -10307,9 +10249,7 @@ static void DispatchNavigationToEngine(
     uint64_t navToken,
     int navigatorIndex,
     QuickView::BrowseDirection dir) {
-    if (!g_imageEngine || path.empty()) return;
-
-    g_imageEngine->NavigateTo(path, fileSize, navToken);
+    if (g_imageEngine) g_imageEngine->NavigateTo(path, fileSize, navToken);
     if (navigatorIndex != -1) {
         g_imageEngine->UpdateView(navigatorIndex, dir);
     }
@@ -10413,7 +10353,6 @@ static void EnqueuePhase2NavigationTask(
     task.navToken = navToken;
     task.imageId = imageId;
     task.dir = dir;
-    task.enqueueTick = GetTickCount64();
     task.serial = ++g_phase2NavSerial;
 
     bool dropped = false;
@@ -10460,7 +10399,6 @@ static void EnqueuePhase2NavigationTask(
 } // namespace
 
 // [v8.16] Added BrowseDirection to prevent resetting direction to IDLE
-// [v8.16] Added BrowseDirection to prevent resetting direction to IDLE
 void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::BrowseDirection dir) {
 
     if (!g_imageEngine || path.empty()) return;
@@ -10503,9 +10441,7 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
         g_editState.OriginalFilePath = path;
     }
     
-    g_isLoading = true;
-    
-    // [Fix] Reliable Titan Detection
+ // [Fix] Reliable Titan Detection
     // Use the robust Phase 2 logic (which checks exact dimensions + file size) 
     // to determine if we should show the Titan decode progress bar.
     int idx = g_navigator.FindIndex(path);
@@ -10651,9 +10587,7 @@ FireAndForget UpdateCompareLeftHistogramAsync(HWND hwnd, std::wstring path) {
             g_compare.left.metadata.HasEntropy = histMeta.HasEntropy;
         }
 
-        if (hasFullMeta || hasHist) {
-            RequestRepaint(PaintLayer::All);
-        }
+        RequestRepaint(PaintLayer::All);
     }
 }
 
@@ -10782,15 +10716,16 @@ void NavigateEdge(HWND hwnd, bool toLast) {
     if (g_navigator.Count() <= 0) return;
     if (!CheckUnsavedChanges(hwnd)) return;
 
-    std::wstring path = toLast ? g_navigator.Last() : g_navigator.First();
+    std::wstring path = (toLast)
+        ? g_navigator.Last()
+        : g_navigator.First();
 
     if (IsCompareModeActive()) {
         if (!path.empty()) {
             g_compare.activePane = ComparePane::Right;
             g_compare.contextPane = ComparePane::Right;
             g_compare.selectedPane = ComparePane::Right;
-            g_editState.Reset();
-            g_viewState.Reset();
+           g_viewState.Reset();
             QuickView::BrowseDirection browseDir = toLast
                 ? QuickView::BrowseDirection::FORWARD
                 : QuickView::BrowseDirection::BACKWARD;
@@ -10825,6 +10760,7 @@ void Navigate(HWND hwnd, int direction) {
                 if (success) {
                     g_compare.activePane = ComparePane::Left;
                     g_compare.contextPane = ComparePane::Left;
+                    g_compare.selectedPane = ComparePane::Left;
                     MarkCompareDirty();
                     RequestRepaint(PaintLayer::Image | PaintLayer::Static);
                 }
@@ -10986,10 +10922,6 @@ void OnPaint(HWND hwnd) {
                  QuickView::RegionRect vp = { (int)viewL, (int)viewT, (int)viewW, (int)viewH };
                  
                  // Calculate Base Preview Ratio (Preview / Original)
-                 // [Fix5] Use the MINIMUM ratio of both dimensions to ensure the worst-case
-                 // dimension triggers tiles. For tall/narrow images (e.g. 1080x9123 decoded to
-                 // 3840x2160), width ratio can exceed 1.0 while height ratio is tiny (0.24).
-                 // Also clamp to 1.0: a preview can never have more detail than the original.
                  float baseRatio = 0.0f;
                  float previewW = g_imageResource.GetSize().width;
                  float previewH = g_imageResource.GetSize().height;
@@ -11035,8 +10967,7 @@ void OnPaint(HWND hwnd) {
                   bool dispatchChanged = (curDispatchSerial != lastDispatchSerial);
                   bool forceReseed = g_forceTitanTileReseed.exchange(false, std::memory_order_acq_rel);
                   if (imageChanged) {
-                      lastVP = { -1, -1, -1, -1 };
-                      lastAbsZoom = -1.0f;
+                                       lastAbsZoom = -1.0f;
                       lastTileImageId = curTileImageId;
                   }
                   if (dispatchChanged) {
@@ -11522,4 +11453,43 @@ std::vector<std::wstring>& GetSystemIccProfiles() {
         initialized = true;
     }
     return profiles;
+}
+
+// [v10.5] Animation Frame Stepping Helper
+void HandleAnimFrameStep(HWND hwnd, bool forward) {
+    if (!g_imageResource.animator) return;
+    
+    // Pause if playing
+    if (g_animPlaying) {
+        g_animPlaying = false;
+        KillTimer(hwnd, IDT_ANIMATION);
+        g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
+    }
+    
+    uint32_t total = g_imageResource.animator->GetTotalFrames();
+    if (total <= 1) return;
+    
+    uint32_t current = g_imageResource.frameMeta.index;
+    uint32_t target = 0;
+    if (forward) {
+        target = (current + 1) % total;
+    } else {
+        target = (current > 0) ? current - 1 : total - 1;
+    }
+    
+    auto nextFrame = g_imageResource.animator->SeekToFrame(target);
+    if (nextFrame && nextFrame->pixels) {
+        ComPtr<ID2D1Bitmap> newBitmap;
+        if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
+            g_imageResource.bitmap = newBitmap;
+            g_imageResource.frameMeta = nextFrame->frameMeta;
+            RenderImageToDComp(hwnd, g_imageResource, true);
+            if (g_compEngine) {
+                RECT rc; GetClientRect(hwnd, &rc);
+                SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom, false);
+                g_compEngine->Commit();
+            }
+            RequestRepaint(PaintLayer::Dynamic);
+        }
+    }
 }
