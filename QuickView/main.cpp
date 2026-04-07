@@ -2500,6 +2500,81 @@ DialogLayout CalculateDialogLayout(D2D1_SIZE_F size) {
 // [Refactored] Hit testing moved to UIRenderer::HitTestWindowControls
 // Hover state tracked as index: -1=None, 0=Close, 1=Max, 2=Min, 3=Pin
 static int g_winCtrlHoverState = -1;
+static int g_winCtrlPressedState = -1;
+
+static int HitTestWindowControlButton(POINT pt) {
+    if (!g_uiRenderer) return -1;
+
+    WindowControlHit hit = g_uiRenderer->HitTestWindowControls((float)pt.x, (float)pt.y);
+    switch (hit) {
+        case WindowControlHit::Close:    return 0;
+        case WindowControlHit::Maximize: return 1;
+        case WindowControlHit::Minimize: return 2;
+        case WindowControlHit::Pin:      return 3;
+        default:                         return -1;
+    }
+}
+
+static bool ExecuteWindowControlButton(HWND hwnd, int buttonIndex) {
+    switch (buttonIndex) {
+        case 0:
+            SendMessage(hwnd, WM_CLOSE, 0, 0);
+            return true;
+        case 1: {
+            // [Fix] Exit Fullscreen if active, else toggle Maximize
+            if (g_isFullScreen) {
+                SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+            } else {
+                // [Phase 2] Cross-Monitor: Fake Maximize (Video Wall)
+                if (g_runtime.CrossMonitorMode) {
+                    RECT vRect = GetVirtualScreenRect();
+                    RECT rcNow; GetWindowRect(hwnd, &rcNow);
+
+                    // Check if we are already "Fake Maximized" (Span all monitors)
+                    bool isSpanned = (rcNow.left == vRect.left && rcNow.top == vRect.top &&
+                                      (rcNow.right - rcNow.left) == (vRect.right - vRect.left) &&
+                                      (rcNow.bottom - rcNow.top) == (vRect.bottom - vRect.top));
+
+                    if (isSpanned) {
+                        // Restore to saved placement
+                        SetWindowPlacement(hwnd, &g_savedWindowPlacement);
+                        // Force SW_SHOWNORMAL to ensure style flags update if needed
+                        ShowWindow(hwnd, SW_SHOWNORMAL);
+                        // Reset view state for proper fit
+                        g_viewState.Reset();
+                    } else {
+                        // Save current placement before spanning
+                        GetWindowPlacement(hwnd, &g_savedWindowPlacement);
+
+                        // Fake Maximize -> Set to Virtual Rect
+                        ShowWindow(hwnd, SW_SHOWNORMAL); // Ensure we remain compatible with DComp
+                        SetWindowPos(hwnd, nullptr, vRect.left, vRect.top,
+                                     vRect.right - vRect.left, vRect.bottom - vRect.top,
+                                     SWP_NOZORDER | SWP_FRAMECHANGED);
+                    }
+                } else {
+                    // Standard Windows Maximize
+                    bool wasZoomed = IsZoomed(hwnd);
+                    ShowWindow(hwnd, wasZoomed ? SW_RESTORE : SW_MAXIMIZE);
+                    // Reset view state if restoring
+                    if (wasZoomed) {
+                        g_viewState.Reset();
+                        RestoreCurrentExifOrientation();
+                    }
+                }
+            }
+            return true;
+        }
+        case 2:
+            ShowWindow(hwnd, SW_MINIMIZE);
+            return true;
+        case 3:
+            SendMessage(hwnd, WM_COMMAND, IDM_ALWAYS_ON_TOP, 0);
+            return true;
+        default:
+            return false;
+    }
+}
 
 
 // Unified Repaint Request System - 缁熶竴閲嶇粯璇锋眰绯荤粺
@@ -6635,16 +6710,8 @@ SKIP_EDGE_NAV:;
           }
           
           if (g_showControls && g_uiRenderer) {
-              // Use UIRenderer's unified hit testing
-              WindowControlHit hit = g_uiRenderer->HitTestWindowControls((float)pt.x, (float)pt.y);
-              switch (hit) {
-                  case WindowControlHit::Close:    g_winCtrlHoverState = 0; break;
-                  case WindowControlHit::Maximize: g_winCtrlHoverState = 1; break;
-                  case WindowControlHit::Minimize: g_winCtrlHoverState = 2; break;
-                  case WindowControlHit::Pin:      g_winCtrlHoverState = 3; break;
-                  default: break;
-              }
-              
+              g_winCtrlHoverState = HitTestWindowControlButton(pt);
+
               // Hand cursor for window control buttons
               if (g_winCtrlHoverState != -1) {
                   SetCursor(LoadCursor(nullptr, IDC_HAND));
@@ -7076,63 +7143,14 @@ SKIP_EDGE_NAV:;
         RequestRepaint(PaintLayer::Image);
         return 0;
 
-
     case WM_LBUTTONDOWN: {
         POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
         
         // 0. Window control buttons - HIGHEST PRIORITY (using cached hover state)
         if (g_winCtrlHoverState != -1) {
-            switch (g_winCtrlHoverState) {
-                case 0: SendMessage(hwnd, WM_CLOSE, 0, 0); return 0; // Close
-                case 1: { // Maximize
-                    // [Fix] Exit Fullscreen if active, else toggle Maximize
-                    if (g_isFullScreen) {
-                        SendMessage(hwnd, WM_COMMAND, IDM_FULLSCREEN, 0);
-                    } else {
-                        // [Phase 2] Cross-Monitor: Fake Maximize (Video Wall)
-                        if (g_runtime.CrossMonitorMode) {
-                             RECT vRect = GetVirtualScreenRect();
-                             RECT rcNow; GetWindowRect(hwnd, &rcNow);
-                             
-                             // Check if we are already "Fake Maximized" (Span all monitors)
-                             bool isSpanned = (rcNow.left == vRect.left && rcNow.top == vRect.top &&
-                                               (rcNow.right - rcNow.left) == (vRect.right - vRect.left) &&
-                                               (rcNow.bottom - rcNow.top) == (vRect.bottom - vRect.top));
-                             
-                             if (isSpanned) {
-                                 // Restore to saved placement
-                                 SetWindowPlacement(hwnd, &g_savedWindowPlacement);
-                                 // Force SW_SHOWNORMAL to ensure style flags update if needed
-                                 ShowWindow(hwnd, SW_SHOWNORMAL);
-                                 // Reset view state for proper fit
-                                 g_viewState.Reset();
-                             } else {
-                                 // Save current placement before spanning
-                                 GetWindowPlacement(hwnd, &g_savedWindowPlacement);
-                                 
-                                 // Fake Maximize -> Set to Virtual Rect
-                                 ShowWindow(hwnd, SW_SHOWNORMAL); // Ensure we remain compatible with DComp
-                                 SetWindowPos(hwnd, nullptr, vRect.left, vRect.top, 
-                                              vRect.right - vRect.left, vRect.bottom - vRect.top, 
-                                              SWP_NOZORDER | SWP_FRAMECHANGED);
-                             }
-                        } else {
-                            // Standard Windows Maximize
-                            bool wasZoomed = IsZoomed(hwnd);
-                            ShowWindow(hwnd, wasZoomed ? SW_RESTORE : SW_MAXIMIZE);
-                            // Reset view state if restoring
-                            if (wasZoomed) {
-                                g_viewState.Reset();
-                                RestoreCurrentExifOrientation();
-                            }
-                        }
-                    }
-                    return 0;
-                }
-                case 2: ShowWindow(hwnd, SW_MINIMIZE); return 0; // Min
-                case 3: SendMessage(hwnd, WM_COMMAND, IDM_ALWAYS_ON_TOP, 0); return 0; // Pin
-                default: break;
-            }
+            g_winCtrlPressedState = g_winCtrlHoverState;
+            SetCapture(hwnd);
+            return 0;
         }
         
         // 1. Settings / Update Toast
@@ -7413,6 +7431,21 @@ SKIP_EDGE_NAV:;
     }
     case WM_LBUTTONUP: {
         POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+
+        if (g_winCtrlPressedState != -1) {
+            const int pressed = g_winCtrlPressedState;
+            g_winCtrlPressedState = -1;
+            if (GetCapture() == hwnd) {
+                ReleaseCapture();
+            }
+
+            const int releasedOver = HitTestWindowControlButton(pt);
+            if (releasedOver == pressed) {
+                ExecuteWindowControlButton(hwnd, pressed);
+            }
+            return 0;
+        }
+
         if (g_viewState.IsPendingFullscreenExitDrag) {
             g_viewState.IsPendingFullscreenExitDrag = false;
             ReleaseCapture();
@@ -7867,6 +7900,9 @@ SKIP_EDGE_NAV:;
         return 0;
     }
     case WM_CAPTURECHANGED:
+        if ((HWND)lParam != hwnd) {
+            g_winCtrlPressedState = -1;
+        }
         if (g_viewState.IsPendingFullscreenExitDrag) {
             g_viewState.IsPendingFullscreenExitDrag = false;
         }
