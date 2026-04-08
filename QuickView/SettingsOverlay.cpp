@@ -39,6 +39,116 @@ static D2D1_COLOR_F ScaleUiColor(const D2D1_COLOR_F& color, float hdrWhiteScale)
         (std::max)(0.0f, color.b * scale),
         color.a);
 }
+
+struct SettingsThemePalette {
+    D2D1_COLOR_F dimmer;
+    D2D1_COLOR_F text;
+    D2D1_COLOR_F textDim;
+    D2D1_COLOR_F accent;
+    D2D1_COLOR_F controlBg;
+    D2D1_COLOR_F border;
+    D2D1_COLOR_F success;
+    D2D1_COLOR_F error;
+    D2D1_COLOR_F panelBg;
+    D2D1_COLOR_F hoverTint;
+    D2D1_COLOR_F disabledFill;
+    D2D1_COLOR_F subtleTint;
+    D2D1_COLOR_F shadow;
+};
+
+SettingsThemePalette GetSettingsThemePalette() {
+    if (IsLightThemeActive()) {
+        return {
+            D2D1::ColorF(0.94f, 0.96f, 0.99f, 0.52f),
+            D2D1::ColorF(0.10f, 0.12f, 0.15f),
+            D2D1::ColorF(0.40f, 0.45f, 0.52f),
+            D2D1::ColorF(0.02f, 0.43f, 0.78f),
+            D2D1::ColorF(0.92f, 0.94f, 0.97f),
+            D2D1::ColorF(0.80f, 0.84f, 0.89f),
+            D2D1::ColorF(0.11f, 0.62f, 0.23f),
+            D2D1::ColorF(0.79f, 0.19f, 0.16f),
+            D2D1::ColorF(0.985f, 0.99f, 1.0f, g_config.SettingsAlpha),
+            D2D1::ColorF(0.0f, 0.18f, 0.42f, 0.06f),
+            D2D1::ColorF(0.85f, 0.88f, 0.92f, 0.65f),
+            D2D1::ColorF(0.06f, 0.08f, 0.12f, 0.06f),
+            D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f),
+        };
+    }
+
+    return {
+        D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f),
+        D2D1::ColorF(1.0f, 1.0f, 1.0f),
+        D2D1::ColorF(0.6f, 0.6f, 0.6f),
+        D2D1::ColorF(0.0f, 0.47f, 0.84f),
+        D2D1::ColorF(0.25f, 0.25f, 0.25f),
+        D2D1::ColorF(0.3f, 0.3f, 0.3f),
+        D2D1::ColorF(0.1f, 0.8f, 0.1f),
+        D2D1::ColorF(0.8f, 0.1f, 0.1f),
+        D2D1::ColorF(0.08f, 0.08f, 0.10f, g_config.SettingsAlpha),
+        D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f),
+        D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f),
+        D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f),
+        D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.20f),
+    };
+}
+
+AppStrings::Language GetResolvedSettingsLanguage() {
+    if (g_config.Language != (int)AppStrings::Language::Auto) {
+        return static_cast<AppStrings::Language>(g_config.Language);
+    }
+
+    const LANGID id = GetUserDefaultUILanguage();
+    switch (PRIMARYLANGID(id)) {
+        case LANG_CHINESE:
+            return AppStrings::Language::ChineseSimplified;
+        case LANG_JAPANESE:
+            return AppStrings::Language::Japanese;
+        case LANG_RUSSIAN:
+            return AppStrings::Language::Russian;
+        case LANG_GERMAN:
+            return AppStrings::Language::German;
+        case LANG_SPANISH:
+            return AppStrings::Language::Spanish;
+        default:
+            return AppStrings::Language::English;
+    }
+}
+
+const wchar_t* GetThemeSettingLabel() {
+    switch (GetResolvedSettingsLanguage()) {
+        case AppStrings::Language::ChineseSimplified: return L"主题";
+        case AppStrings::Language::ChineseTraditional: return L"主題";
+        case AppStrings::Language::Japanese: return L"テーマ";
+        case AppStrings::Language::Russian: return L"Тема";
+        case AppStrings::Language::German: return L"Design";
+        case AppStrings::Language::Spanish: return L"Tema";
+        default: return L"Theme";
+    }
+}
+
+const wchar_t* GetDarkThemeLabel() {
+    switch (GetResolvedSettingsLanguage()) {
+        case AppStrings::Language::ChineseSimplified: return L"深色";
+        case AppStrings::Language::ChineseTraditional: return L"深色";
+        case AppStrings::Language::Japanese: return L"ダーク";
+        case AppStrings::Language::Russian: return L"Темная";
+        case AppStrings::Language::German: return L"Dunkel";
+        case AppStrings::Language::Spanish: return L"Oscuro";
+        default: return L"Dark";
+    }
+}
+
+const wchar_t* GetLightThemeLabel() {
+    switch (GetResolvedSettingsLanguage()) {
+        case AppStrings::Language::ChineseSimplified: return L"浅色";
+        case AppStrings::Language::ChineseTraditional: return L"淺色";
+        case AppStrings::Language::Japanese: return L"ライト";
+        case AppStrings::Language::Russian: return L"Светлая";
+        case AppStrings::Language::German: return L"Hell";
+        case AppStrings::Language::Spanish: return L"Claro";
+        default: return L"Light";
+    }
+}
 }
 
 
@@ -599,28 +709,27 @@ void SettingsOverlay::SetUIScale(float scale) {
 }
 
 void SettingsOverlay::CreateResources(ID2D1DeviceContext* pRT) {
+    const auto palette = GetSettingsThemePalette();
     if (!m_brushBg) {
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f), m_hdrWhiteScale), &m_brushBg);        // Dimmer (40% opacity)
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f), m_hdrWhiteScale), &m_brushText);             // White
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.6f, 0.6f, 0.6f), m_hdrWhiteScale), &m_brushTextDim);          // Gray
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.47f, 0.84f), m_hdrWhiteScale), &m_brushAccent);         // Windows Blue
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.25f, 0.25f, 0.25f), m_hdrWhiteScale), &m_brushControlBg);     // Control Dark
-        
-        // New Visuals
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.3f, 0.3f, 0.3f), m_hdrWhiteScale), &m_brushBorder);
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.1f, 0.8f, 0.1f), m_hdrWhiteScale), &m_brushSuccess);
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.8f, 0.1f, 0.1f), m_hdrWhiteScale), &m_brushError);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.dimmer, m_hdrWhiteScale), &m_brushBg);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.text, m_hdrWhiteScale), &m_brushText);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.textDim, m_hdrWhiteScale), &m_brushTextDim);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.accent, m_hdrWhiteScale), &m_brushAccent);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.controlBg, m_hdrWhiteScale), &m_brushControlBg);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.border, m_hdrWhiteScale), &m_brushBorder);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.success, m_hdrWhiteScale), &m_brushSuccess);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.error, m_hdrWhiteScale), &m_brushError);
     }
 
     if (m_brushBg) {
-        m_brushBg->SetColor(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f), m_hdrWhiteScale));
-        m_brushText->SetColor(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f), m_hdrWhiteScale));
-        m_brushTextDim->SetColor(ScaleUiColor(D2D1::ColorF(0.6f, 0.6f, 0.6f), m_hdrWhiteScale));
-        m_brushAccent->SetColor(ScaleUiColor(D2D1::ColorF(0.0f, 0.47f, 0.84f), m_hdrWhiteScale));
-        m_brushControlBg->SetColor(ScaleUiColor(D2D1::ColorF(0.25f, 0.25f, 0.25f), m_hdrWhiteScale));
-        m_brushBorder->SetColor(ScaleUiColor(D2D1::ColorF(0.3f, 0.3f, 0.3f), m_hdrWhiteScale));
-        m_brushSuccess->SetColor(ScaleUiColor(D2D1::ColorF(0.1f, 0.8f, 0.1f), m_hdrWhiteScale));
-        m_brushError->SetColor(ScaleUiColor(D2D1::ColorF(0.8f, 0.1f, 0.1f), m_hdrWhiteScale));
+        m_brushBg->SetColor(ScaleUiColor(palette.dimmer, m_hdrWhiteScale));
+        m_brushText->SetColor(ScaleUiColor(palette.text, m_hdrWhiteScale));
+        m_brushTextDim->SetColor(ScaleUiColor(palette.textDim, m_hdrWhiteScale));
+        m_brushAccent->SetColor(ScaleUiColor(palette.accent, m_hdrWhiteScale));
+        m_brushControlBg->SetColor(ScaleUiColor(palette.controlBg, m_hdrWhiteScale));
+        m_brushBorder->SetColor(ScaleUiColor(palette.border, m_hdrWhiteScale));
+        m_brushSuccess->SetColor(ScaleUiColor(palette.success, m_hdrWhiteScale));
+        m_brushError->SetColor(ScaleUiColor(palette.error, m_hdrWhiteScale));
     }
 
     // Get System Message Font (e.g. Microsoft YaHei UI on CN, Segoe UI on EN)
@@ -1028,6 +1137,27 @@ void SettingsOverlay::BuildMenu() {
         SaveConfig();
     };
     tabVisuals.items.push_back(itemUiScale);
+
+    SettingsItem itemThemeMode = {
+        GetThemeSettingLabel(),
+        OptionType::Segment,
+        nullptr,
+        nullptr,
+        &g_config.ThemeMode,
+        nullptr,
+        0,
+        0,
+        { AppStrings::Settings_Option_Auto, GetDarkThemeLabel(), GetLightThemeLabel() }
+    };
+    itemThemeMode.onChange = [this]() {
+        if (g_config.ThemeMode < 0 || g_config.ThemeMode > 2) g_config.ThemeMode = 0;
+        SaveConfig();
+        if (m_hwnd) {
+            ApplyWindowTheme(m_hwnd);
+            InvalidateRect(m_hwnd, nullptr, FALSE);
+        }
+    };
+    tabVisuals.items.push_back(itemThemeMode);
     
     // Always on Top with immediate effect
     SettingsItem itemAoT = { AppStrings::Settings_Label_AlwaysOnTop, OptionType::Toggle, &g_config.AlwaysOnTop };
@@ -1616,6 +1746,7 @@ void SettingsOverlay::SetVisible(bool visible) {
 void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
     if (!m_visible && !m_showUpdateToast) return;
     CreateResources(pRT);
+    const auto palette = GetSettingsThemePalette();
     
     // Check for deferred rebuild before rendering
     if (m_pendingRebuild) {
@@ -1659,7 +1790,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
 
         // 3. Draw HUD Panel Background (Opaque Dark)
         ComPtr<ID2D1SolidColorBrush> brushPanelBg;
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.08f, 0.08f, 0.10f, g_config.SettingsAlpha), m_hdrWhiteScale), &brushPanelBg);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.panelBg, m_hdrWhiteScale), &brushPanelBg);
         D2D1_ROUNDED_RECT hudRounded = D2D1::RoundedRect(hudRect, 8.0f, 8.0f);
         pRT->FillRoundedRectangle(hudRounded, brushPanelBg.Get());
 
@@ -1722,7 +1853,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
             if (isActive) {
                 pRT->FillRectangle(D2D1::RectF(hudX, tabY + 10.0f * s, hudX + 3.0f * s, tabY + 30.0f * s), m_brushAccent.Get());
                 ComPtr<ID2D1SolidColorBrush> tint;
-                pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f), m_hdrWhiteScale), &tint);
+                pRT->CreateSolidColorBrush(ScaleUiColor(palette.hoverTint, m_hdrWhiteScale), &tint);
                 pRT->FillRectangle(tabRect, tint.Get());
             }
 
@@ -2148,7 +2279,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
                     if (item.isDisabled) {
                         // Disabled: Draw gray toggle background + disabled text
                         ComPtr<ID2D1SolidColorBrush> brushDisabled;
-                        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f), m_hdrWhiteScale), &brushDisabled);
+                        pRT->CreateSolidColorBrush(ScaleUiColor(palette.disabledFill, m_hdrWhiteScale), &brushDisabled);
                         D2D1_RECT_F toggleBg = D2D1::RectF(controlRect.left, controlRect.top + 5, controlRect.left + 44, controlRect.top + 27);
                         pRT->FillRoundedRectangle(D2D1::RoundedRect(toggleBg, 11, 11), brushDisabled.Get());
                         
@@ -2219,7 +2350,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
                      // Handle disabled state
                      if (item.isDisabled) {
                          // Gray disabled button
-                         pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f), m_hdrWhiteScale), &btnBrush);
+                         pRT->CreateSolidColorBrush(ScaleUiColor(palette.disabledFill, m_hdrWhiteScale), &btnBrush);
                          pRT->FillRoundedRectangle(D2D1::RoundedRect(btnRect, btnRadius, btnRadius), btnBrush.Get());
                          
                          // Show disabled text on the left
@@ -2359,7 +2490,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
 
         D2D1_RECT_F thumbRect = D2D1::RectF(hudX + hudW - 8.0f * s, thumbY, hudX + hudW - 4.0f * s, thumbY + thumbH);
         ComPtr<ID2D1SolidColorBrush> scrollBrush;
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.2f), m_hdrWhiteScale), &scrollBrush);
+        pRT->CreateSolidColorBrush(ScaleUiColor(palette.subtleTint, m_hdrWhiteScale), &scrollBrush);
         pRT->FillRoundedRectangle(D2D1::RoundedRect(thumbRect, 2.0f * s, 2.0f * s), scrollBrush.Get());
     }
 
@@ -3019,6 +3150,7 @@ void SettingsOverlay::DrawComboBox(ID2D1DeviceContext* pRT, const D2D1_RECT_F& r
 
 void SettingsOverlay::DrawComboDropdown(ID2D1DeviceContext* pRT) {
     if (!m_pActiveCombo) return;
+    const auto palette = GetSettingsThemePalette();
     
     const float s = m_uiScale;
     float controlX = m_pActiveCombo->rect.left + LABEL_COLUMN_WIDTH * s;
@@ -3059,7 +3191,7 @@ void SettingsOverlay::DrawComboDropdown(ID2D1DeviceContext* pRT) {
         bool isSel = (m_pActiveCombo->pIntVal && *m_pActiveCombo->pIntVal == idx);
         if (isSel && idx != m_comboHoverIdx) {
              ComPtr<ID2D1SolidColorBrush> tint;
-             pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), m_hdrWhiteScale), &tint);
+             pRT->CreateSolidColorBrush(ScaleUiColor(palette.subtleTint, m_hdrWhiteScale), &tint);
              pRT->FillRectangle(itemRect, tint.Get());
         }
         
@@ -3076,6 +3208,7 @@ void SettingsOverlay::DrawComboDropdown(ID2D1DeviceContext* pRT) {
 
 void SettingsOverlay::RenderTooltip(ID2D1DeviceContext* pRT) {
     if (!m_pHoverTooltipItem || m_pHoverTooltipItem->tooltipText.empty()) return;
+    const auto palette = GetSettingsThemePalette();
 
     float s = m_uiScale;
 
@@ -3117,7 +3250,7 @@ void SettingsOverlay::RenderTooltip(ID2D1DeviceContext* pRT) {
     // Soft shadow (simulated)
     D2D1_ROUNDED_RECT shadow = D2D1::RoundedRect(D2D1::RectF(bgRect.left, bgRect.top + 4.0f, bgRect.right, bgRect.bottom + 4.0f), 4.0f * s, 4.0f * s);
     ComPtr<ID2D1SolidColorBrush> shadowBrush;
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.2f), &shadowBrush);
+    pRT->CreateSolidColorBrush(ScaleUiColor(palette.shadow, m_hdrWhiteScale), &shadowBrush);
     pRT->FillRoundedRectangle(shadow, shadowBrush.Get());
 
     // Background and border

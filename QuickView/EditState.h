@@ -92,6 +92,7 @@ struct AppConfig {
     int UIScalePreset = 0;               // 0=Auto(DPI), 1=90%, 2=100%, 3=110%, 4=125%
 
     // --- View ---
+    int ThemeMode = 0;                  // 0=Auto, 1=Dark, 2=Light
     int CanvasColor = 2;                // 0=Black, 1=White, 2=Grid, 3=Custom
     float CanvasCustomR = 0.2f;         // Custom color RGB (0.0-1.0)
     float CanvasCustomG = 0.2f;
@@ -299,4 +300,6 @@ extern RuntimeConfig g_runtime;
 bool CheckWritePermission(const std::wstring& dir);
 void SaveConfig(); // Ensure visible
 void LoadConfig(); // Ensure visible
-
+bool IsSystemLightTheme();
+bool IsLightThemeActive();
+void ApplyWindowTheme(HWND hwnd);

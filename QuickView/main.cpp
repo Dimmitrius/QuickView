@@ -178,6 +178,52 @@ CRenderEngine* g_pRenderEngine = nullptr; // Global raw alias for linker compati
 bool g_isFullScreen = false;
 static WINDOWPLACEMENT g_savedWindowPlacement = { sizeof(WINDOWPLACEMENT) };
 
+namespace {
+enum class PreferredAppMode {
+    Default,
+    AllowDark,
+    ForceDark,
+    ForceLight,
+    Max
+};
+
+using SetPreferredAppModeFn = PreferredAppMode(WINAPI*)(PreferredAppMode);
+using FlushMenuThemesFn = void (WINAPI*)();
+
+bool ReadAppsUseLightThemeRegistry(bool defaultValue) {
+    DWORD value = defaultValue ? 1u : 0u;
+    DWORD size = sizeof(value);
+    const LONG status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme",
+        RRF_RT_REG_DWORD,
+        nullptr,
+        &value,
+        &size);
+    if (status != ERROR_SUCCESS) return defaultValue;
+    return value != 0;
+}
+
+SetPreferredAppModeFn LoadSetPreferredAppMode() {
+    static const auto fn = []() -> SetPreferredAppModeFn {
+        HMODULE module = LoadLibraryW(L"uxtheme.dll");
+        if (!module) return nullptr;
+        return reinterpret_cast<SetPreferredAppModeFn>(GetProcAddress(module, MAKEINTRESOURCEA(135)));
+    }();
+    return fn;
+}
+
+FlushMenuThemesFn LoadFlushMenuThemes() {
+    static const auto fn = []() -> FlushMenuThemesFn {
+        HMODULE module = LoadLibraryW(L"uxtheme.dll");
+        if (!module) return nullptr;
+        return reinterpret_cast<FlushMenuThemesFn>(GetProcAddress(module, MAKEINTRESOURCEA(136)));
+    }();
+    return fn;
+}
+}
+
 // [Step 3] Unified Resource Management
 struct ImageResource {
     ComPtr<ID2D1Bitmap> bitmap;
@@ -4294,6 +4340,42 @@ void ApplyWindowCornerPreference(HWND hwnd, bool enable) {
     DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
 }
 
+bool IsSystemLightTheme() {
+    return ReadAppsUseLightThemeRegistry(false);
+}
+
+bool IsLightThemeActive() {
+    switch (g_config.ThemeMode) {
+        case 1: return false;
+        case 2: return true;
+        default: return IsSystemLightTheme();
+    }
+}
+
+void ApplyWindowTheme(HWND hwnd) {
+    if (!hwnd) return;
+
+    const bool useLightTheme = IsLightThemeActive();
+    const BOOL useDarkFrame = useLightTheme ? FALSE : TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkFrame, sizeof(useDarkFrame));
+
+    if (const auto setPreferredAppMode = LoadSetPreferredAppMode()) {
+        setPreferredAppMode(useLightTheme ? PreferredAppMode::ForceLight : PreferredAppMode::ForceDark);
+    }
+    if (const auto flushMenuThemes = LoadFlushMenuThemes()) {
+        flushMenuThemes();
+    }
+
+    SetWindowPos(
+        hwnd,
+        nullptr,
+        0,
+        0,
+        0,
+        0,
+        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 void SaveConfig() {
     std::wstring iniPath;
     
@@ -4335,6 +4417,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"General", L"UIScaleMode", (g_config.UIScalePreset == 0) ? L"0" : L"1", iniPath.c_str());
 
     // View
+    WritePrivateProfileStringW(L"View", L"ThemeMode", std::to_wstring(g_config.ThemeMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"CanvasColor", std::to_wstring(g_config.CanvasColor).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"CanvasCustomR", std::to_wstring(g_config.CanvasCustomR).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"CanvasCustomG", std::to_wstring(g_config.CanvasCustomG).c_str(), iniPath.c_str());
@@ -4459,6 +4542,8 @@ void LoadConfig() {
     g_config.UIScalePreset = uiScalePreset;
 
     // View
+    g_config.ThemeMode = GetPrivateProfileIntW(L"View", L"ThemeMode", 0, iniPath.c_str());
+    if (g_config.ThemeMode < 0 || g_config.ThemeMode > 2) g_config.ThemeMode = 0;
     g_config.CanvasColor = GetPrivateProfileIntW(L"View", L"CanvasColor", 0, iniPath.c_str());
     wchar_t bufR[32], bufG[32], bufB[32];
     GetPrivateProfileStringW(L"View", L"CanvasCustomR", L"0.2", bufR, 32, iniPath.c_str());
@@ -6083,17 +6168,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HDC hdc = (HDC)wParam;
         HWND hEdit = (HWND)lParam;
         if (g_dialog.IsVisible && hEdit == g_dialog.hEdit) {
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkColor(hdc, RGB(30, 30, 30));
-            static HBRUSH hBrush = CreateSolidBrush(RGB(30, 30, 30)); 
-            return (LRESULT)hBrush;
+            const bool useLightTheme = IsLightThemeActive();
+            const COLORREF bg = useLightTheme ? RGB(246, 248, 251) : RGB(30, 30, 30);
+            const COLORREF fg = useLightTheme ? RGB(20, 24, 28) : RGB(255, 255, 255);
+            SetTextColor(hdc, fg);
+            SetBkColor(hdc, bg);
+            static HBRUSH hBrushDark = CreateSolidBrush(RGB(30, 30, 30));
+            static HBRUSH hBrushLight = CreateSolidBrush(RGB(246, 248, 251));
+            return (LRESULT)(useLightTheme ? hBrushLight : hBrushDark);
         }
         break;
     }
     case WM_CREATE: {
         MARGINS margins = { 0, 0, 0, 1 }; 
         DwmExtendFrameIntoClientArea(hwnd, &margins); 
-        SetWindowPos(hwnd, nullptr, 0,0,0,0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        ApplyWindowTheme(hwnd);
         return 0;
     }
     case WM_ENTERSIZEMOVE: {
@@ -6154,6 +6243,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_DISPLAYCHANGE: {
         // [CMS] System/Monitor profile changed
         RefreshDisplayColorPipeline(hwnd, true);
+        break;
+    }
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED: {
+        if (g_config.ThemeMode == 0) {
+            ApplyWindowTheme(hwnd);
+            RequestRepaint(PaintLayer::All);
+        }
         break;
     }
     case WM_NCCALCSIZE: if (wParam) return 0; break;

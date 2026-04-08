@@ -5,15 +5,50 @@
 #include <shellapi.h>
 #include "shlobj.h"
 #include "EditState.h"
+#include <uxtheme.h>
 
 extern AppConfig g_config;
 extern RuntimeConfig g_runtime;
+
+namespace {
+enum class PreferredAppMode {
+    Default,
+    AllowDark,
+    ForceDark,
+    ForceLight,
+    Max
+};
+
+using SetPreferredAppModeFn = PreferredAppMode(WINAPI*)(PreferredAppMode);
+using FlushMenuThemesFn = void (WINAPI*)();
+
+void ApplyContextMenuTheme() {
+    static const auto setPreferredAppMode = []() -> SetPreferredAppModeFn {
+        HMODULE module = LoadLibraryW(L"uxtheme.dll");
+        if (!module) return nullptr;
+        return reinterpret_cast<SetPreferredAppModeFn>(GetProcAddress(module, MAKEINTRESOURCEA(135)));
+    }();
+    static const auto flushMenuThemes = []() -> FlushMenuThemesFn {
+        HMODULE module = LoadLibraryW(L"uxtheme.dll");
+        if (!module) return nullptr;
+        return reinterpret_cast<FlushMenuThemesFn>(GetProcAddress(module, MAKEINTRESOURCEA(136)));
+    }();
+
+    if (setPreferredAppMode) {
+        setPreferredAppMode(IsLightThemeActive() ? PreferredAppMode::ForceLight : PreferredAppMode::ForceDark);
+    }
+    if (flushMenuThemes) {
+        flushMenuThemes();
+    }
+}
+}
 
 // ============================================================
 // ContextMenu.cpp - Right-click Context Menu Implementation
 // ============================================================
 
 void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix, bool isWindowLocked, bool showInfoPanel, bool infoPanelExpanded, bool alwaysOnTop, bool renderRaw, bool isRawFile, bool isFullscreen, bool isCrossMonitor, bool isCompareMode, bool isPixelArtMode) {
+    ApplyContextMenuTheme();
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
@@ -190,6 +225,7 @@ void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix,
 }
 
 void ShowGalleryContextMenu(HWND hwnd, POINT pt) {
+    ApplyContextMenuTheme();
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
