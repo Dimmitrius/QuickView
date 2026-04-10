@@ -1788,11 +1788,25 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
     if (m_visible) {
         D2D1_RECT_F hudRect = D2D1::RectF(hudX, hudY, hudX + hudW, hudY + hudH);
 
-        // 3. Draw HUD Panel Background (Opaque Dark)
-        ComPtr<ID2D1SolidColorBrush> brushPanelBg;
-        pRT->CreateSolidColorBrush(ScaleUiColor(palette.panelBg, m_hdrWhiteScale), &brushPanelBg);
         D2D1_ROUNDED_RECT hudRounded = D2D1::RoundedRect(hudRect, 8.0f, 8.0f);
-        pRT->FillRoundedRectangle(hudRounded, brushPanelBg.Get());
+
+        // 3. Draw HUD Panel Background (Geek Glass or Fallback)
+        if (m_bgCmdList) {
+            m_geekGlass.InitializeResources(pRT);
+            QuickView::UI::GeekGlass::GeekGlassConfig config;
+            config.panelBounds = hudRect;
+            config.cornerRadius = 8.0f;
+            config.blurStandardDeviation = 20.0f * m_uiScale;
+            config.opacity = g_config.SettingsAlpha;
+            config.pBackgroundCommandList = m_bgCmdList;
+            config.backgroundTransform = m_bgTransform;
+            m_geekGlass.DrawGeekGlassPanel(pRT, config);
+        } else {
+            ComPtr<ID2D1SolidColorBrush> brushPanelBg;
+            pRT->CreateSolidColorBrush(ScaleUiColor(palette.panelBg, m_hdrWhiteScale), &brushPanelBg);
+            brushPanelBg->SetOpacity(g_config.SettingsAlpha);
+            pRT->FillRoundedRectangle(hudRounded, brushPanelBg.Get());
+        }
 
         // 4. Draw Border
         pRT->DrawRoundedRectangle(hudRounded, m_brushBorder.Get(), 1.0f);
@@ -1818,7 +1832,10 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
 
         // Sidebar (Left portion of HUD)
         D2D1_RECT_F sidebarRect = D2D1::RectF(hudX, hudY, hudX + sidebarW, hudY + hudH);
+        float oldSidebarOp = m_brushControlBg->GetOpacity();
+        m_brushControlBg->SetOpacity(oldSidebarOp * 0.3f);
         pRT->FillRectangle(sidebarRect, m_brushControlBg.Get());
+        m_brushControlBg->SetOpacity(oldSidebarOp);
 
         pRT->PopLayer();
 

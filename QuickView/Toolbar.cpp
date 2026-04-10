@@ -397,8 +397,23 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
 
     pRT->PushLayer(params, layer.Get());
 
-    m_brushBg->SetOpacity(g_config.ToolbarAlpha);
-    pRT->FillRoundedRectangle(m_bgRect, m_brushBg.Get());
+    ComPtr<ID2D1DeviceContext> dc;
+    if (SUCCEEDED(pRT->QueryInterface(IID_PPV_ARGS(&dc))) && m_bgCmdList) {
+        m_geekGlass.InitializeResources(dc.Get());
+        
+        QuickView::UI::GeekGlass::GeekGlassConfig config;
+        config.panelBounds = m_bgRect.rect;
+        config.cornerRadius = m_bgRect.radiusX;
+        config.blurStandardDeviation = 15.0f * m_uiScale;
+        config.opacity = g_config.ToolbarAlpha; 
+        config.pBackgroundCommandList = m_bgCmdList;
+        config.backgroundTransform = m_bgTransform;
+        
+        m_geekGlass.DrawGeekGlassPanel(dc.Get(), config);
+    } else {
+        m_brushBg->SetOpacity(g_config.ToolbarAlpha);
+        pRT->FillRoundedRectangle(m_bgRect, m_brushBg.Get());
+    }
 
     for (const auto &btn : m_buttons) {
       if (btn.rect.right == 0)

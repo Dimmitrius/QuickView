@@ -3692,10 +3692,24 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
     context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.6f)), &pOverlayBrush); // Slightly clearer overlay
     context->FillRectangle(D2D1::RectF(0, 0, size.width, size.height), pOverlayBrush.Get());
     
-    // Box Background (with configurable alpha)
-    ComPtr<ID2D1SolidColorBrush> pBgBrush;
-    context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(0.18f, 0.18f, 0.18f, g_config.SettingsAlpha)), &pBgBrush);
-    context->FillRoundedRectangle(D2D1::RoundedRect(layout.Box, 10.0f, 10.0f), pBgBrush.Get());
+    // Box Background (Geek Glass or Fallback)
+    bool useGlass = g_uiRenderer && g_uiRenderer->GetBackgroundCommandList();
+    if (useGlass) {
+        auto& geekGlass = g_uiRenderer->GetGlassEngine("Dialog_Main");
+        geekGlass.InitializeResources(context);
+        QuickView::UI::GeekGlass::GeekGlassConfig config;
+        config.panelBounds = layout.Box;
+        config.cornerRadius = 10.0f;
+        config.blurStandardDeviation = 24.0f; 
+        config.opacity = g_config.SettingsAlpha;
+        config.pBackgroundCommandList = g_uiRenderer->GetBackgroundCommandList();
+        config.backgroundTransform = g_compEngine ? g_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+        geekGlass.DrawGeekGlassPanel(context, config);
+    } else {
+        ComPtr<ID2D1SolidColorBrush> pBgBrush;
+        context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(0.18f, 0.18f, 0.18f, g_config.SettingsAlpha)), &pBgBrush);
+        context->FillRoundedRectangle(D2D1::RoundedRect(layout.Box, 10.0f, 10.0f), pBgBrush.Get());
+    }
     
     // Border
     ComPtr<ID2D1SolidColorBrush> pBorderBrush;

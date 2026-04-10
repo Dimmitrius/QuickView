@@ -2,6 +2,7 @@
 #include "pch.h"
 #include <vector>
 #include <string>
+#include "GeekGlass.h"
 
 // IDs for button actions
 enum class ToolbarButtonID {
@@ -77,6 +78,12 @@ public:
     float GetMinWidth() const { return m_minRequiredWidth > 0.0f ? m_minRequiredWidth : (PADDING_X * 2 + 8 * BUTTON_SIZE + 7 * GAP) * m_uiScale; }
     bool IsWindowTooNarrow() const { return m_windowTooNarrow; }
 
+    // [Geek Glass] Data Injection
+    void SetGeekGlassData(ID2D1CommandList* list, const D2D1_MATRIX_3X2_F& transform) {
+        m_bgCmdList = list;
+        m_bgTransform = transform;
+    }
+
 private:
     // Layout Constants
     const float BUTTON_SIZE = 32.0f;
@@ -122,5 +129,10 @@ private:
     ComPtr<IDWriteTextFormat> m_textFormatUI;
     ComPtr<IDWriteFactory> m_dwriteFactory; // Need factory to create format
     
+    // Geek Glass properties
+    QuickView::UI::GeekGlass::GeekGlassEngine m_geekGlass;
+    ID2D1CommandList* m_bgCmdList = nullptr;
+    D2D1_MATRIX_3X2_F m_bgTransform = D2D1::Matrix3x2F::Identity();
+
     void CreateResources(ID2D1RenderTarget* pRT);
 };

@@ -27,10 +27,26 @@ void GeekGlassEngine::ReleaseResources() {
 }
 
 void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, ThemeMode theme, const D2D1_RECT_F& bounds) {
+    float width = bounds.right - bounds.left;
+    float height = bounds.bottom - bounds.top;
+    float currentWidth = m_currentBounds.right - m_currentBounds.left;
+    float currentHeight = m_currentBounds.bottom - m_currentBounds.top;
+
+    bool sizeChanged = (std::abs(width - currentWidth) > 0.001f) || (std::abs(height - currentHeight) > 0.001f);
+    bool themeChanged = (theme != m_currentTheme);
+    bool needsRebuild = !m_diagonalBrush || !m_bevelBrush || themeChanged || sizeChanged;
+
     // Check if the brushes need to be rebuilt: only if resized or theme changes
-    if (m_diagonalBrush && m_bevelBrush && theme == m_currentTheme && 
-        bounds.left == m_currentBounds.left && bounds.top == m_currentBounds.top && 
-        bounds.right == m_currentBounds.right && bounds.bottom == m_currentBounds.bottom) {
+    if (!needsRebuild) {
+        // Safety Lock 1: Only translation changed, trivially update proxy points without recreating D2D Stops
+        if (bounds.left != m_currentBounds.left || bounds.top != m_currentBounds.top) {
+             m_diagonalBrush->SetStartPoint(D2D1::Point2F(bounds.left, bounds.top));
+             m_diagonalBrush->SetEndPoint(D2D1::Point2F(bounds.right, bounds.bottom));
+             
+             m_bevelBrush->SetStartPoint(D2D1::Point2F(bounds.left, bounds.top));
+             m_bevelBrush->SetEndPoint(D2D1::Point2F(bounds.right, bounds.bottom));
+        }
+        m_currentBounds = bounds;
         return; 
     }
 

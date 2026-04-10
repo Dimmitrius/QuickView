@@ -93,11 +93,29 @@ public:
     // 初始化
     HRESULT Initialize(CompositionEngine* compEngine, IDWriteFactory* dwriteFactory);
     
+    // 资源释放 (Device Loss 恢复)
+    void DiscardDeviceResources() {
+        for (auto& pair : m_glassCache) {
+            pair.second.ReleaseResources();
+        }
+        m_glassCache.clear();
+        
+        m_bgCommandList.Reset();
+    }
+    
     // ===== 分层渲染控制 =====
     void MarkStaticDirty() { m_isStaticDirty = true; }
     void MarkDynamicDirty() { m_isDynamicDirty = true; m_dynamicFullDirty = true; }
     void MarkGalleryDirty() { m_isGalleryDirty = true; }
     void MarkDirty() { MarkDynamicDirty(); }  // 兼容旧接口
+
+    // ===== 极客玻璃缓存池 (Engine Cache Map) =====
+    QuickView::UI::GeekGlass::GeekGlassEngine& GetGlassEngine(const std::string& key) {
+        return m_glassCache[key];
+    }
+    ID2D1CommandList* GetBackgroundCommandList() const { 
+        return m_bgCommandList.Get(); 
+    }
     
     // 细粒度脏标记 (用于 Dirty Rects 优化)
     void MarkOSDDirty() { m_isDynamicDirty = true; m_osdDirty = true; }
@@ -214,7 +232,8 @@ private:
     RECT CalculateOSDDirtyRect();
     
 private:
-    
+    std::unordered_map<std::string, QuickView::UI::GeekGlass::GeekGlassEngine> m_glassCache;
+
     CompositionEngine* m_compEngine = nullptr;
     IDWriteFactory* m_dwriteFactory = nullptr;
     

@@ -647,9 +647,11 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
     DrawComparePaneIndicator(dc, hwnd);
     
     // Toolbar
-    g_toolbar.SetHdrWhiteScale(hdrWhiteScale);
-    g_toolbar.Render(dc);
-    
+    if (g_toolbar.IsVisible()) {
+        g_toolbar.SetHdrWhiteScale(hdrWhiteScale);
+        g_toolbar.SetGeekGlassData(m_bgCommandList.Get(), m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity());
+        g_toolbar.Render(dc);
+    }
     bool hudVisible = IsCompareModeActive() && g_runtime.ShowCompareInfo;
 
     // Info Panel or HUD - Use g_runtime directly since SetRuntimeConfig may not be called
@@ -676,12 +678,18 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
     }
 
     // Settings Overlay
-    g_settingsOverlay.SetHdrWhiteScale(hdrWhiteScale);
-    g_settingsOverlay.Render(dc, (float)m_width, (float)m_height);
+    if (g_settingsOverlay.IsVisible()) {
+        g_settingsOverlay.SetHdrWhiteScale(hdrWhiteScale);
+        g_settingsOverlay.SetGeekGlassData(m_bgCommandList.Get(), m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity());
+        g_settingsOverlay.Render(dc, (float)m_width, (float)m_height);
+    }
     
     // Help Overlay (Top of Static Layer)
-    g_helpOverlay.SetHdrWhiteScale(hdrWhiteScale);
-    g_helpOverlay.Render(dc, (float)m_width, (float)m_height);
+    if (g_helpOverlay.IsVisible()) {
+        g_helpOverlay.SetHdrWhiteScale(hdrWhiteScale);
+        g_helpOverlay.SetGeekGlassData(m_bgCommandList.Get(), m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity());
+        g_helpOverlay.Render(dc, (float)m_width, (float)m_height);
+    }
 }
 
 // ============================================================================
@@ -759,7 +767,7 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
         GetCompareIndicatorState(pane, splitRatio, isWipe);
         float splitX = m_width * splitRatio;
 
-        auto drawSingleOSD = [&](const std::wstring& text, float centerX, float centerY) {
+        auto drawSingleOSD = [&](const std::wstring& text, float centerX, float centerY, int index) {
             if (text.empty()) return;
             ComPtr<IDWriteTextLayout> layout;
             m_dwriteFactory->CreateTextLayout(text.c_str(), (UINT32)text.length(), m_osdFormat.Get(), 1000.0f*s, 100.0f*s, &layout);
@@ -769,13 +777,28 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
             float padH = 20.0f * s, padV = 10.0f * s;
             float tw = tm.width + padH * 2, th = tm.height + padV * 2;
             D2D1_RECT_F r = D2D1::RectF(centerX - tw/2, centerY - th/2, centerX + tw/2, centerY + th/2);
-            dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6*s, 6*s), bgBrush.Get());
+            
+            if (m_bgCommandList) {
+                std::string key = "OSD_" + std::to_string(index);
+                auto& geekGlass = GetGlassEngine(key);
+                geekGlass.InitializeResources(dc);
+                QuickView::UI::GeekGlass::GeekGlassConfig config;
+                config.panelBounds = r;
+                config.cornerRadius = 6.0f * s;
+                config.blurStandardDeviation = 16.0f * s;
+                config.opacity = m_osdOpacity;
+                config.pBackgroundCommandList = m_bgCommandList.Get();
+                config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+                geekGlass.DrawGeekGlassPanel(dc, config);
+            } else {
+                dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6*s, 6*s), bgBrush.Get());
+            }
             dc->DrawTextLayout(D2D1::Point2F(r.left + padH, r.top + padV), layout.Get(), textBrush.Get());
         };
 
         float centerY = m_height - 100.0f * s;
-        drawSingleOSD(m_osdTextLeft, splitX * 0.5f, centerY);
-        drawSingleOSD(m_osdTextRight, splitX + (m_width - splitX) * 0.5f, centerY);
+        drawSingleOSD(m_osdTextLeft, splitX * 0.5f, centerY, 0);
+        drawSingleOSD(m_osdTextRight, splitX + (m_width - splitX) * 0.5f, centerY, 1);
         return;
     }
 
@@ -822,7 +845,20 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
     }
 
     D2D1_RECT_F bgRect = D2D1::RectF(x, y, x + toastW, y + toastH);
-    dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
+    if (m_bgCommandList) {
+        auto& geekGlass = GetGlassEngine("OSD_0");
+        geekGlass.InitializeResources(dc);
+        QuickView::UI::GeekGlass::GeekGlassConfig config;
+        config.panelBounds = bgRect;
+        config.cornerRadius = 8.0f * s;
+        config.blurStandardDeviation = 16.0f * s;
+        config.opacity = m_osdOpacity;
+        config.pBackgroundCommandList = m_bgCommandList.Get();
+        config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+        geekGlass.DrawGeekGlassPanel(dc, config);
+    } else {
+        dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
+    }
     
     if (textLayout && textBrush) {
         D2D1_POINT_2F textOrigin = D2D1::Point2F(x + paddingH, y + paddingV);
@@ -2752,7 +2788,21 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
 
     auto drawArrow = [&](float arrowCenterX, float arrowCenterY, bool isLeft) {
         D2D1_ELLIPSE ellipse = D2D1::Ellipse(D2D1::Point2F(arrowCenterX, arrowCenterY), circleRadius, circleRadius);
-        dc->FillEllipse(ellipse, brushCircle.Get());
+        if (m_bgCommandList) {
+            std::string key = isLeft ? "Arrow_Left" : "Arrow_Right";
+            auto& geekGlass = GetGlassEngine(key);
+            geekGlass.InitializeResources(dc);
+            QuickView::UI::GeekGlass::GeekGlassConfig config;
+            config.panelBounds = D2D1::RectF(arrowCenterX - circleRadius, arrowCenterY - circleRadius, arrowCenterX + circleRadius, arrowCenterY + circleRadius);
+            config.cornerRadius = circleRadius;
+            config.blurStandardDeviation = 12.0f * s;
+            config.opacity = 0.5f;
+            config.pBackgroundCommandList = m_bgCommandList.Get();
+            config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+            geekGlass.DrawGeekGlassPanel(dc, config);
+        } else {
+            dc->FillEllipse(ellipse, brushCircle.Get());
+        }
 
         ComPtr<ID2D1PathGeometry> path;
         factory->CreatePathGeometry(&path);
@@ -3301,7 +3351,20 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     // Top-roll: No top corners rounded
     D2D1_RECT_F clipRect = D2D1::RectF(panelX, panelY - 10 * s, panelX + panelW, panelY + panelH);
-    dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), brushBg.Get());
+    if (m_bgCommandList) {
+        auto& geekGlass = GetGlassEngine("CompareHUD_0");
+        geekGlass.InitializeResources(dc);
+        QuickView::UI::GeekGlass::GeekGlassConfig config;
+        config.panelBounds = clipRect;
+        config.cornerRadius = 8.0f * s;
+        config.blurStandardDeviation = 16.0f * s;
+        config.opacity = g_config.InfoPanelAlpha;
+        config.pBackgroundCommandList = m_bgCommandList.Get();
+        config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+        geekGlass.DrawGeekGlassPanel(dc, config);
+    } else {
+        dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), brushBg.Get());
+    }
     // [HUD Adjust] Removed blue border
 
     float y = panelY + padding;

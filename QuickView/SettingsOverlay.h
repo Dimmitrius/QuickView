@@ -4,6 +4,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include "GeekGlass.h"
 
 // [Fix] Resolve Windows macro interference
 #undef LoadIcon
@@ -108,6 +109,12 @@ public:
     void BuildMenu(); 
     void RebuildMenu(); 
     
+    // [Geek Glass] Data Injection
+    void SetGeekGlassData(ID2D1CommandList* list, const D2D1_MATRIX_3X2_F& transform) {
+        m_bgCmdList = list;
+        m_bgTransform = transform;
+    }
+    
     void SetItemStatus(const std::wstring& label, const std::wstring& status, D2D1::ColorF color); 
     void OpenTab(int index); 
     
@@ -192,4 +199,9 @@ private:
     
     bool m_pendingRebuild = false;
     bool m_pendingResetFeedback = false; 
+
+    // Geek Glass properties
+    QuickView::UI::GeekGlass::GeekGlassEngine m_geekGlass;
+    ID2D1CommandList* m_bgCmdList = nullptr;
+    D2D1_MATRIX_3X2_F m_bgTransform = D2D1::Matrix3x2F::Identity();
 };

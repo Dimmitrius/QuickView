@@ -2,6 +2,7 @@
 #include "pch.h"
 #include <vector>
 #include <string>
+#include "GeekGlass.h"
 
 struct HelpItem {
     bool isHeader = false;
@@ -22,6 +23,12 @@ public:
     void SetVisible(bool visible);
     bool IsVisible() const { return m_visible; }
     void Toggle() { SetVisible(!m_visible); }
+
+    // [Geek Glass] Data Injection
+    void SetGeekGlassData(ID2D1CommandList* list, const D2D1_MATRIX_3X2_F& transform) {
+        m_bgCmdList = list;
+        m_bgTransform = transform;
+    }
 
     // Input
     bool OnMouseWheel(float delta); // Scroll
@@ -72,4 +79,9 @@ private:
     const float ROW_HEIGHT = 28.0f;
     const float HEADER_HEIGHT = 40.0f;
     D2D1_RECT_F m_finalRect = {};
+
+    // Geek Glass properties
+    QuickView::UI::GeekGlass::GeekGlassEngine m_geekGlass;
+    ID2D1CommandList* m_bgCmdList = nullptr;
+    D2D1_MATRIX_3X2_F m_bgTransform = D2D1::Matrix3x2F::Identity();
 };

@@ -196,8 +196,23 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
 
     m_finalRect = D2D1::RectF(x, y, x + panelW, y + panelH);
 
-    // Panel Bg
-    pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBg.Get());
+    // Panel Bg (Geek Glass or Fallback)
+    ComPtr<ID2D1DeviceContext> dc;
+    if (SUCCEEDED(pRT->QueryInterface(IID_PPV_ARGS(&dc))) && m_bgCmdList) {
+        m_geekGlass.InitializeResources(dc.Get());
+        
+        QuickView::UI::GeekGlass::GeekGlassConfig config;
+        config.panelBounds = m_finalRect;
+        config.cornerRadius = 8.0f * s;
+        config.blurStandardDeviation = 20.0f * m_uiScale;
+        config.opacity = 0.95f; 
+        config.pBackgroundCommandList = m_bgCmdList;
+        config.backgroundTransform = m_bgTransform;
+        
+        m_geekGlass.DrawGeekGlassPanel(dc.Get(), config);
+    } else {
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBg.Get());
+    }
     pRT->DrawRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBorder.Get(), 1.0f * s);
 
     // Header Title

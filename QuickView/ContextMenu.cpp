@@ -1,239 +1,192 @@
 #include "pch.h"
 #include "ContextMenu.h"
+#include "GeekContextMenu.h"
 #include "AppStrings.h"
 #include "EditState.h"
-#include <shellapi.h>
-#include "shlobj.h"
-#include "EditState.h"
-#include <uxtheme.h>
 
 extern AppConfig g_config;
 extern RuntimeConfig g_runtime;
 
-namespace {
-enum class PreferredAppMode {
-    Default,
-    AllowDark,
-    ForceDark,
-    ForceLight,
-    Max
-};
+using namespace QuickView::UI::Menu;
+using MI = GeekMenuItem;
+using AB = ActionButton;
 
-using SetPreferredAppModeFn = PreferredAppMode(WINAPI*)(PreferredAppMode);
-using FlushMenuThemesFn = void (WINAPI*)();
+// ============================================================
+// ShowContextMenu - Build and show D2D rendered menu
+// ============================================================
+void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix,
+                     bool isWindowLocked, bool showInfoPanel, bool infoPanelExpanded,
+                     bool alwaysOnTop, bool renderRaw, bool isRawFile, bool isFullscreen,
+                     bool isCrossMonitor, bool isCompareMode, bool isPixelArtMode) {
 
-void ApplyContextMenuTheme() {
-    static const auto setPreferredAppMode = []() -> SetPreferredAppModeFn {
-        HMODULE module = LoadLibraryW(L"uxtheme.dll");
-        if (!module) return nullptr;
-        return reinterpret_cast<SetPreferredAppModeFn>(GetProcAddress(module, MAKEINTRESOURCEA(135)));
-    }();
-    static const auto flushMenuThemes = []() -> FlushMenuThemesFn {
-        HMODULE module = LoadLibraryW(L"uxtheme.dll");
-        if (!module) return nullptr;
-        return reinterpret_cast<FlushMenuThemesFn>(GetProcAddress(module, MAKEINTRESOURCEA(136)));
-    }();
+    // ========================================================
+    // Top Action Row (4 buttons)
+    // ========================================================
+    std::vector<AB> actions = {
+        { IDM_OPEN, AppStrings::Context_Open, Icons::Open, true, false },
+        { IDM_RENAME, AppStrings::Context_Rename, Icons::Rename, hasImage, false },
+        { IDM_EDIT, AppStrings::Context_Edit, Icons::Edit, hasImage, false },
+        { IDM_DELETE, AppStrings::Context_Delete, Icons::Delete, hasImage, true /*isDanger*/ },
+    };
 
-    if (setPreferredAppMode) {
-        setPreferredAppMode(IsLightThemeActive() ? PreferredAppMode::ForceLight : PreferredAppMode::ForceDark);
+    // ========================================================
+    // Body Menu Items
+    // ========================================================
+    std::vector<MI> items;
+
+    // --- Open & Copy Group ---
+    items.push_back(MI::Normal(IDM_OPENWITH_DEFAULT, AppStrings::Context_OpenWith, Icons::OpenWith).Enabled(hasImage));
+    items.push_back(MI::Normal(IDM_COPY_IMAGE, AppStrings::Context_CopyImage, Icons::Copy, L"Ctrl+C"));
+    items.push_back(MI::Normal(IDM_SHOW_IN_EXPLORER, AppStrings::Context_ShowInExplorer, Icons::Explorer));
+    items.push_back(MI::Normal(IDM_OPEN_FOLDER, AppStrings::Context_OpenFolder, Icons::Folder).Enabled(hasImage));
+    items.push_back(MI::Normal(IDM_COPY_PATH, AppStrings::Context_CopyPath, Icons::Link, L"Ctrl+Shift+C"));
+    items.push_back(MI::Normal(IDM_PRINT, AppStrings::Context_Print, Icons::Print, L"Ctrl+P"));
+    items.push_back(MI::Sep());
+
+    // --- Transform Submenu ---
+    items.push_back(MI::Sub(AppStrings::Context_Transform, Icons::Transform, {
+        MI::Normal(IDM_ROTATE_CW, AppStrings::Context_RotateCW),
+        MI::Normal(IDM_ROTATE_CCW, AppStrings::Context_RotateCCW),
+        MI::Normal(IDM_FLIP_H, AppStrings::Context_FlipH),
+        MI::Normal(IDM_FLIP_V, AppStrings::Context_FlipV),
+    }).Enabled(hasImage));
+
+    // --- View Submenu ---
+    {
+        std::vector<MI> viewItems;
+        viewItems.push_back(MI::Check(IDM_COMPARE_MODE, AppStrings::Context_CompareMode, isCompareMode, Icons::Compare));
+        viewItems.push_back(MI::Sep());
+        viewItems.push_back(MI::Normal(IDM_ZOOM_100, AppStrings::Context_ActualSize));
+        viewItems.push_back(MI::Normal(IDM_ZOOM_FIT, AppStrings::Context_FitToScreen));
+        viewItems.push_back(MI::Normal(IDM_ZOOM_IN, AppStrings::Context_ZoomIn));
+        viewItems.push_back(MI::Normal(IDM_ZOOM_OUT, AppStrings::Context_ZoomOut));
+        viewItems.push_back(MI::Sep());
+        viewItems.push_back(MI::Check(IDM_LOCK_WINDOW_SIZE, AppStrings::Context_LockWindow, isWindowLocked));
+        viewItems.push_back(MI::Check(IDM_ALWAYS_ON_TOP, AppStrings::Context_AlwaysOnTop, alwaysOnTop));
+        viewItems.push_back(MI::Sep());
+        viewItems.push_back(MI::Normal(IDM_HUD_GALLERY, AppStrings::Context_HUDGallery));
+
+        UINT liteFlags = (showInfoPanel && !infoPanelExpanded) ? true : false;
+        UINT fullFlags = (showInfoPanel && infoPanelExpanded) ? true : false;
+        viewItems.push_back(MI::Check(IDM_LITE_INFO, AppStrings::Context_LiteInfoPanel, liteFlags));
+        viewItems.push_back(MI::Check(IDM_FULL_INFO, AppStrings::Context_FullInfoPanel, fullFlags));
+        viewItems.push_back(MI::Sep());
+        viewItems.push_back(MI::Check(IDM_RENDER_RAW, AppStrings::Context_RenderRAW, renderRaw).Enabled(isRawFile));
+        viewItems.push_back(MI::Check(IDM_PIXEL_ART_MODE, AppStrings::Context_PixelArtMode, isPixelArtMode));
+        viewItems.push_back(MI::Check(IDM_FULLSCREEN, AppStrings::Context_Fullscreen, isFullscreen));
+        viewItems.push_back(MI::Check(IDM_TOGGLE_SPAN, AppStrings::Context_SpanDisplays, isCrossMonitor));
+
+        items.push_back(MI::Sub(AppStrings::Context_View, Icons::Eye, std::move(viewItems)));
     }
-    if (flushMenuThemes) {
-        flushMenuThemes();
+
+    // --- Color Space Submenu ---
+    {
+        int cms = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
+        std::vector<MI> cmsItems;
+        cmsItems.push_back(MI::Check(IDM_CMS_UNMANAGED, AppStrings::Settings_Option_CmsUnmanaged, cms == 0));
+        cmsItems.push_back(MI::Check(IDM_CMS_AUTO, AppStrings::Settings_Option_Auto, cms == 1));
+        cmsItems.push_back(MI::Check(IDM_CMS_SRGB, AppStrings::Settings_Option_CmssRGB, cms == 2));
+        cmsItems.push_back(MI::Check(IDM_CMS_P3, AppStrings::Settings_Option_CmsP3, cms == 3));
+        cmsItems.push_back(MI::Check(IDM_CMS_ADOBERGB, AppStrings::Settings_Option_CmsAdobeRGB, cms == 4));
+        cmsItems.push_back(MI::Check(IDM_CMS_GRAY, AppStrings::Settings_Option_CmsGray, cms == 5));
+        cmsItems.push_back(MI::Check(IDM_CMS_PROPHOTO, AppStrings::Settings_Option_CmsProPhoto, cms == 6));
+
+        // Dynamic label: "色彩空间: <current>"
+        std::wstring cmsLabel = AppStrings::Context_ColorSpace;
+        cmsLabel += L": ";
+        switch (cms) {
+            case 0: cmsLabel += AppStrings::Settings_Option_CmsUnmanaged; break;
+            case 1: cmsLabel += AppStrings::Settings_Option_Auto; break;
+            case 2: cmsLabel += AppStrings::Settings_Option_CmssRGB; break;
+            case 3: cmsLabel += AppStrings::Settings_Option_CmsP3; break;
+            case 4: cmsLabel += AppStrings::Settings_Option_CmsAdobeRGB; break;
+            case 5: cmsLabel += AppStrings::Settings_Option_CmsGray; break;
+            case 6: cmsLabel += AppStrings::Settings_Option_CmsProPhoto; break;
+        }
+        items.push_back(MI::Sub(cmsLabel.c_str(), Icons::Color, std::move(cmsItems)));
     }
-}
+
+    // --- Soft Proofing Submenu ---
+    {
+        std::vector<MI> proofItems;
+        proofItems.push_back(MI::Check(IDM_SOFT_PROOF_TOGGLE, AppStrings::Context_SoftProofing, g_runtime.EnableSoftProofing));
+        proofItems.push_back(MI::Sep());
+
+        extern std::vector<std::wstring>& GetSystemIccProfiles();
+        auto& profiles = GetSystemIccProfiles();
+
+        if (!g_config.CustomSoftProofProfile.empty()) {
+            std::wstring name = g_config.CustomSoftProofProfile.substr(
+                g_config.CustomSoftProofProfile.find_last_of(L"/\\") + 1);
+            bool sel = (g_runtime.SoftProofProfilePath == g_config.CustomSoftProofProfile);
+            proofItems.push_back(MI::Check(IDM_SOFT_PROOF_CUSTOM, (L"[*] " + name).c_str(), sel));
+            proofItems.push_back(MI::Sep());
+        }
+
+        int maxP = (int)profiles.size();
+        if (maxP > 50) maxP = 50;
+        for (int i = 0; i < maxP; i++) {
+            std::wstring fn = profiles[i].substr(profiles[i].find_last_of(L"/\\") + 1);
+            bool sel = (g_runtime.SoftProofProfilePath == profiles[i]);
+            proofItems.push_back(MI::Check(IDM_SOFT_PROOF_BASE + i, fn.c_str(), sel));
+        }
+        items.push_back(MI::Sub(AppStrings::Context_SoftProofProfile, Icons::SoftProof, std::move(proofItems)));
+    }
+
+    // --- Wallpaper Submenu ---
+    items.push_back(MI::Sub(AppStrings::Context_SetAsWallpaper, Icons::Wallpaper, {
+        MI::Normal(IDM_WALLPAPER_FILL, AppStrings::Context_WallpaperFill),
+        MI::Normal(IDM_WALLPAPER_FIT, AppStrings::Context_WallpaperFit),
+        MI::Normal(IDM_WALLPAPER_TILE, AppStrings::Context_WallpaperTile),
+    }).Enabled(hasImage));
+
+    items.push_back(MI::Sep());
+
+    // --- File Operations ---
+    if (hasImage && needsExtensionFix)
+        items.push_back(MI::Normal(IDM_FIX_EXTENSION, AppStrings::Context_FixExtension, Icons::FixExt));
+
+    items.push_back(MI::Sep());
+
+    // --- Sort Submenu ---
+    items.push_back(MI::Sub(AppStrings::Context_SortBy, Icons::Sort, {
+        MI::Check(IDM_SORT_AUTO, AppStrings::Settings_Option_SortAuto, g_runtime.SortOrder == 0),
+        MI::Check(IDM_SORT_NAME, AppStrings::Settings_Option_SortName, g_runtime.SortOrder == 1),
+        MI::Check(IDM_SORT_MODIFIED, AppStrings::Settings_Option_SortModified, g_runtime.SortOrder == 2),
+        MI::Check(IDM_SORT_DATE_TAKEN, AppStrings::Settings_Option_SortDateTaken, g_runtime.SortOrder == 3),
+        MI::Check(IDM_SORT_SIZE, AppStrings::Settings_Option_SortSize, g_runtime.SortOrder == 4),
+        MI::Check(IDM_SORT_TYPE, AppStrings::Settings_Option_SortType, g_runtime.SortOrder == 5),
+        MI::Sep(),
+        MI::Check(IDM_SORT_ASCENDING, AppStrings::Context_SortAscending, !g_runtime.SortDescending),
+        MI::Check(IDM_SORT_DESCENDING, AppStrings::Context_SortDescending, g_runtime.SortDescending),
+    }));
+
+    // --- Navigation Submenu ---
+    items.push_back(MI::Sub(AppStrings::Context_NavOrder, Icons::Navigation, {
+        MI::Check(IDM_NAV_LOOP, AppStrings::Settings_Option_NavLoop, g_runtime.NavLoop),
+        MI::Check(IDM_NAV_THROUGH, AppStrings::Settings_Option_NavThrough, g_runtime.NavTraverse),
+    }));
+
+    items.push_back(MI::Sep());
+
+    // --- Settings Group ---
+    items.push_back(MI::Normal(IDM_SETTINGS, AppStrings::Context_Settings, Icons::Settings, L"Ctrl+,"));
+    items.push_back(MI::Normal(IDM_ABOUT, AppStrings::Context_About, Icons::About, L"Alt+Enter"));
+    items.push_back(MI::Normal(IDM_EXIT, AppStrings::Context_Exit, Icons::Exit, L"MButton"));
+
+    // ========================================================
+    // Show the Geek Glass menu
+    // ========================================================
+    GeekContextMenu::ShowMenu(hwnd, pt.x, pt.y, std::move(actions), std::move(items));
 }
 
 // ============================================================
-// ContextMenu.cpp - Right-click Context Menu Implementation
+// Gallery Context Menu (simplified)
 // ============================================================
-
-void ShowContextMenu(HWND hwnd, POINT pt, bool hasImage, bool needsExtensionFix, bool isWindowLocked, bool showInfoPanel, bool infoPanelExpanded, bool alwaysOnTop, bool renderRaw, bool isRawFile, bool isFullscreen, bool isCrossMonitor, bool isCompareMode, bool isPixelArtMode) {
-    ApplyContextMenuTheme();
-    HMENU hMenu = CreatePopupMenu();
-    if (!hMenu) return;
-
-    // ========================================================
-    // [Open & Edit] Group
-    // ========================================================
-    AppendMenuW(hMenu, MF_STRING, IDM_OPEN, AppStrings::Context_Open);
-    AppendMenuW(hMenu, hasImage ? MF_STRING : MF_GRAYED, IDM_OPENWITH_DEFAULT, AppStrings::Context_OpenWith);
-    AppendMenuW(hMenu, MF_STRING, IDM_EDIT, AppStrings::Context_Edit);
-    AppendMenuW(hMenu, MF_STRING, IDM_SHOW_IN_EXPLORER, AppStrings::Context_ShowInExplorer);
-    AppendMenuW(hMenu, hasImage ? MF_STRING : MF_GRAYED, IDM_OPEN_FOLDER, AppStrings::Context_OpenFolder);
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_COPY_IMAGE, AppStrings::Context_CopyImage);
-    AppendMenuW(hMenu, MF_STRING, IDM_COPY_PATH, AppStrings::Context_CopyPath);
-    AppendMenuW(hMenu, MF_STRING, IDM_PRINT, AppStrings::Context_Print);
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    // ========================================================
-    // [Transform] Submenu
-    // ========================================================
-    HMENU hTransformMenu = CreatePopupMenu();
-    AppendMenuW(hTransformMenu, MF_STRING, IDM_ROTATE_CW, AppStrings::Context_RotateCW);
-    AppendMenuW(hTransformMenu, MF_STRING, IDM_ROTATE_CCW, AppStrings::Context_RotateCCW);
-    AppendMenuW(hTransformMenu, MF_STRING, IDM_FLIP_H, AppStrings::Context_FlipH);
-    AppendMenuW(hTransformMenu, MF_STRING, IDM_FLIP_V, AppStrings::Context_FlipV);
-
-    AppendMenuW(hMenu, hasImage ? MF_POPUP : (MF_POPUP | MF_GRAYED), (UINT_PTR)hTransformMenu, AppStrings::Context_Transform);
-
-    // ========================================================
-    // [View] Submenu
-    // ========================================================
-    HMENU hViewMenu = CreatePopupMenu();
-
-    // Compare Mode Toggle
-    AppendMenuW(hViewMenu, isCompareMode ? (MF_STRING | MF_CHECKED) : MF_STRING, IDM_COMPARE_MODE, AppStrings::Context_CompareMode);
-    AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_100, AppStrings::Context_ActualSize);
-    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_FIT, AppStrings::Context_FitToScreen);
-    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_IN, AppStrings::Context_ZoomIn);
-    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_OUT, AppStrings::Context_ZoomOut);
-    AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hViewMenu, MF_STRING | (isWindowLocked ? MF_CHECKED : 0), IDM_LOCK_WINDOW_SIZE, AppStrings::Context_LockWindow);
-    AppendMenuW(hViewMenu, MF_STRING | (alwaysOnTop ? MF_CHECKED : 0), IDM_ALWAYS_ON_TOP, AppStrings::Context_AlwaysOnTop);
-    AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hViewMenu, MF_STRING, IDM_HUD_GALLERY, AppStrings::Context_HUDGallery);
-    
-    // Info Panel with check states
-    UINT liteFlags = MF_STRING | ((showInfoPanel && !infoPanelExpanded) ? MF_CHECKED : 0);
-    UINT fullFlags = MF_STRING | ((showInfoPanel && infoPanelExpanded) ? MF_CHECKED : 0);
-    AppendMenuW(hViewMenu, liteFlags, IDM_LITE_INFO, AppStrings::Context_LiteInfoPanel);
-    AppendMenuW(hViewMenu, fullFlags, IDM_FULL_INFO, AppStrings::Context_FullInfoPanel);
-    AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-    
-    UINT rawFlags = MF_STRING;
-    if (!isRawFile) rawFlags |= MF_GRAYED;
-    if (renderRaw) rawFlags |= MF_CHECKED;
-    AppendMenuW(hViewMenu, rawFlags, IDM_RENDER_RAW, AppStrings::Context_RenderRAW);
-    
-    // Toggle Pixel Art Mode
-    AppendMenuW(hViewMenu, MF_STRING | (isPixelArtMode ? MF_CHECKED : 0), IDM_PIXEL_ART_MODE, AppStrings::Context_PixelArtMode);
-
-    AppendMenuW(hViewMenu, MF_STRING | (isFullscreen ? MF_CHECKED : 0), IDM_FULLSCREEN, AppStrings::Context_Fullscreen);
-    
-    AppendMenuW(hViewMenu, MF_STRING | (isCrossMonitor ? MF_CHECKED : 0), IDM_TOGGLE_SPAN, AppStrings::Context_SpanDisplays);
-
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, AppStrings::Context_View);
-    
-    // ========================================================
-    // [CMS] Color Space Submenu (Promoted to Root)
-    // ========================================================
-    HMENU hCmsMenu = CreatePopupMenu();
-    int currentCms = g_runtime.GetEffectiveCmsMode(g_config.ColorManagement);
-    AppendMenuW(hCmsMenu, (currentCms == 0 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_UNMANAGED, AppStrings::Settings_Option_CmsUnmanaged);
-    AppendMenuW(hCmsMenu, (currentCms == 1 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_AUTO, AppStrings::Settings_Option_Auto);
-    AppendMenuW(hCmsMenu, (currentCms == 2 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_SRGB, AppStrings::Settings_Option_CmssRGB);
-    AppendMenuW(hCmsMenu, (currentCms == 3 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_P3, AppStrings::Settings_Option_CmsP3);
-    AppendMenuW(hCmsMenu, (currentCms == 4 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_ADOBERGB, AppStrings::Settings_Option_CmsAdobeRGB);
-    AppendMenuW(hCmsMenu, (currentCms == 5 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_GRAY, AppStrings::Settings_Option_CmsGray);
-    AppendMenuW(hCmsMenu, (currentCms == 6 ? MF_CHECKED : 0) | MF_STRING, IDM_CMS_PROPHOTO, AppStrings::Settings_Option_CmsProPhoto);
-
-    // Dynamic label for parent menu: "Color Space: <Current Mode>"
-    std::wstring cmsLabel = AppStrings::Context_ColorSpace;
-    cmsLabel += L": ";
-    switch (currentCms) {
-        case 0: cmsLabel += AppStrings::Settings_Option_CmsUnmanaged; break;
-        case 1: cmsLabel += AppStrings::Settings_Option_Auto; break;
-        case 2: cmsLabel += AppStrings::Settings_Option_CmssRGB; break;
-        case 3: cmsLabel += AppStrings::Settings_Option_CmsP3; break;
-        case 4: cmsLabel += AppStrings::Settings_Option_CmsAdobeRGB; break;
-        case 5: cmsLabel += AppStrings::Settings_Option_CmsGray; break;
-        case 6: cmsLabel += AppStrings::Settings_Option_CmsProPhoto; break;
-    }
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hCmsMenu, cmsLabel.c_str());
-
-    // ========================================================
-    // [Soft Proofing] Submenu
-    // ========================================================
-    HMENU hProofMenu = CreatePopupMenu();
-    AppendMenuW(hProofMenu, (g_runtime.EnableSoftProofing ? MF_CHECKED : 0) | MF_STRING, IDM_SOFT_PROOF_TOGGLE, AppStrings::Context_SoftProofing);
-    AppendMenuW(hProofMenu, MF_SEPARATOR, 0, nullptr);
-
-    extern std::vector<std::wstring>& GetSystemIccProfiles();
-    std::vector<std::wstring>& proofProfiles = GetSystemIccProfiles();
-
-    // Custom Profile (Saved in Config)
-    if (!g_config.CustomSoftProofProfile.empty()) {
-        std::wstring customName = g_config.CustomSoftProofProfile.substr(g_config.CustomSoftProofProfile.find_last_of(L"/\\") + 1);
-        bool isSelected = (g_runtime.SoftProofProfilePath == g_config.CustomSoftProofProfile);
-        AppendMenuW(hProofMenu, (isSelected ? MF_CHECKED : 0) | MF_STRING, IDM_SOFT_PROOF_CUSTOM, (L"[*] " + customName).c_str());
-        AppendMenuW(hProofMenu, MF_SEPARATOR, 0, nullptr);
-    }
-
-    // System Profiles (Limit to 50 to avoid ID collision)
-    int maxProfiles = (int)proofProfiles.size();
-    if (maxProfiles > 50) maxProfiles = 50;
-
-    for (int i = 0; i < maxProfiles; i++) {
-        std::wstring filename = proofProfiles[i].substr(proofProfiles[i].find_last_of(L"/\\") + 1);
-        bool isSelected = (g_runtime.SoftProofProfilePath == proofProfiles[i]);
-        AppendMenuW(hProofMenu, (isSelected ? MF_CHECKED : 0) | MF_STRING, IDM_SOFT_PROOF_BASE + i, filename.c_str());
-    }
-
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hProofMenu, AppStrings::Context_SoftProofProfile);
-    
-    // Set as Wallpaper submenu
-    HMENU hWallpaperMenu = CreatePopupMenu();
-    AppendMenuW(hWallpaperMenu, MF_STRING, IDM_WALLPAPER_FILL, AppStrings::Context_WallpaperFill);
-    AppendMenuW(hWallpaperMenu, MF_STRING, IDM_WALLPAPER_FIT, AppStrings::Context_WallpaperFit);
-    AppendMenuW(hWallpaperMenu, MF_STRING, IDM_WALLPAPER_TILE, AppStrings::Context_WallpaperTile);
-    AppendMenuW(hMenu, hasImage ? MF_POPUP : (MF_POPUP | MF_GRAYED), (UINT_PTR)hWallpaperMenu, AppStrings::Context_SetAsWallpaper);
-    
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    // ========================================================
-    // [File Operations] Group
-    // ========================================================
-    AppendMenuW(hMenu, hasImage ? MF_STRING : MF_GRAYED, IDM_RENAME, AppStrings::Context_Rename);
-    AppendMenuW(hMenu, (hasImage && needsExtensionFix) ? MF_STRING : MF_GRAYED, IDM_FIX_EXTENSION, AppStrings::Context_FixExtension);
-    AppendMenuW(hMenu, hasImage ? MF_STRING : MF_GRAYED, IDM_DELETE, AppStrings::Context_Delete);
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    // ========================================================
-    // [Sorting & Navigation] Group
-    // ========================================================
-    HMENU hSortMenu = CreatePopupMenu();
-    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 0 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_AUTO, AppStrings::Settings_Option_SortAuto);
-    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 1 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_NAME, AppStrings::Settings_Option_SortName);
-    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 2 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_MODIFIED, AppStrings::Settings_Option_SortModified);
-    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 3 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_DATE_TAKEN, AppStrings::Settings_Option_SortDateTaken);
-    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 4 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_SIZE, AppStrings::Settings_Option_SortSize);
-    AppendMenuW(hSortMenu, (g_runtime.SortOrder == 5 ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_TYPE, AppStrings::Settings_Option_SortType);
-    AppendMenuW(hSortMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hSortMenu, (!g_runtime.SortDescending ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_ASCENDING, AppStrings::Context_SortAscending);
-    AppendMenuW(hSortMenu, (g_runtime.SortDescending ? MF_CHECKED : 0) | MF_STRING, IDM_SORT_DESCENDING, AppStrings::Context_SortDescending);
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, AppStrings::Context_SortBy);
-
-    HMENU hNavMenu = CreatePopupMenu();
-    AppendMenuW(hNavMenu, (g_runtime.NavLoop ? MF_CHECKED : 0) | MF_STRING, IDM_NAV_LOOP, AppStrings::Settings_Option_NavLoop);
-    AppendMenuW(hNavMenu, (g_runtime.NavTraverse ? MF_CHECKED : 0) | MF_STRING, IDM_NAV_THROUGH, AppStrings::Settings_Option_NavThrough);
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hNavMenu, AppStrings::Context_NavOrder);
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    // ========================================================
-    // [Settings] Group
-    // ========================================================
-    AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, AppStrings::Context_Settings);
-    AppendMenuW(hMenu, MF_STRING, IDM_ABOUT, AppStrings::Context_About);
-    AppendMenuW(hMenu, MF_STRING, IDM_EXIT, AppStrings::Context_Exit);
-
-    // Show menu
-    TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN, 
-                   pt.x, pt.y, 0, hwnd, nullptr);
-    
-    DestroyMenu(hMenu);
-}
-
 void ShowGalleryContextMenu(HWND hwnd, POINT pt) {
-    ApplyContextMenuTheme();
-    HMENU hMenu = CreatePopupMenu();
-    if (!hMenu) return;
+    std::vector<MI> items;
+    items.push_back(MI::Normal(IDM_GALLERY_OPEN_COMPARE, AppStrings::Context_GalleryOpenCompare, Icons::Compare));
+    items.push_back(MI::Normal(IDM_GALLERY_OPEN_NEW_WINDOW, AppStrings::Context_GalleryOpenNewWindow, Icons::Open));
 
-    AppendMenuW(hMenu, MF_STRING, IDM_GALLERY_OPEN_COMPARE, AppStrings::Context_GalleryOpenCompare);
-    AppendMenuW(hMenu, MF_STRING, IDM_GALLERY_OPEN_NEW_WINDOW, AppStrings::Context_GalleryOpenNewWindow);
-
-    TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
-                   pt.x, pt.y, 0, hwnd, nullptr);
-
-    DestroyMenu(hMenu);
+    GeekContextMenu::ShowMenu(hwnd, pt.x, pt.y, {}, std::move(items));
 }
