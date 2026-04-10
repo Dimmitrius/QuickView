@@ -2299,9 +2299,11 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
     ctx->CreateCommandList(&cmdList);
     ComPtr<ID2D1Image> origTarget;
     ctx->GetTarget(&origTarget);
-    ctx->SetTarget(cmdList.Get());
 
-    ctx->Clear(D2D1::ColorF(0, 0, 0, 0)); // Transparent to avoid baking background color
+    // [Fix] Clear the backing surface BEFORE hooking the CommandList to avoid baking an Infinite Bounds transparent layer
+    ctx->Clear(D2D1::ColorF(0, 0, 0, 0)); 
+    
+    ctx->SetTarget(cmdList.Get());
 
     if (UseSvgViewportRendering(res)) {
         // === SVG Viewport Path ===
@@ -2443,7 +2445,15 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
     // [Geek Glass] Finish CommandList recording and apply to actual DComp surface
     cmdList->Close();
     ctx->SetTarget(origTarget.Get());
+    
+    // [Fix] Save and Reset the context transform so DrawImage doesn't doubly apply the recorded transform
+    D2D1_MATRIX_3X2_F oldTransform;
+    ctx->GetTransform(&oldTransform);
+    ctx->SetTransform(D2D1::Matrix3x2F::Identity());
+    
     ctx->DrawImage(cmdList.Get());
+    
+    ctx->SetTransform(oldTransform);
     
     if (g_uiRenderer) {
         g_uiRenderer->SetBackgroundCommandList(cmdList.Get());
