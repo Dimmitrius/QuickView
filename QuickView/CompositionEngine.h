@@ -127,6 +127,10 @@ public:
         if (h) *h = layer.height;
     }
 
+    // [Geek Glass] Returns the complete screen-space transform matrix applied to the image by DComp
+    D2D1_MATRIX_3X2_F GetScreenTransform() const;
+
+
 private:
     HRESULT CreateLayerSurface(UILayer layer, UINT width, UINT height);
     HRESULT CreateAllSurfaces(UINT width, UINT height);
@@ -224,10 +228,11 @@ private:
     UINT m_lastBgH = 0;
     DXGI_FORMAT m_lastBgFormat = DXGI_FORMAT_UNKNOWN;
 
-    // State tracking for Drift Compensation
+    // State tracking for Drift Compensation and Glass rendering
     float m_currentScale = 1.0f;
     float m_currentPanX = 0.0f;
     float m_currentPanY = 0.0f;
     float m_currentCompScaleX = 1.0f;
     float m_currentCompScaleY = 1.0f;
+    D2D1_MATRIX_3X2_F m_currentModelMatrix = D2D1::Matrix3x2F::Identity();
 };

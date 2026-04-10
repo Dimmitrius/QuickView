@@ -974,7 +974,8 @@ HRESULT CompositionEngine::UpdateTransformMatrix(VisualState vs, float winW, flo
     D2D1_MATRIX_3X2_F mRotate = D2D1::Matrix3x2F::Rotation(vs.TotalRotation);
     
     // Set Model Matrix
-    m_modelTransform->SetMatrix(mFlip * mRotate);
+    m_currentModelMatrix = mFlip * mRotate;
+    m_modelTransform->SetMatrix(m_currentModelMatrix);
 
     // 2. Calculate Scale
     float compScaleX = 1.0f;
@@ -1071,6 +1072,41 @@ HRESULT CompositionEngine::Commit() {
     return m_device->Commit();
 }
 
+// ============================================================================
+// [Geek Glass] D2D to Screen Coordinates Transformer
+// ============================================================================
+D2D1_MATRIX_3X2_F CompositionEngine::GetScreenTransform() const {
+    // Reconstruct the exact matrix applied by the DComp Visual Tree
+    
+    // 1. Image offsets (The active layer is statically offset by -width/2, -height/2 to center it at 0,0 locally)
+    const ImageLayer& active = (m_activeLayerIndex == 0) ? m_imageA : m_imageB;
+    float layerW = (float)active.width;
+    float layerH = (float)active.height;
+    
+    D2D1_MATRIX_3X2_F offsetM = D2D1::Matrix3x2F::Translation(-layerW / 2.0f, -layerH / 2.0f);
+    
+    // 2. Model (Flip + Rotation)
+    D2D1_MATRIX_3X2_F modelM = m_currentModelMatrix;
+    
+    // 3. Scale (Zoom applied by DComp)
+    // Note: DComp scale is a combination of base physical scaling and user zoom
+    float targetScaleX = m_currentScale * m_currentCompScaleX;
+    float targetScaleY = m_currentScale * m_currentCompScaleY;
+    D2D1_MATRIX_3X2_F scaleM = D2D1::Matrix3x2F::Scale(targetScaleX, targetScaleY);
+    
+    // 4. Translation (Pan)
+    D2D1_MATRIX_3X2_F panM = D2D1::Matrix3x2F::Translation(m_currentPanX, m_currentPanY);
+    
+    // 5. Container Window Centering
+    // The ImageContainer is statically anchored at the center of the window
+    D2D1_MATRIX_3X2_F anchorM = D2D1::Matrix3x2F::Translation(m_width / 2.0f, m_height / 2.0f);
+    
+    return offsetM * modelM * scaleM * panM * anchorM;
+}
+
+// ============================================================================
+// Background Management
+// ============================================================================
 HRESULT CompositionEngine::UpdateBackground(float width, float height, const D2D1_COLOR_F& bgColor, bool showGrid) {
     if (!m_device) return E_FAIL;
     

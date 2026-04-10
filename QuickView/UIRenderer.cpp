@@ -627,6 +627,9 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
     // [Fix] Clear surface before drawing to prevent "ghosting" of previous state (e.g. pinned vs unpinned background)
     dc->Clear(D2D1::ColorF(0, 0, 0, 0));
 
+    // [Geek Glass] Initialize lazily here (we have valid context on the UI static layer)
+    m_geekGlass.InitializeResources(dc);
+
     const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     ComPtr<ID2D1SolidColorBrush> whiteBrush, blackBrush, accentBrush;
     dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(D2D1::ColorF::White), hdrWhiteScale), &whiteBrush);
@@ -2626,11 +2629,24 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
 
     D2D1_RECT_F panelRect = D2D1::RectF(startX, startY, startX + width, startY + height);
     
-    // Background - Use g_config.InfoPanelAlpha for transparency
-    ComPtr<ID2D1SolidColorBrush> brushBg, brushWhite;
-    CreateScaledBrush(dc, D2D1::ColorF(0.0f, 0.0f, 0.0f, g_config.InfoPanelAlpha), hdrWhiteScale, &brushBg);
+    // [Geek Glass] Panel Background Render
+    QuickView::UI::GeekGlass::GeekGlassConfig glassConfig;
+    glassConfig.panelBounds = panelRect;
+    glassConfig.cornerRadius = 8.0f * s;
+    glassConfig.blurStandardDeviation = 15.0f * s;
+    glassConfig.theme = QuickView::UI::GeekGlass::ThemeMode::Dark; // Force dark mode for now
+    glassConfig.opacity = 1.0f; // Could hook to g_config.InfoPanelAlpha later
+    glassConfig.pBackgroundCommandList = m_bgCommandList.Get();
+    
+    if (m_compEngine) {
+        glassConfig.backgroundTransform = m_compEngine->GetScreenTransform();
+    }
+    
+    m_geekGlass.DrawGeekGlassPanel(dc, glassConfig);
+    
+    // Create base brushes
+    ComPtr<ID2D1SolidColorBrush> brushWhite;
     CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::White), hdrWhiteScale, &brushWhite);
-    dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 8.0f * s, 8.0f * s), brushBg.Get());
     
     // Buttons
     m_panelCloseRect = D2D1::RectF(startX + width - 20.0f * s, startY + 4.0f * s, startX + width - 4.0f * s, startY + 20.0f * s);

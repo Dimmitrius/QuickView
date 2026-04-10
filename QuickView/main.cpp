@@ -2294,6 +2294,13 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
     ID2D1DeviceContext* ctx = g_compEngine->BeginPendingUpdate(surfW, surfH, isTitan, fullWidth, fullHeight, false, imageSurfaceFormat);
     if (!ctx) return false;
     
+    // [Geek Glass] Create a CommandList to intercept the drawing
+    ComPtr<ID2D1CommandList> cmdList;
+    ctx->CreateCommandList(&cmdList);
+    ComPtr<ID2D1Image> origTarget;
+    ctx->GetTarget(&origTarget);
+    ctx->SetTarget(cmdList.Get());
+
     ctx->Clear(D2D1::ColorF(0, 0, 0, 0)); // Transparent to avoid baking background color
 
     if (UseSvgViewportRendering(res)) {
@@ -2431,6 +2438,15 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
         
         g_lastFitOffset = D2D1::Point2F((surfW - effectiveW * scale)/2.0f, (surfH - effectiveH * scale)/2.0f);
         
+    }
+    
+    // [Geek Glass] Finish CommandList recording and apply to actual DComp surface
+    cmdList->Close();
+    ctx->SetTarget(origTarget.Get());
+    ctx->DrawImage(cmdList.Get());
+    
+    if (g_uiRenderer) {
+        g_uiRenderer->SetBackgroundCommandList(cmdList.Get());
     }
     
     g_compEngine->EndPendingUpdate();

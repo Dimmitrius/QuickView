@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include "ImageEngine.h" // For CacheTopology
 #include "OSDState.h"
+#include "GeekGlass.h"
 
 // ============================================================================
 // UIRenderer - 多层 UI 渲染器
@@ -108,6 +109,11 @@ public:
     void UpdateMetadata(const CImageLoader::ImageMetadata& metadata, const std::wstring& imagePath);
     void UpdateViewState(const ViewState& viewState);
     void UpdateHoverState(POINT mousePos, int hoverRowIndex);
+    
+    // ===== Glass Rendering Hooks =====
+    void SetBackgroundCommandList(ID2D1CommandList* cmdList) {
+        m_bgCommandList = cmdList;
+    }
     
     // ===== Hit Testing (For Click Detection) =====
     HitTestResult HitTest(float x, float y);
@@ -299,4 +305,7 @@ private:
     ComPtr<IDWriteTextFormat> m_debugFormat;
     ComPtr<IDWriteTextFormat> m_iconFormat;
     ComPtr<IDWriteTextFormat> m_panelFormat;  // For Info Panel text
+
+    ComPtr<ID2D1CommandList> m_bgCommandList;
+    QuickView::UI::GeekGlass::GeekGlassEngine m_geekGlass;
 };
