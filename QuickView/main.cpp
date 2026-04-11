@@ -3701,15 +3701,17 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
         config.panelBounds = layout.Box;
         config.cornerRadius = 10.0f;
         config.blurStandardDeviation = 24.0f; 
-        config.opacity = g_config.SettingsAlpha;
+        config.opacity = g_config.GlassModalsOpacity / 100.0f;
         config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
         config.pBackgroundCommandList = g_uiRenderer->GetBackgroundCommandList();
         config.backgroundTransform = g_compEngine ? g_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
         geekGlass.DrawGeekGlassPanel(context, config);
     } else {
         ComPtr<ID2D1SolidColorBrush> pBgBrush;
-        context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(0.18f, 0.18f, 0.18f, g_config.SettingsAlpha)), &pBgBrush);
+        context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(0.18f, 0.18f, 0.18f, g_config.GlassModalsOpacity / 100.0f)), &pBgBrush);
         context->FillRoundedRectangle(D2D1::RoundedRect(layout.Box, 10.0f, 10.0f), pBgBrush.Get());
     }
     
@@ -4470,6 +4472,8 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"GeekGlass", L"EnableGeekGlass", g_config.EnableGeekGlass ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassUIAnimations", g_config.GlassUIAnimations ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassBlurSigma", std::to_wstring(g_config.GlassBlurSigma).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassTintAlpha", std::to_wstring(g_config.GlassTintAlpha).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassSpecularOpacity", std::to_wstring(g_config.GlassSpecularOpacity).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassOsdOpacity", std::to_wstring(g_config.GlassOsdOpacity).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassPanelsOpacity", std::to_wstring(g_config.GlassPanelsOpacity).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassModalsOpacity", std::to_wstring(g_config.GlassModalsOpacity).c_str(), iniPath.c_str());
@@ -4505,9 +4509,7 @@ void SaveConfig() {
 
     WritePrivateProfileStringW(L"View", L"ExifPanelMode", std::to_wstring(g_config.ExifPanelMode).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"ToolbarInfoDefault", std::to_wstring(g_config.ToolbarInfoDefault).c_str(), iniPath.c_str());
-    WritePrivateProfileStringW(L"View", L"InfoPanelAlpha", std::to_wstring(g_config.InfoPanelAlpha).c_str(), iniPath.c_str());
-    WritePrivateProfileStringW(L"View", L"ToolbarAlpha", std::to_wstring(g_config.ToolbarAlpha).c_str(), iniPath.c_str());
-    WritePrivateProfileStringW(L"View", L"SettingsAlpha", std::to_wstring(g_config.SettingsAlpha).c_str(), iniPath.c_str());
+    // Redundant Alphas Removed (Unified to Geek Glass)
     WritePrivateProfileStringW(L"View", L"NavIndicator", std::to_wstring(g_config.NavIndicator).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"EnableCrossMonitor", g_config.EnableCrossMonitor ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"View", L"RoundedCorners", g_config.RoundedCorners ? L"1" : L"0", iniPath.c_str());
@@ -4630,15 +4632,20 @@ void LoadConfig() {
     g_config.EnableGeekGlass = GetPrivateProfileIntW(L"GeekGlass", L"EnableGeekGlass", 1, iniPath.c_str()) != 0;
     g_config.GlassUIAnimations = GetPrivateProfileIntW(L"GeekGlass", L"GlassUIAnimations", 1, iniPath.c_str()) != 0;
     
-    wchar_t bufGGB[32], bufGGO[32], bufGGP[32], bufGGM[32];
+    wchar_t bufGGB[32], bufGGTA[32], bufGGSO[32], bufGGO[32], bufGGP[32], bufGGM[32];
     GetPrivateProfileStringW(L"GeekGlass", L"GlassBlurSigma", L"25.0", bufGGB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassTintAlpha", L"0.65", bufGGTA, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassSpecularOpacity", L"0.15", bufGGSO, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassOsdOpacity", L"15.0", bufGGO, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassPanelsOpacity", L"45.0", bufGGP, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassModalsOpacity", L"75.0", bufGGM, 32, iniPath.c_str());
     g_config.GlassBlurSigma = (float)_wtof(bufGGB);
+    g_config.GlassTintAlpha = (float)_wtof(bufGGTA);
+    g_config.GlassSpecularOpacity = (float)_wtof(bufGGSO);
     g_config.GlassOsdOpacity = (float)_wtof(bufGGO);
     g_config.GlassPanelsOpacity = (float)_wtof(bufGGP);
     g_config.GlassModalsOpacity = (float)_wtof(bufGGM);
+    g_config.EnforceGlassSafetyLimits();
     g_config.GlassVectorStrokeWeightIndex = GetPrivateProfileIntW(L"GeekGlass", L"GlassVectorStrokeWeightIndex", 0, iniPath.c_str());
 
     g_config.GlassTintProfile = GetPrivateProfileIntW(L"GeekGlass", L"GlassTintProfile", 0, iniPath.c_str());
@@ -4689,14 +4696,7 @@ void LoadConfig() {
     g_config.ToolbarInfoDefault = GetPrivateProfileIntW(L"View", L"ToolbarInfoDefault", 0, iniPath.c_str());
     
     wchar_t buf[32];
-    GetPrivateProfileStringW(L"View", L"InfoPanelAlpha", L"0.85", buf, 32, iniPath.c_str());
-    g_config.InfoPanelAlpha = (float)_wtof(buf);
-    
-    GetPrivateProfileStringW(L"View", L"ToolbarAlpha", L"0.85", buf, 32, iniPath.c_str());
-    g_config.ToolbarAlpha = (float)_wtof(buf);
-    
-    GetPrivateProfileStringW(L"View", L"SettingsAlpha", L"0.95", buf, 32, iniPath.c_str());
-    g_config.SettingsAlpha = (float)_wtof(buf);
+    // Redundant Alphas Removed (Unified to Geek Glass)
     g_config.NavIndicator = GetPrivateProfileIntW(L"View", L"NavIndicator", 0, iniPath.c_str());
     g_config.EnableCrossMonitor = GetPrivateProfileIntW(L"View", L"EnableCrossMonitor", 0, iniPath.c_str()) != 0;
     g_config.RoundedCorners = GetPrivateProfileIntW(L"View", L"RoundedCorners", 1, iniPath.c_str()) != 0;

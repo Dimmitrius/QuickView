@@ -35,13 +35,16 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const 
 
     bool sizeChanged = (std::abs(width - currentWidth) > 0.001f) || (std::abs(height - currentHeight) > 0.001f);
     bool themeChanged = (config.theme != m_currentTheme) || (config.tintProfile != m_currentTintProfile);
+    // Detect material parameter changes (tintAlpha/specularOpacity driven by sliders)
+    bool materialChanged = (std::abs(config.tintAlpha - m_currentTintAlpha) > 0.001f) ||
+                           (std::abs(config.specularOpacity - m_currentSpecularOpacity) > 0.001f);
     if (config.tintProfile == 1 && (
         config.customTintColor.r != m_currentCustomTintColor.r || 
         config.customTintColor.g != m_currentCustomTintColor.g || 
         config.customTintColor.b != m_currentCustomTintColor.b)) {
         themeChanged = true;
     }
-    bool needsRebuild = !m_diagonalBrush || !m_bevelBrush || !m_baseTintBrush || themeChanged || sizeChanged;
+    bool needsRebuild = !m_diagonalBrush || !m_bevelBrush || !m_baseTintBrush || themeChanged || sizeChanged || materialChanged;
 
     // Check if the brushes need to be rebuilt: only if resized or theme changes
     if (!needsRebuild) {
@@ -60,28 +63,35 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const 
     m_currentTheme = config.theme;
     m_currentTintProfile = config.tintProfile;
     m_currentCustomTintColor = config.customTintColor;
+    m_currentTintAlpha = config.tintAlpha;
+    m_currentSpecularOpacity = config.specularOpacity;
     m_currentBounds = config.panelBounds;
+
+    // --- Effective tint alpha (clamped to 5% safety floor) ---
+    float effectiveTintAlpha = (std::max)(0.05f, config.tintAlpha);
 
     // --- Base Solid Tint (Providing contrast floor) ---
     if (config.tintProfile == 1) { // Custom
-        pContext->CreateSolidColorBrush(config.customTintColor, &m_baseTintBrush);
+        D2D1_COLOR_F tint = config.customTintColor;
+        tint.a = effectiveTintAlpha;
+        pContext->CreateSolidColorBrush(tint, &m_baseTintBrush);
     } else { // Auto
         if (config.theme == ThemeMode::Dark) {
-            pContext->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.09f, 0.65f), &m_baseTintBrush); // (20, 20, 24, 65%)
+            pContext->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.09f, effectiveTintAlpha), &m_baseTintBrush);
         } else {
-            pContext->CreateSolidColorBrush(D2D1::ColorF(0.94f, 0.94f, 0.96f, 0.65f), &m_baseTintBrush); // (240, 240, 245, 65%)
+            pContext->CreateSolidColorBrush(D2D1::ColorF(0.94f, 0.94f, 0.96f, effectiveTintAlpha), &m_baseTintBrush);
         }
     }
 
     // --- Diagonal Gradient Filling (Simulating Glass Light Wrap) ---
+    // Use config.specularOpacity instead of hardcoded 0.15f
     D2D1_POINT_2F diagStart = D2D1::Point2F(config.panelBounds.left, config.panelBounds.top);
     D2D1_POINT_2F diagEnd   = D2D1::Point2F(config.panelBounds.right, config.panelBounds.bottom);
 
     ComPtr<ID2D1GradientStopCollection> pDiagStops;
     
-    // Weaken the reflections to 15% max, as the base tint now provides the solid color
     D2D1_GRADIENT_STOP stops[] = {
-        { 0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f) }, // Top-Left: Light reflection 
+        { 0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, config.specularOpacity) }, // Top-Left: Light reflection 
         { 1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f) }  // Bottom-Right: Fade to clear
     };
     pContext->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pDiagStops);
@@ -178,7 +188,9 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const Gee
 
         // Render the processed background into the current layer
         pContext->DrawImage(m_cropEffect.Get());
-    } 
+    }
+    // Track B (DWM): System provides blur via Acrylic, we skip D2D blur pipeline entirely.
+    // Tint, specular, and bevel still render below.
 
     // 4. Update Brushes
     CreateOrUpdateBrushes(pContext, config);
@@ -188,9 +200,30 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const Gee
         pContext->FillRoundedRectangle(&roundedRect, m_baseTintBrush.Get());
     }
 
-    // Render Diagonal Specular Highlight Fill
+    // Render Diagonal Specular Highlight Fill (with smart luminance-based suppression)
     if (m_diagonalBrush) {
-        pContext->FillRoundedRectangle(&roundedRect, m_diagonalBrush.Get());
+        // Smart Specular Suppression: Linear Remap in [0.05, 0.15] luminance range.
+        // When background is extremely dark, the specular highlight naturally fades
+        // to prevent the "grey haze" artifact on pure black backgrounds.
+        float specularScale = 1.0f;
+        if (config.backgroundLuminance >= 0.0f) {
+            // L in [0.0, 0.05) → fully suppressed (0.0)
+            // L in [0.05, 0.15] → linear ramp from 0.0 to 1.0
+            // L > 0.15         → full intensity (1.0)
+            constexpr float kLumLow = 0.05f;
+            constexpr float kLumHigh = 0.15f;
+            if (config.backgroundLuminance < kLumLow) {
+                specularScale = 0.0f;
+            } else if (config.backgroundLuminance < kLumHigh) {
+                specularScale = (config.backgroundLuminance - kLumLow) / (kLumHigh - kLumLow);
+            }
+        }
+
+        if (specularScale > 0.001f) {
+            m_diagonalBrush->SetOpacity(specularScale);
+            pContext->FillRoundedRectangle(&roundedRect, m_diagonalBrush.Get());
+            m_diagonalBrush->SetOpacity(1.0f); // Reset for next frame
+        }
     }
 
     // Render 1px Bevel Edge

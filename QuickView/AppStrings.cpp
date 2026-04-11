@@ -246,9 +246,7 @@ const wchar_t *Settings_Action_Added = nullptr;
 const wchar_t *Settings_Status_DisabledInPortable = nullptr;
 const wchar_t *Settings_Label_DebugHUD = nullptr;
 const wchar_t *Settings_Label_Prefetch = nullptr;
-const wchar_t *Settings_Label_InfoPanelAlpha = nullptr;
-const wchar_t *Settings_Label_ToolbarAlpha = nullptr;
-const wchar_t *Settings_Label_SettingsAlpha = nullptr;
+
 const wchar_t *Settings_Label_Reset = nullptr;
 const wchar_t *Settings_Action_Restore = nullptr;
 const wchar_t *Settings_Action_Done = nullptr;
@@ -3913,9 +3911,7 @@ template <typename T> void ApplyT() {
   Settings_Status_DisabledInPortable = T::Settings_Status_DisabledInPortable;
   Settings_Label_DebugHUD = T::Settings_Label_DebugHUD;
   Settings_Label_Prefetch = T::Settings_Label_Prefetch;
-  Settings_Label_InfoPanelAlpha = T::Settings_Label_InfoPanelAlpha;
-  Settings_Label_ToolbarAlpha = T::Settings_Label_ToolbarAlpha;
-  Settings_Label_SettingsAlpha = T::Settings_Label_SettingsAlpha;
+
   Settings_Label_Reset = T::Settings_Label_Reset;
   Settings_Action_Restore = T::Settings_Action_Restore;
   Settings_Action_Done = T::Settings_Action_Done;

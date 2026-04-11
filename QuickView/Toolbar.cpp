@@ -406,9 +406,11 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
         config.cornerRadius = m_bgRect.radiusX;
         config.enableGeekGlass = g_config.EnableGeekGlass;
         config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
         config.blurStandardDeviation = g_config.GlassBlurSigma * m_uiScale;
-        config.opacity = g_config.ToolbarAlpha; // Fallback to ToolbarAlpha for backward compatibility or use GlassPanelsOpacity
+        config.opacity = g_config.GlassPanelsOpacity / 100.0f;
         if (g_config.EnableGeekGlass) {
             config.opacity = g_config.GlassPanelsOpacity / 100.0f;
         } 
@@ -417,7 +419,7 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
         
         m_geekGlass.DrawGeekGlassPanel(dc.Get(), config);
     } else {
-        m_brushBg->SetOpacity(g_config.ToolbarAlpha);
+        m_brushBg->SetOpacity(g_config.GlassPanelsOpacity / 100.0f);
         pRT->FillRoundedRectangle(m_bgRect, m_brushBg.Get());
     }
 

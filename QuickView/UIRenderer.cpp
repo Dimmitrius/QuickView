@@ -36,7 +36,7 @@ extern ViewState g_viewState;  // [v3.2] For Nav Indicators
 extern CImageLoader::ImageMetadata g_currentMetadata;  // [v3.2] For Info Panel
 extern std::wstring g_imagePath;  // [v3.2] For Info Panel
 extern bool g_slowMotionMode; // [Debug] Slow-motion crossfade mode
-extern AppConfig g_config;  // [v3.2] For InfoPanelAlpha
+extern AppConfig g_config;
 extern int GetCurrentZoomPercent(); // [v3.2.3] For Info Panel Zoom Display
 extern bool GetCompareIndicatorState(int& outPane, float& outSplitRatio, bool& outIsWipe);
 extern bool GetCompareInfoSnapshot(CImageLoader::ImageMetadata& left, CImageLoader::ImageMetadata& right);
@@ -787,7 +787,9 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
                 config.cornerRadius = 6.0f * s;
                 config.enableGeekGlass = g_config.EnableGeekGlass;
         config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
                 config.blurStandardDeviation = g_config.GlassBlurSigma * s;
                 config.opacity = m_osdOpacity;
                 if (g_config.EnableGeekGlass) {
@@ -859,7 +861,9 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
         config.cornerRadius = 8.0f * s;
         config.enableGeekGlass = g_config.EnableGeekGlass;
         config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
         config.blurStandardDeviation = g_config.GlassBlurSigma * s;
         config.opacity = m_osdOpacity;
         if (g_config.EnableGeekGlass) {
@@ -2683,9 +2687,11 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     glassConfig.cornerRadius = 8.0f * s;
     glassConfig.enableGeekGlass = g_config.EnableGeekGlass;
     glassConfig.tintProfile = g_config.GlassTintProfile;
-    glassConfig.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+    glassConfig.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+    glassConfig.tintAlpha = g_config.GlassTintAlpha;
+    glassConfig.specularOpacity = g_config.GlassSpecularOpacity;
     glassConfig.blurStandardDeviation = g_config.GlassBlurSigma * s;
-    glassConfig.opacity = 0.85f * g_config.InfoPanelAlpha;
+    glassConfig.opacity = g_config.GlassPanelsOpacity / 100.0f;
     if (g_config.EnableGeekGlass) {
         glassConfig.opacity = g_config.GlassPanelsOpacity / 100.0f;
     }
@@ -2814,7 +2820,9 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
             config.cornerRadius = circleRadius;
             config.enableGeekGlass = g_config.EnableGeekGlass;
         config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
             config.blurStandardDeviation = g_config.GlassBlurSigma * s;
             config.opacity = 0.5f;
             if (g_config.EnableGeekGlass) {
@@ -3363,7 +3371,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
     // Deep geeky background
     ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText, brushLabel, brushGood, brushBad, brushWarn, brushWinner;
-    CreateScaledBrush(dc, D2D1::ColorF(0.005f, 0.005f, 0.008f, g_config.InfoPanelAlpha), hdrWhiteScale, &brushBg); // [HUD Adjust] Apply User Alpha
+    CreateScaledBrush(dc, D2D1::ColorF(0.005f, 0.005f, 0.008f, g_config.GlassPanelsOpacity / 100.0f), hdrWhiteScale, &brushBg); // [HUD Adjust] Apply User Alpha
     CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.6f), hdrWhiteScale, &brushBorder);
     CreateScaledBrush(dc, D2D1::ColorF(0.9f, 0.9f, 0.95f), hdrWhiteScale, &brushText);
     CreateScaledBrush(dc, D2D1::ColorF(0.5f, 0.55f, 0.6f), hdrWhiteScale, &brushLabel);
@@ -3382,9 +3390,11 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         config.cornerRadius = 8.0f * s;
         config.enableGeekGlass = g_config.EnableGeekGlass;
         config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
         config.blurStandardDeviation = g_config.GlassBlurSigma * s;
-        config.opacity = g_config.InfoPanelAlpha;
+        config.opacity = g_config.GlassPanelsOpacity / 100.0f;
         if (g_config.EnableGeekGlass) {
             config.opacity = g_config.GlassPanelsOpacity / 100.0f;
         }

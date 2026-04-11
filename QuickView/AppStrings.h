@@ -329,9 +329,7 @@ namespace AppStrings {
     
     extern const wchar_t* Settings_Label_DebugHUD;
     extern const wchar_t* Settings_Label_Prefetch;
-    extern const wchar_t* Settings_Label_InfoPanelAlpha;
-    extern const wchar_t* Settings_Label_ToolbarAlpha;
-    extern const wchar_t* Settings_Label_SettingsAlpha;
+
     extern const wchar_t* Settings_Label_Reset;
     extern const wchar_t* Settings_Action_Restore;
     extern const wchar_t* Settings_Action_Done;

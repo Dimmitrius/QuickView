@@ -65,7 +65,7 @@ SettingsThemePalette GetSettingsThemePalette() {
         bool isLightText = textBrightness > 0.5f;
 
         D2D1_COLOR_F textDim = text;
-        textDim.a = 0.6f;
+        textDim.a = 0.75f;
 
         if (isLightText) {
             return {
@@ -77,8 +77,8 @@ SettingsThemePalette GetSettingsThemePalette() {
                 D2D1::ColorF(0.3f, 0.3f, 0.3f),
                 D2D1::ColorF(0.1f, 0.8f, 0.1f),
                 D2D1::ColorF(0.8f, 0.1f, 0.1f),
-                D2D1::ColorF(0.08f, 0.08f, 0.10f, g_config.SettingsAlpha),
-                D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f),
+                D2D1::ColorF(0.08f, 0.08f, 0.10f, g_config.GlassModalsOpacity / 100.0f),
+                D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f),
                 D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f),
                 D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f),
                 D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.20f),
@@ -93,8 +93,8 @@ SettingsThemePalette GetSettingsThemePalette() {
                 D2D1::ColorF(0.80f, 0.84f, 0.89f),
                 D2D1::ColorF(0.11f, 0.62f, 0.23f),
                 D2D1::ColorF(0.79f, 0.19f, 0.16f),
-                D2D1::ColorF(0.985f, 0.99f, 1.0f, g_config.SettingsAlpha),
-                D2D1::ColorF(0.0f, 0.18f, 0.42f, 0.06f),
+                D2D1::ColorF(0.985f, 0.99f, 1.0f, g_config.GlassModalsOpacity / 100.0f),
+                D2D1::ColorF(0.0f, 0.18f, 0.42f, 0.10f),
                 D2D1::ColorF(0.85f, 0.88f, 0.92f, 0.65f),
                 D2D1::ColorF(0.06f, 0.08f, 0.12f, 0.06f),
                 D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f),
@@ -106,14 +106,14 @@ SettingsThemePalette GetSettingsThemePalette() {
         return {
             D2D1::ColorF(0.94f, 0.96f, 0.99f, 0.52f),
             D2D1::ColorF(0.10f, 0.12f, 0.15f),
-            D2D1::ColorF(0.40f, 0.45f, 0.52f),
+            D2D1::ColorF(0.35f, 0.40f, 0.48f),
             D2D1::ColorF(0.02f, 0.43f, 0.78f),
             D2D1::ColorF(0.92f, 0.94f, 0.97f),
             D2D1::ColorF(0.80f, 0.84f, 0.89f),
             D2D1::ColorF(0.11f, 0.62f, 0.23f),
             D2D1::ColorF(0.79f, 0.19f, 0.16f),
-            D2D1::ColorF(0.985f, 0.99f, 1.0f, g_config.SettingsAlpha),
-            D2D1::ColorF(0.0f, 0.18f, 0.42f, 0.06f),
+            D2D1::ColorF(0.985f, 0.99f, 1.0f, g_config.GlassModalsOpacity / 100.0f),
+            D2D1::ColorF(0.0f, 0.18f, 0.42f, 0.10f),
             D2D1::ColorF(0.85f, 0.88f, 0.92f, 0.65f),
             D2D1::ColorF(0.06f, 0.08f, 0.12f, 0.06f),
             D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f),
@@ -123,14 +123,14 @@ SettingsThemePalette GetSettingsThemePalette() {
     return {
         D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f),
         D2D1::ColorF(1.0f, 1.0f, 1.0f),
-        D2D1::ColorF(0.6f, 0.6f, 0.6f),
+        D2D1::ColorF(0.75f, 0.75f, 0.75f),
         D2D1::ColorF(0.0f, 0.47f, 0.84f),
         D2D1::ColorF(0.25f, 0.25f, 0.25f),
         D2D1::ColorF(0.3f, 0.3f, 0.3f),
         D2D1::ColorF(0.1f, 0.8f, 0.1f),
         D2D1::ColorF(0.8f, 0.1f, 0.1f),
-        D2D1::ColorF(0.08f, 0.08f, 0.10f, g_config.SettingsAlpha),
-        D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f),
+        D2D1::ColorF(0.08f, 0.08f, 0.10f, g_config.GlassModalsOpacity / 100.0f),
+        D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f),
         D2D1::ColorF(0.3f, 0.3f, 0.3f, 0.5f),
         D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f),
         D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.20f),
@@ -1136,6 +1136,12 @@ void SettingsOverlay::BuildMenu() {
     };
     itemThemeMode.onChange = [this]() {
         if (g_config.ThemeMode < 0 || g_config.ThemeMode > 3) g_config.ThemeMode = 0;
+        // Preset-driven full overwrite: clicking Dark/Light applies the built-in preset
+        if (g_config.ThemeMode == 1) {
+            g_config.ApplyThemePreset(PRESET_DARK);
+        } else if (g_config.ThemeMode == 2) {
+            g_config.ApplyThemePreset(PRESET_LIGHT);
+        }
         SaveConfig();
         if (m_hwnd) {
             ApplyWindowTheme(m_hwnd);
@@ -1201,18 +1207,42 @@ void SettingsOverlay::BuildMenu() {
     itemAnimations.onChange = [this]() { SaveConfig(); };
     tabTheme.items.push_back(itemAnimations);
     
+    // --- Core Material Parameters ---
+    tabTheme.items.push_back({ L"核心材质 (Core Material)", OptionType::Header });
+    
+    // Auto-switch to Custom lambda (shared by all material sliders)
+    auto autoSwitchToCustom = [this]() {
+        if (g_config.ThemeMode == 1 || g_config.ThemeMode == 2) {
+            g_config.ThemeMode = 3;
+            m_pendingRebuild = true;
+        }
+        g_config.EnforceGlassSafetyLimits();
+        SaveConfig();
+        if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE);
+    };
+    
     SettingsItem itemBlur = { L"模糊半径 (Blur Sigma)", OptionType::Slider, nullptr, &g_config.GlassBlurSigma };
     itemBlur.minVal = 5.0f;
     itemBlur.maxVal = 40.0f;
     itemBlur.displayFormat = L"%.0f px";
-    // Defer painting of large blur sigma to minimize GPU jitters as suggested by the user
-    // We update config but avoid force-synchronous heavy redrawing here unless it's on a short timer, or rely on the natural event loop
-    itemBlur.onChange = [this]() { 
-        SaveConfig(); 
-        g_config.GlassBlurSigma = std::max(5.0f, std::min(40.0f, g_config.GlassBlurSigma));
-        if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE);
-    };
+    itemBlur.onChange = autoSwitchToCustom;
     tabTheme.items.push_back(itemBlur);
+
+    SettingsItem itemTintAlpha = { L"底色浓度 (Tint Alpha)", OptionType::Slider, nullptr, &g_config.GlassTintAlpha };
+    itemTintAlpha.minVal = 0.05f;
+    itemTintAlpha.maxVal = 1.0f;
+    itemTintAlpha.displayFormat = L"%.0f %%";
+    itemTintAlpha.tooltipText = L"控制玻璃背景底色的不透明度。最低 5% 以确保文字可读";
+    itemTintAlpha.onChange = autoSwitchToCustom;
+    tabTheme.items.push_back(itemTintAlpha);
+
+    SettingsItem itemSpecular = { L"高光亮度 (Reflectivity)", OptionType::Slider, nullptr, &g_config.GlassSpecularOpacity };
+    itemSpecular.minVal = 0.0f;
+    itemSpecular.maxVal = 0.50f;
+    itemSpecular.displayFormat = L"%.0f %%";
+    itemSpecular.tooltipText = L"控制玻璃面板对角线光泽的强度。在纯黑背景下引擎会自动抑制";
+    itemSpecular.onChange = autoSwitchToCustom;
+    tabTheme.items.push_back(itemSpecular);
 
     // Vector Stroke Config
     tabTheme.items.push_back({ L"矢量细分 (Vector Assets)", OptionType::Header });
@@ -1223,13 +1253,16 @@ void SettingsOverlay::BuildMenu() {
     // Glass Tint Profile (Base Color)
     tabTheme.items.push_back({ L"玻璃着色配置 (Glass Tint)", OptionType::Header });
     SettingsItem itemTintProfile = { L"着色模式", OptionType::Segment, nullptr, nullptr, &g_config.GlassTintProfile, nullptr, 0, 0, { L"自动适配", L"个性自选" } };
-    itemTintProfile.onChange = [this]() { SaveConfig(); this->BuildMenu(); };
+    itemTintProfile.onChange = [this, autoSwitchToCustom]() { 
+        autoSwitchToCustom();
+        this->BuildMenu(); 
+    };
     tabTheme.items.push_back(itemTintProfile);
 
     if (g_config.GlassTintProfile == 1) {
         SettingsItem itemTintColor = { L"玻璃底色", OptionType::CustomColorRow };
         itemTintColor.pFloatVal = &g_config.GlassCustomTintR;
-        itemTintColor.onChange = [this]() {
+        itemTintColor.onChange = [this, autoSwitchToCustom]() {
             HWND hwnd = GetActiveWindow();
             static COLORREF acrCustClr[16]; 
             CHOOSECOLOR cc = { sizeof(CHOOSECOLOR) };
@@ -1242,8 +1275,7 @@ void SettingsOverlay::BuildMenu() {
                 g_config.GlassCustomTintR = GetRValue(cc.rgbResult) / 255.0f;
                 g_config.GlassCustomTintG = GetGValue(cc.rgbResult) / 255.0f;
                 g_config.GlassCustomTintB = GetBValue(cc.rgbResult) / 255.0f;
-                SaveConfig();
-                if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+                autoSwitchToCustom();
             }
         };
         tabTheme.items.push_back(itemTintColor);
@@ -1715,24 +1747,6 @@ void SettingsOverlay::BuildMenu() {
     };
     tabAdvanced.items.push_back(itemPrefetch);
 
-    tabAdvanced.items.push_back({ AppStrings::Settings_Header_Transparency, OptionType::Header });
-    SettingsItem itemInfoPanelAlpha = { AppStrings::Settings_Label_InfoPanelAlpha, OptionType::Slider, nullptr, &g_config.InfoPanelAlpha };
-    itemInfoPanelAlpha.minVal = 0.1f;
-    itemInfoPanelAlpha.maxVal = 1.0f;
-    itemInfoPanelAlpha.displayFormat = L"%.2f";
-    tabAdvanced.items.push_back(itemInfoPanelAlpha);
-
-    SettingsItem itemToolbarAlpha = { AppStrings::Settings_Label_ToolbarAlpha, OptionType::Slider, nullptr, &g_config.ToolbarAlpha };
-    itemToolbarAlpha.minVal = 0.1f;
-    itemToolbarAlpha.maxVal = 1.0f;
-    itemToolbarAlpha.displayFormat = L"%.2f";
-    tabAdvanced.items.push_back(itemToolbarAlpha);
-
-    SettingsItem itemSettingsAlpha = { AppStrings::Settings_Label_SettingsAlpha, OptionType::Slider, nullptr, &g_config.SettingsAlpha };
-    itemSettingsAlpha.minVal = 0.1f;
-    itemSettingsAlpha.maxVal = 1.0f;
-    itemSettingsAlpha.displayFormat = L"%.2f";
-    tabAdvanced.items.push_back(itemSettingsAlpha);
     
     // System Helpers
     tabAdvanced.items.push_back({ AppStrings::Settings_Header_System, OptionType::Header });
@@ -1762,8 +1776,8 @@ void SettingsOverlay::BuildMenu() {
          // 3. Reset Runtime
          g_runtime.ShowInfoPanel = (g_config.ExifPanelMode != 0);
          g_runtime.InfoPanelExpanded = (g_config.ExifPanelMode == 2);
-         g_config.InfoPanelAlpha = 0.85f;
-         g_config.ToolbarAlpha = 0.85f;
+         g_config.GlassPanelsOpacity = 45.0f;
+         g_config.GlassModalsOpacity = 75.0f;
          
          // 4. Force UI refresh
          // 4. Force UI refresh
@@ -1978,11 +1992,13 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
             config.cornerRadius = 8.0f;
             config.enableGeekGlass = g_config.EnableGeekGlass;
             config.tintProfile = g_config.GlassTintProfile;
-            config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, 0.65f);
+            config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+            config.tintAlpha = g_config.GlassTintAlpha;
+            config.specularOpacity = g_config.GlassSpecularOpacity;
             config.blurStandardDeviation = g_config.GlassBlurSigma * m_uiScale;
-            config.opacity = g_config.SettingsAlpha;
+            config.opacity = g_config.GlassModalsOpacity / 100.0f;
             if (g_config.EnableGeekGlass) {
-                config.opacity = g_config.GlassModalsOpacity / 100.0f;
+                // Glass effect uses the same opacity config
             }
             config.pBackgroundCommandList = m_bgCmdList;
             config.backgroundTransform = m_bgTransform;
@@ -1990,7 +2006,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
         } else {
             ComPtr<ID2D1SolidColorBrush> brushPanelBg;
             pRT->CreateSolidColorBrush(ScaleUiColor(palette.panelBg, m_hdrWhiteScale), &brushPanelBg);
-            brushPanelBg->SetOpacity(g_config.SettingsAlpha);
+            brushPanelBg->SetOpacity(g_config.GlassModalsOpacity / 100.0f);
             pRT->FillRoundedRectangle(hudRounded, brushPanelBg.Get());
         }
 
@@ -2019,7 +2035,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
         // Sidebar (Left portion of HUD)
         D2D1_RECT_F sidebarRect = D2D1::RectF(hudX, hudY, hudX + sidebarW, hudY + hudH);
         float oldSidebarOp = m_brushControlBg->GetOpacity();
-        m_brushControlBg->SetOpacity(oldSidebarOp * 0.3f);
+        m_brushControlBg->SetOpacity(oldSidebarOp * 0.7f); // Increased opacity for better visibility
         pRT->FillRectangle(sidebarRect, m_brushControlBg.Get());
         m_brushControlBg->SetOpacity(oldSidebarOp);
 

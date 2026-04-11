@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "LosslessTransform.h" // For EditQuality enum
+#include <d2d1.h>
 
 // EditQuality enum definition moved to LosslessTransform.h
 
@@ -75,6 +76,21 @@ enum class ColorSpaceMode {
     DisplayP3 = 3
 };
 
+// ============================================================================
+// Theme Preset System — Preset-Driven Glass Material Configuration
+// ============================================================================
+struct ThemePreset {
+    D2D1_COLOR_F tintColor;     // Base glass tint color (RGB, alpha ignored here)
+    float tintAlpha;            // Tint layer opacity (replaces hardcoded 0.65f/0.45f)
+    float blurSigma;            // Blur radius in pixels
+    float specularOpacity;      // Diagonal highlight intensity (0.0 - 1.0)
+    float masterOpacity;        // Overall panel opacity percentage (0 - 100)
+};
+
+// Built-in presets (immutable reference values)
+inline constexpr ThemePreset PRESET_DARK  = { {0.06f, 0.06f, 0.08f, 1.0f}, 0.65f, 25.0f, 0.15f, 85.0f };
+inline constexpr ThemePreset PRESET_LIGHT = { {0.95f, 0.95f, 0.95f, 1.0f}, 0.45f, 15.0f, 0.05f, 45.0f };
+
 /// <summary>
 /// Application configuration (for future settings menu)
 /// </summary>
@@ -104,6 +120,8 @@ struct AppConfig {
     bool EnableGeekGlass = true;           // Master switch (fallback to pure colors)
     bool GlassUIAnimations = true;         // UI animations (0ms hard cut if false)
     float GlassBlurSigma = 25.0f;          // Blur radius (5.0f to 40.0f)
+    float GlassTintAlpha = 0.65f;          // Tint layer opacity (0.05 - 1.0, floor at 5% for safety)
+    float GlassSpecularOpacity = 0.15f;    // Diagonal highlight intensity (0.0 - 0.5)
     float GlassOsdOpacity = 15.0f;         // OSD Level (0-100 %)
     float GlassPanelsOpacity = 45.0f;      // Toolbar & Panels Level (0-100 %)
     float GlassModalsOpacity = 75.0f;      // Modals & Context Menus Level (0-100 %)
@@ -186,9 +204,6 @@ struct AppConfig {
     bool AlwaysSaveEdgeAdapted = false;  
     bool AlwaysSaveLossy = false;        
     bool ShowSavePrompt = true;          
-    float InfoPanelAlpha = 0.85f;
-    float ToolbarAlpha = 0.85f;
-    float SettingsAlpha = 0.95f;
     
     // Default States (User Preference)
     bool ShowInfoPanel = false;          
@@ -217,6 +232,32 @@ struct AppConfig {
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Apply a theme preset: full overwrite of all glass material parameters.
+    /// Called when user clicks Dark/Light preset buttons.
+    /// </summary>
+    void ApplyThemePreset(const ThemePreset& preset) {
+        GlassBlurSigma = preset.blurSigma;
+        GlassTintAlpha = preset.tintAlpha;
+        GlassSpecularOpacity = preset.specularOpacity;
+        GlassModalsOpacity = preset.masterOpacity;
+        
+        // Force reset the tint profile to Auto when applying a preset
+        GlassTintProfile = 0;
+        GlassCustomTintR = preset.tintColor.r;
+        GlassCustomTintG = preset.tintColor.g;
+        GlassCustomTintB = preset.tintColor.b;
+    }
+
+    /// <summary>
+    /// Clamp GlassTintAlpha to safety floor (5% minimum to prevent invisible menus).
+    /// </summary>
+    void EnforceGlassSafetyLimits() {
+        GlassTintAlpha = (std::max)(0.05f, (std::min)(1.0f, GlassTintAlpha));
+        GlassSpecularOpacity = (std::max)(0.0f, (std::min)(0.50f, GlassSpecularOpacity));
+        GlassBlurSigma = (std::max)(5.0f, (std::min)(40.0f, GlassBlurSigma));
     }
 };
 
@@ -325,3 +366,28 @@ void LoadConfig(); // Ensure visible
 bool IsSystemLightTheme();
 bool IsLightThemeActive();
 void ApplyWindowTheme(HWND hwnd);
+
+// ============================================================================
+// Contrast Compensation — Automatic dim text brightness adaptation
+// ============================================================================
+// When the glass background is extremely dark, secondary text (file paths,
+// version numbers, hint text) needs a brightness boost to remain legible.
+// Uses perceptual luminance: L = 0.2126R + 0.7152G + 0.0722B
+inline float ComputePerceptualLuminance(const D2D1_COLOR_F& c) {
+    return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+}
+
+// Returns an appropriate dim text brightness (0.0-1.0) given the background luminance.
+// Dark backgrounds → brighter dim text (up to 0.90), Light backgrounds → darker dim text (down to 0.40).
+inline float GetContrastDimBrightness(float bgLuminance) {
+    // Linear remap: [0.05, 0.20] → dim from 0.90 to 0.55
+    constexpr float kLow = 0.05f;
+    constexpr float kHigh = 0.20f;
+    constexpr float kBrightDim = 0.90f; // Maximum brightness for dim text on ultra-dark
+    constexpr float kNormalDim = 0.55f;  // Standard brightness for dim text
+
+    if (bgLuminance < kLow) return kBrightDim;
+    if (bgLuminance > kHigh) return kNormalDim;
+    float t = (bgLuminance - kLow) / (kHigh - kLow);
+    return kBrightDim + (kNormalDim - kBrightDim) * t;
+}

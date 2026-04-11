@@ -38,6 +38,14 @@ namespace QuickView::UI::GeekGlass {
         // Master opacity control, fully hardware accelerated via PushLayer
         float opacity = 1.0f; 
 
+        // Material parameters (driven by ThemePreset or user sliders)
+        float tintAlpha = 0.65f;            // Base tint layer opacity (floor: 5%)
+        float specularOpacity = 0.15f;      // Diagonal highlight intensity (0.0 - 0.5)
+
+        // Smart lighting: background luminance for specular suppression
+        // Set by caller (e.g. from EstimateCanvasLuminance). -1.0 = not available.
+        float backgroundLuminance = -1.0f;
+
         // Tint Customization
         int tintProfile = 0; // 0=Auto, 1=Custom
         D2D1_COLOR_F customTintColor = D2D1::ColorF(0.5f, 0.5f, 0.5f, 0.65f); // Used if tintProfile == 1
@@ -74,6 +82,8 @@ namespace QuickView::UI::GeekGlass {
         ThemeMode m_currentTheme = ThemeMode::Dark;
         int m_currentTintProfile = 0;
         D2D1_COLOR_F m_currentCustomTintColor = {};
+        float m_currentTintAlpha = 0.65f;
+        float m_currentSpecularOpacity = 0.15f;
         D2D1_RECT_F m_currentBounds = {};
     };
 
