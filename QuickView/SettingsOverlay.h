@@ -151,6 +151,7 @@ private:
     SettingsItem* m_pHoverTooltipItem = nullptr;
     float m_lastMouseX = 0.0f;
     float m_lastMouseY = 0.0f;
+    bool m_needsLayoutRebuild = false;
 
     std::vector<SettingsTab> m_tabs;
 

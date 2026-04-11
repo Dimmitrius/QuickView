@@ -14,6 +14,7 @@
 #include <wincodec.h>
 #include "CoroutineTypes.h"
 #include "ImageLoaderSimd.h"
+#include "GeekGlass.h"
 
 // Windows headers
 #pragma comment(lib, "version.lib")
@@ -1200,7 +1201,10 @@ void SettingsOverlay::BuildMenu() {
     // Geek Glass Engine
     tabTheme.items.push_back({ L"极客玻璃引擎 (GPU 加速)", OptionType::Header });
     SettingsItem itemEnableGlass = { L"启用极客玻璃特效", OptionType::Toggle, &g_config.EnableGeekGlass };
-    itemEnableGlass.onChange = [this]() { SaveConfig(); if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE); };
+    itemEnableGlass.onChange = [this]() { 
+        SaveConfig(); 
+        this->BuildMenu(); // Rebuild to update isDisabled states of dependent sliders
+    };
     tabTheme.items.push_back(itemEnableGlass);
 
     SettingsItem itemAnimations = { L"UI 动画反馈 (关闭即为 0 毫秒硬切)", OptionType::Toggle, &g_config.GlassUIAnimations };
@@ -1210,11 +1214,17 @@ void SettingsOverlay::BuildMenu() {
     // --- Core Material Parameters ---
     tabTheme.items.push_back({ L"核心材质 (Core Material)", OptionType::Header });
     
+    bool glassDisabled = !g_config.EnableGeekGlass;
+    static float fZero = 0.0f;
+    static float fOne = 1.0f;
+
     // Auto-switch to Custom lambda (shared by all material sliders)
     auto autoSwitchToCustom = [this]() {
-        if (g_config.ThemeMode == 1 || g_config.ThemeMode == 2) {
+        if (g_config.ThemeMode != 3) {
             g_config.ThemeMode = 3;
-            m_pendingRebuild = true;
+            // Defer layout change (adding new rows) until mouse release if currently dragging
+            if (!m_pActiveSlider) m_pendingRebuild = true;
+            else m_needsLayoutRebuild = true;
         }
         g_config.EnforceGlassSafetyLimits();
         SaveConfig();
@@ -1226,6 +1236,11 @@ void SettingsOverlay::BuildMenu() {
     itemBlur.maxVal = 40.0f;
     itemBlur.displayFormat = L"%.0f px";
     itemBlur.onChange = autoSwitchToCustom;
+    if (glassDisabled) {
+        itemBlur.isDisabled = true;
+        itemBlur.pFloatVal = &fZero;
+        itemBlur.disabledText = L"关闭极客玻璃后该项失效";
+    }
     tabTheme.items.push_back(itemBlur);
 
     SettingsItem itemTintAlpha = { L"底色浓度 (Tint Alpha)", OptionType::Slider, nullptr, &g_config.GlassTintAlpha };
@@ -1234,6 +1249,10 @@ void SettingsOverlay::BuildMenu() {
     itemTintAlpha.displayFormat = L"%.0f %%";
     itemTintAlpha.tooltipText = L"控制玻璃背景底色的不透明度。最低 5% 以确保文字可读";
     itemTintAlpha.onChange = autoSwitchToCustom;
+    if (glassDisabled) {
+        itemTintAlpha.isDisabled = true;
+        itemTintAlpha.pFloatVal = &fOne;
+    }
     tabTheme.items.push_back(itemTintAlpha);
 
     SettingsItem itemSpecular = { L"高光亮度 (Reflectivity)", OptionType::Slider, nullptr, &g_config.GlassSpecularOpacity };
@@ -1242,6 +1261,10 @@ void SettingsOverlay::BuildMenu() {
     itemSpecular.displayFormat = L"%.0f %%";
     itemSpecular.tooltipText = L"控制玻璃面板对角线光泽的强度。在纯黑背景下引擎会自动抑制";
     itemSpecular.onChange = autoSwitchToCustom;
+    if (glassDisabled) {
+        itemSpecular.isDisabled = true;
+        itemSpecular.pFloatVal = &fZero;
+    }
     tabTheme.items.push_back(itemSpecular);
 
     // Vector Stroke Config
@@ -1287,19 +1310,19 @@ void SettingsOverlay::BuildMenu() {
     SettingsItem itemOsd = { L"悬浮信息提示 (OSD)", OptionType::Slider, nullptr, &g_config.GlassOsdOpacity };
     itemOsd.minVal = 0.0f; itemOsd.maxVal = 100.0f; itemOsd.displayFormat = L"%.0f %%";
     itemOsd.tooltipText = L"控制加载转圈、图片切换比率等临时提示信息的透明度";
-    itemOsd.onChange = [this]() { SaveConfig(); if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE); };
+    itemOsd.onChange = autoSwitchToCustom;
     tabTheme.items.push_back(itemOsd);
 
     SettingsItem itemPanels = { L"工具面板与底图属性 (Panels)", OptionType::Slider, nullptr, &g_config.GlassPanelsOpacity };
     itemPanels.minVal = 0.0f; itemPanels.maxVal = 100.0f; itemPanels.displayFormat = L"%.0f %%";
     itemPanels.tooltipText = L"控制底部工具栏、侧边 EXIF 属性面板的透明度";
-    itemPanels.onChange = [this]() { SaveConfig(); if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE); };
+    itemPanels.onChange = autoSwitchToCustom;
     tabTheme.items.push_back(itemPanels);
 
     SettingsItem itemModals = { L"模态弹框视窗 (Modals)", OptionType::Slider, nullptr, &g_config.GlassModalsOpacity };
     itemModals.minVal = 0.0f; itemModals.maxVal = 100.0f; itemModals.displayFormat = L"%.0f %%";
     itemModals.tooltipText = L"控制设置界面、关于弹框、以及主区域右键菜单的透明度";
-    itemModals.onChange = [this]() { SaveConfig(); if (m_hwnd) InvalidateRect(m_hwnd, NULL, FALSE); };
+    itemModals.onChange = autoSwitchToCustom;
     tabTheme.items.push_back(itemModals);
 
     m_tabs.push_back(tabTheme);
@@ -1987,19 +2010,13 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
         // 3. Draw HUD Panel Background (Geek Glass or Fallback)
         if (m_bgCmdList) {
             m_geekGlass.InitializeResources(pRT);
-            QuickView::UI::GeekGlass::GeekGlassConfig config;
+            QuickView::UI::GeekGlass::GeekGlassConfig config = QuickView::UI::GeekGlass::GetGlobalThemeConfig();
             config.panelBounds = hudRect;
             config.cornerRadius = 8.0f;
-            config.enableGeekGlass = g_config.EnableGeekGlass;
-            config.tintProfile = g_config.GlassTintProfile;
-            config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
-            config.tintAlpha = g_config.GlassTintAlpha;
-            config.specularOpacity = g_config.GlassSpecularOpacity;
-            config.blurStandardDeviation = g_config.GlassBlurSigma * m_uiScale;
-            config.opacity = g_config.GlassModalsOpacity / 100.0f;
-            if (g_config.EnableGeekGlass) {
-                // Glass effect uses the same opacity config
-            }
+            
+            // Override with local scale awareness for Settings UI if needed
+            config.blurStandardDeviation *= m_uiScale; 
+
             config.pBackgroundCommandList = m_bgCmdList;
             config.backgroundTransform = m_bgTransform;
             m_geekGlass.DrawGeekGlassPanel(pRT, config);
@@ -2829,7 +2846,12 @@ void SettingsOverlay::DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rec
     if (format.empty()) {
         swprintf_s(buf, L"%.1f", val);
     } else {
-        swprintf_s(buf, format.c_str(), val);
+        // Smart scaling: if format is percentage and maxVal is 1.0 (internal float scale), multiply by 100 for display
+        float displayVal = val;
+        if (maxV <= 1.05f && format.find(L"%%") != std::wstring::npos) {
+            displayVal *= 100.0f;
+        }
+        swprintf_s(buf, format.c_str(), displayVal);
     }
 
     // Adjust right bounds based on format length to avoid clipping
@@ -3015,7 +3037,10 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
         if (t > 1.0f) t = 1.0f;
         
         float newVal = m_pActiveSlider->minVal + t * (m_pActiveSlider->maxVal - m_pActiveSlider->minVal);
-        *m_pActiveSlider->pFloatVal = newVal;
+        if (*m_pActiveSlider->pFloatVal != newVal) {
+            *m_pActiveSlider->pFloatVal = newVal;
+            if (m_pActiveSlider->onChange) m_pActiveSlider->onChange();
+        }
         return SettingsAction::RepaintStatic;
     }
 
@@ -3327,6 +3352,11 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
 SettingsAction SettingsOverlay::OnLButtonUp(float x, float y) {
     if (m_pActiveSlider) {
         m_pActiveSlider = nullptr;
+        // If we deferred a layout change (e.g. switching to Custom mode), do it now after release
+        if (m_needsLayoutRebuild) {
+            m_needsLayoutRebuild = false;
+            BuildMenu();
+        }
         return SettingsAction::RepaintStatic;
     }
     return SettingsAction::None; // Consume if visible

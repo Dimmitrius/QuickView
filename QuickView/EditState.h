@@ -259,6 +259,13 @@ struct AppConfig {
         GlassSpecularOpacity = (std::max)(0.0f, (std::min)(0.50f, GlassSpecularOpacity));
         GlassBlurSigma = (std::max)(5.0f, (std::min)(40.0f, GlassBlurSigma));
     }
+
+    /// <summary>
+    /// Helper to get the actual float value for vector stroke weight.
+    /// </summary>
+    float GetVectorStrokeWeight() const {
+        return (GlassVectorStrokeWeightIndex == 1) ? 1.0f : 1.5f;
+    }
 };
 
 /// <summary>

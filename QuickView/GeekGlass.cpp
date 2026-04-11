@@ -18,6 +18,9 @@ void GeekGlassEngine::InitializeResources(ID2D1RenderTarget* pRT) {
     pContext->CreateEffect(CLSID_D2D1GaussianBlur, &m_blurEffect);
     pContext->CreateEffect(CLSID_D2D1Crop, &m_cropEffect);
     pContext->CreateEffect(CLSID_D2D12DAffineTransform, &m_transformEffect);
+    pContext->CreateEffect(CLSID_D2D1Scale, &m_scaleDownEffect);
+    pContext->CreateEffect(CLSID_D2D1Scale, &m_scaleUpEffect);
+    pContext->CreateEffect(CLSID_D2D1ColorMatrix, &m_colorMatrixEffect);
 
     // Lock the blur behavior to HARD borders to prevent bleeding out from edges (transparent sampling).
     if (m_blurEffect) {
@@ -29,6 +32,9 @@ void GeekGlassEngine::ReleaseResources() {
     m_blurEffect.Reset();
     m_cropEffect.Reset();
     m_transformEffect.Reset();
+    m_scaleDownEffect.Reset();
+    m_scaleUpEffect.Reset();
+    m_colorMatrixEffect.Reset();
     m_diagonalBrush.Reset();
     m_bevelBrush.Reset();
     m_baseTintBrush.Reset();
@@ -173,31 +179,66 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlass
     pRT->PushLayer(layerParams, nullptr);
 
     // 3. Track execution
-    if (pContext && config.enableGeekGlass && config.track == RenderTrack::TrackA_CommandList && config.pBackgroundCommandList && m_blurEffect && m_cropEffect && m_transformEffect) {
+    if (pContext && config.enableGeekGlass && config.track == RenderTrack::TrackA_CommandList && config.pBackgroundCommandList && 
+        m_blurEffect && m_cropEffect && m_transformEffect && m_scaleDownEffect && m_scaleUpEffect && m_colorMatrixEffect) {
         
-        // Feed the command list into transform effect to map DComp coordinates to D2D screen space
+        float dpiX, dpiY;
+        pRT->GetDpi(&dpiX, &dpiY);
+        float dpiScale = dpiX / 96.0f;
+        
+        // 3.1 DPI-Aware Sigma
+        // Ensure that 4k users feel the same depth as 1080p users.
+        float effectiveSigma = config.blurStandardDeviation * dpiScale;
+
+        // 3.2 Downsampling Factor (The Trick for "Deep" look)
+        // High performance deep blur: scale down to 1/4, blur there, scale up.
+        float downscale = 0.25f; 
+        float upscale = 1.0f / downscale;
+        
+        // When processing on a 1/4 resolution, the internal sigma is scaled down
+        // but the final visual spread will effectively be 4x larger relative to source.
+        float internalSigma = effectiveSigma / upscale; 
+
+        // [Stage 1: Transform Background]
         m_transformEffect->SetInput(0, config.pBackgroundCommandList);
         m_transformEffect->SetValue(D2D1_2DAFFINETRANSFORM_PROP_INTERPOLATION_MODE, D2D1_2DAFFINETRANSFORM_INTERPOLATION_MODE_LINEAR);
         m_transformEffect->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX, config.backgroundTransform);
 
-        // Feed transformed output into blur algorithm
-        m_blurEffect->SetInputEffect(0, m_transformEffect.Get());
-        m_blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, config.blurStandardDeviation);
+        // [Stage 2: Downsample]
+        m_scaleDownEffect->SetInputEffect(0, m_transformEffect.Get());
+        m_scaleDownEffect->SetValue(D2D1_SCALE_PROP_SCALE, D2D1::Vector2F(downscale, downscale));
+        m_scaleDownEffect->SetValue(D2D1_SCALE_PROP_INTERPOLATION_MODE, D2D1_SCALE_INTERPOLATION_MODE_LINEAR);
 
-        // Optimal approach: Chain a crop effect to avoid blurring pixels outside our rect
-        m_cropEffect->SetInputEffect(0, m_blurEffect.Get());
-        
-        // Expand the crop region to account for blur spreading.
-        D2D1_RECT_F cropRect = config.panelBounds;
-        cropRect.left -= config.blurStandardDeviation * 3.0f;
-        cropRect.top -= config.blurStandardDeviation * 3.0f;
-        cropRect.right += config.blurStandardDeviation * 3.0f;
-        cropRect.bottom += config.blurStandardDeviation * 3.0f;
-        
-        D2D1_VECTOR_4F cropVec = { cropRect.left, cropRect.top, cropRect.right, cropRect.bottom };
+        // [Stage 3: Deep Gaussian Blur]
+        m_blurEffect->SetInputEffect(0, m_scaleDownEffect.Get());
+        m_blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, internalSigma);
+        m_blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
+
+        // [Stage 4: Saturation Boost (1.3x)]
+        // Compensates for color washing out during heavy blur pass.
+        float sat = 1.3f;
+        float r = 0.2126f; float g = 0.7152f; float b = 0.0722f;
+        D2D1_MATRIX_5X4_F satMatrix = D2D1::Matrix5x4F(
+            r*(1-sat)+sat, r*(1-sat),   r*(1-sat),   0,
+            g*(1-sat),     g*(1-sat)+sat, g*(1-sat),   0,
+            b*(1-sat),     b*(1-sat),     b*(1-sat)+sat, 0,
+            0,             0,             0,           1,
+            0,             0,             0,           0
+        );
+        m_colorMatrixEffect->SetInputEffect(0, m_blurEffect.Get());
+        m_colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, satMatrix);
+
+        // [Stage 5: Upsample]
+        m_scaleUpEffect->SetInputEffect(0, m_colorMatrixEffect.Get());
+        m_scaleUpEffect->SetValue(D2D1_SCALE_PROP_SCALE, D2D1::Vector2F(upscale, upscale));
+        m_scaleUpEffect->SetValue(D2D1_SCALE_PROP_INTERPOLATION_MODE, D2D1_SCALE_INTERPOLATION_MODE_LINEAR);
+
+        // [Stage 6: Final Precise Crop]
+        m_cropEffect->SetInputEffect(0, m_scaleUpEffect.Get());
+        D2D1_VECTOR_4F cropVec = { config.panelBounds.left, config.panelBounds.top, config.panelBounds.right, config.panelBounds.bottom };
         m_cropEffect->SetValue(D2D1_CROP_PROP_RECT, cropVec);
 
-        // Render the processed background into the current layer
+        // Render the processed professional glass background into the current layer
         pContext->DrawImage(m_cropEffect.Get());
     }
     // Track B (DWM): System provides blur via Acrylic, we skip D2D blur pipeline entirely.
@@ -253,11 +294,19 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlass
 GeekGlassConfig GetGlobalThemeConfig() {
     GeekGlassConfig config;
     config.enableGeekGlass = g_config.EnableGeekGlass;
+    
     config.theme = IsLightThemeActive() ? ThemeMode::Light : ThemeMode::Dark;
     
-    config.blurStandardDeviation = g_config.GlassBlurSigma;
-    config.tintAlpha = g_config.GlassTintAlpha;
-    config.specularOpacity = g_config.GlassSpecularOpacity;
+    // If Glass is disabled, we override material to a solid flat appearance
+    if (!config.enableGeekGlass) {
+        config.blurStandardDeviation = 0.0f;
+        config.tintAlpha = 1.0f;           // Full solid color
+        config.specularOpacity = 0.0f;     // No reflections
+    } else {
+        config.blurStandardDeviation = g_config.GlassBlurSigma;
+        config.tintAlpha = g_config.GlassTintAlpha;
+        config.specularOpacity = g_config.GlassSpecularOpacity;
+    }
     
     // GlassModalsOpacity is 0-100 percentage
     config.opacity = g_config.GlassModalsOpacity / 100.0f;

@@ -380,14 +380,35 @@ void GeekContextMenu::CreateResources() {
     m_factory->CreateStrokeStyle(ssp, nullptr, 0, &m_iconStroke);
 
     bool L = m_isLight;
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? 0.08f : 0.93f, L ? 0.08f : 0.93f, L ? 0.10f : 0.95f), &m_textBrush);
+    // Danger/Critical accent (Red)
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(0.92f, 0.22f, 0.20f), &m_dangerTextBrush);
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(0.85f, 0.15f, 0.10f, 0.25f), &m_dangerBrush);
+    
+    // Auxiliary Brushes
     m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? 0.40f : 0.55f, L ? 0.40f : 0.55f, L ? 0.42f : 0.58f), &m_dimBrush);
     m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? 0.55f : 0.38f, L ? 0.55f : 0.38f, L ? 0.57f : 0.40f), &m_disabledBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0,0,0,0.06f) : D2D1::ColorF(1,1,1,0.08f)), &m_hoverBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(0.85f, 0.15f, 0.10f, 0.25f), &m_dangerBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(0.92f, 0.22f, 0.20f), &m_dangerTextBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(0.35f, 0.55f, 0.95f), &m_accentBrush);
+
+    // Separator line
     m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0,0,0,0.08f) : D2D1::ColorF(1,1,1,0.06f)), &m_sepBrush);
+
+    // Accent and Text Colors (Respect Custom Theme)
+    D2D1_COLOR_F accentClr, textClr;
+    if (g_config.ThemeMode == 3) { // Custom
+        accentClr = D2D1::ColorF(g_config.ThemeCustomAccentR, g_config.ThemeCustomAccentG, g_config.ThemeCustomAccentB);
+        textClr   = D2D1::ColorF(g_config.ThemeCustomTextR, g_config.ThemeCustomTextG, g_config.ThemeCustomTextB);
+    } else {
+        accentClr = L ? D2D1::ColorF(0.0f, 0.45f, 0.9f) : D2D1::ColorF(0.0f, 0.6f, 1.0f);
+        textClr   = L ? D2D1::ColorF(0.1f, 0.1f, 0.12f) : D2D1::ColorF(0.92f, 0.92f, 0.95f);
+    }
+
+    m_rt->CreateSolidColorBrush(accentClr, &m_accentBrush);
+    m_rt->CreateSolidColorBrush(textClr, &m_textBrush);
+
+    // Hover Highlight (Using a softened version of the accent or standard grey)
+    D2D1_COLOR_F hoverClr = accentClr;
+    hoverClr.a = L ? 0.12f : 0.15f; 
+    m_rt->CreateSolidColorBrush(hoverClr, &m_hoverBrush);
+
     m_rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, L ? 0.50f : 0.12f), &m_bevelLightBrush);
     m_rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, L ? 0.06f : 0.25f), &m_bevelDarkBrush);
     // Capsule
@@ -531,10 +552,11 @@ void GeekContextMenu::RenderActionRow() {
         float iconY = r.top + 10;
         D2D1_RECT_F iconR = D2D1::RectF(cx - icoSz/2, iconY, cx + icoSz/2, iconY + icoSz);
 
-        // Icon color: accent blue for normal, red for delete
+        // Icon color: accent blue (or custom) for normal, red for delete
+        float strokeW = g_config.GetVectorStrokeWeight();
         ID2D1Brush* iconBrush = btn.isEnabled ? m_accentBrush.Get() : m_disabledBrush.Get();
         if (btn.isDanger && btn.isEnabled) iconBrush = m_dangerTextBrush.Get();
-        if (btn.iconFn) btn.iconFn(m_rt.Get(), iconR, iconBrush, 1.2f);
+        if (btn.iconFn) btn.iconFn(m_rt.Get(), iconR, iconBrush, strokeW);
 
         // Label
         if (m_actionFont) {
@@ -577,7 +599,7 @@ void GeekContextMenu::RenderItem(const GeekMenuItem& item, int index) {
     if (item.isDanger && item.isEnabled) tb = m_dangerTextBrush.Get();
 
     // Checkmark
-    float strokeW = (g_config.GlassVectorStrokeWeightIndex == 1) ? 1.0f : 1.5f;
+    float strokeW = g_config.GetVectorStrokeWeight();
     
     if (item.type == MenuItemType::CheckBox && item.isChecked) {
         D2D1_RECT_F checkR = D2D1::RectF(r.left + ICON_LEFT - 2, r.top + (rh - ICON_SIZE) / 2,
