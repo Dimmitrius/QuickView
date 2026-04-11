@@ -1567,9 +1567,18 @@ static bool RenderCompareComposite(HWND hwnd) {
     ID2D1DeviceContext* ctx = g_compEngine->BeginPendingUpdate(winW, winH, false, 0, 0, false, compareSurfaceFormat);
     if (!ctx) return false;
 
+    // [Geek Glass] Capture Compare results for UI backgrounds
+    ComPtr<ID2D1CommandList> cmdList;
+    ctx->CreateCommandList(&cmdList);
+    ComPtr<ID2D1Image> origTarget;
+    ctx->GetTarget(&origTarget);
+    ctx->SetTarget(cmdList.Get());
+
     ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
     const CompareView rightView = GetRightCompareView();
-    auto DrawDividerHandle = [&](float splitX, float winH, float opacity) {
+
+    // Logic for drawing the composite (moved into cmdList recording)
+    auto DrawDividerHandleInternal = [&](float splitX, float winH, float opacity) {
         const float s = g_uiScale;
         const float radius = 11.0f * s;
         const float centerY = winH * 0.5f;
@@ -1579,16 +1588,16 @@ static bool RenderCompareComposite(HWND hwnd) {
         ComPtr<ID2D1SolidColorBrush> borderBrush;
         ComPtr<ID2D1SolidColorBrush> arrowBrush;
         float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        auto scaleUiColor = [hdrWhiteScale](const D2D1_COLOR_F& color) {
+        auto scaleUiColorLocal = [hdrWhiteScale](const D2D1_COLOR_F& color) {
             return D2D1::ColorF(
                 (std::max)(0.0f, color.r * hdrWhiteScale),
                 (std::max)(0.0f, color.g * hdrWhiteScale),
                 (std::max)(0.0f, color.b * hdrWhiteScale),
                 color.a);
         };
-        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.50f * opacity)), &bgBrush))) return;
-        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * opacity)), &borderBrush))) return;
-        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f * opacity)), &arrowBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColorLocal(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.50f * opacity)), &bgBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColorLocal(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * opacity)), &borderBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColorLocal(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f * opacity)), &arrowBrush))) return;
 
         D2D1_ELLIPSE ellipse = D2D1::Ellipse(D2D1::Point2F(splitX, centerY), radius, radius);
         ctx->FillEllipse(ellipse, bgBrush.Get());
@@ -1596,7 +1605,6 @@ static bool RenderCompareComposite(HWND hwnd) {
 
         const float chevron = 4.5f * s;
         const float gap = 2.0f * s;
-
         ComPtr<ID2D1Factory> factory;
         ctx->GetFactory(&factory);
         if (!factory) return;
@@ -1609,18 +1617,10 @@ static bool RenderCompareComposite(HWND hwnd) {
         factory->CreateStrokeStyle(strokeProps, nullptr, 0, &strokeStyle);
 
         float strokeWidth = 1.6f * s;
-        ctx->DrawLine(D2D1::Point2F(splitX - gap, centerY - chevron),
-                      D2D1::Point2F(splitX - gap - chevron, centerY),
-                      arrowBrush.Get(), strokeWidth, strokeStyle.Get());
-        ctx->DrawLine(D2D1::Point2F(splitX - gap - chevron, centerY),
-                      D2D1::Point2F(splitX - gap, centerY + chevron),
-                      arrowBrush.Get(), strokeWidth, strokeStyle.Get());
-        ctx->DrawLine(D2D1::Point2F(splitX + gap, centerY - chevron),
-                      D2D1::Point2F(splitX + gap + chevron, centerY),
-                      arrowBrush.Get(), strokeWidth, strokeStyle.Get());
-        ctx->DrawLine(D2D1::Point2F(splitX + gap + chevron, centerY),
-                      D2D1::Point2F(splitX + gap, centerY + chevron),
-                      arrowBrush.Get(), strokeWidth, strokeStyle.Get());
+        ctx->DrawLine(D2D1::Point2F(splitX - gap, centerY - chevron), D2D1::Point2F(splitX - gap - chevron, centerY), arrowBrush.Get(), strokeWidth, strokeStyle.Get());
+        ctx->DrawLine(D2D1::Point2F(splitX - gap - chevron, centerY), D2D1::Point2F(splitX - gap, centerY + chevron), arrowBrush.Get(), strokeWidth, strokeStyle.Get());
+        ctx->DrawLine(D2D1::Point2F(splitX + gap, centerY - chevron), D2D1::Point2F(splitX + gap + chevron, centerY), arrowBrush.Get(), strokeWidth, strokeStyle.Get());
+        ctx->DrawLine(D2D1::Point2F(splitX + gap + chevron, centerY), D2D1::Point2F(splitX + gap, centerY + chevron), arrowBrush.Get(), strokeWidth, strokeStyle.Get());
     };
 
     if (g_compare.mode == ViewMode::CompareWipe) {
@@ -1641,23 +1641,15 @@ static bool RenderCompareComposite(HWND hwnd) {
 
         ComPtr<ID2D1SolidColorBrush> dividerBrush;
         float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        auto scaleUiColor = [hdrWhiteScale](const D2D1_COLOR_F& color) {
-            return D2D1::ColorF(
-                (std::max)(0.0f, color.r * hdrWhiteScale),
-                (std::max)(0.0f, color.g * hdrWhiteScale),
-                (std::max)(0.0f, color.b * hdrWhiteScale),
-                color.a);
-        };
-        ctx->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f)), &dividerBrush);
+        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * hdrWhiteScale), &dividerBrush);
         if (dividerBrush) {
             ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 2.0f);
         }
-        DrawDividerHandle(splitX, (float)winH, g_compare.dividerOpacity);
+        DrawDividerHandleInternal(splitX, (float)winH, g_compare.dividerOpacity);
     } else {
         const float splitX = 0.5f * (float)winW;
         const D2D1_RECT_F leftVp = D2D1::RectF(0.0f, 0.0f, splitX, (float)winH);
         const D2D1_RECT_F rightVp = D2D1::RectF(splitX, 0.0f, (float)winW, (float)winH);
-
         int leftExif = GetEffectiveExifOrientation(g_compare.left.view.ExifOrientation, g_compare.left.editState);
         int rightExif = GetEffectiveExifOrientation(g_viewState.ExifOrientation, g_editState);
         DrawResourceIntoViewport(ctx, g_compare.left.resource, leftExif, g_compare.left.view, leftVp);
@@ -1665,17 +1657,18 @@ static bool RenderCompareComposite(HWND hwnd) {
 
         ComPtr<ID2D1SolidColorBrush> dividerBrush;
         float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        auto scaleUiColor = [hdrWhiteScale](const D2D1_COLOR_F& color) {
-            return D2D1::ColorF(
-                (std::max)(0.0f, color.r * hdrWhiteScale),
-                (std::max)(0.0f, color.g * hdrWhiteScale),
-                (std::max)(0.0f, color.b * hdrWhiteScale),
-                color.a);
-        };
-        ctx->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.35f)), &dividerBrush);
+        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.35f * hdrWhiteScale), &dividerBrush);
         if (dividerBrush) {
             ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 1.0f);
         }
+    }
+
+    cmdList->Close();
+    ctx->SetTarget(origTarget.Get());
+    ctx->DrawImage(cmdList.Get());
+
+    if (g_uiRenderer) {
+        g_uiRenderer->SetBackgroundCommandList(cmdList.Get());
     }
 
     g_compEngine->EndPendingUpdate();

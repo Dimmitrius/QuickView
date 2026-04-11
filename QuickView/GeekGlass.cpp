@@ -89,20 +89,20 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
     // 3. Specular Jewel Model: 5-stop Focused Refraction
     // We use a focused [40% - 60%] band to ensure fixed width.
     // Ratios are fixed [0, 0.15, 1.0, 0.15, 0] so only total opacity changes.
-    D2D1_GRADIENT_STOP stops[5];
-    stops[0] = {0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f)};
-    stops[1] = {0.48f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.02f)};
-    stops[2] = {0.50f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.40f)};
-    stops[3] = {0.55f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f)};
-    stops[4] = {1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f)};
+    D2D1_GRADIENT_STOP stops[2];
+    stops[0] = {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f)};
+    stops[1] = {1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f)};
     ComPtr<ID2D1GradientStopCollection> pStops;
-    pRT->CreateGradientStopCollection(stops, 5, &pStops);
+    pRT->CreateGradientStopCollection(stops, 2, &pStops);
+    float margin = (config.panelBounds.right - config.panelBounds.left) * 0.2f;
+
     pRT->CreateLinearGradientBrush(
         D2D1::LinearGradientBrushProperties(
-            D2D1::Point2F(config.panelBounds.left, config.panelBounds.top), 
-            D2D1::Point2F(config.panelBounds.right, config.panelBounds.bottom)), 
+            D2D1::Point2F(config.panelBounds.left - margin,
+                          config.panelBounds.top - margin),
+            D2D1::Point2F(config.panelBounds.right + margin,
+                          config.panelBounds.bottom + margin)),
         pStops.Get(), &m_diagonalBrush);
-
     // [Structure Retention Weights]
     float masterOpacity = config.opacity;
     float tintAlpha = masterOpacity * config.tintAlpha; 

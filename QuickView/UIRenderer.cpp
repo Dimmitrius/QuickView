@@ -793,14 +793,19 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
                 config.blurStandardDeviation = g_config.GlassBlurSigma * s;
                 config.opacity = m_osdOpacity;
                 if (g_config.EnableGeekGlass) {
-                    config.opacity = g_config.GlassOsdOpacity / 100.0f;
+                    // Material Booster Layer (Middle Layer for Depth)
+                    ComPtr<ID2D1SolidColorBrush> boosterBrush;
+                    float baseAlpha = 0.45f * (g_config.GlassOsdOpacity / 100.0f);
+                    D2D1_COLOR_F boosterColor = ScaleUiColor(D2D1::ColorF(0.04f, 0.04f, 0.04f, baseAlpha), hdrWhiteScale);
+                    dc->CreateSolidColorBrush(boosterColor, &boosterBrush);
+                    dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6.0f * s, 6.0f * s), boosterBrush.Get());
+                    
+                    config.pBackgroundCommandList = m_bgCommandList.Get();
+                    config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+                    geekGlass.DrawGeekGlassPanel(dc, config);
+                } else {
+                    dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6.0f * s, 6.0f * s), bgBrush.Get());
                 }
-                config.pBackgroundCommandList = m_bgCommandList.Get();
-                config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
-                geekGlass.DrawGeekGlassPanel(dc, config);
-            } else {
-                dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6*s, 6*s), bgBrush.Get());
-            }
             dc->DrawTextLayout(D2D1::Point2F(r.left + padH, r.top + padV), layout.Get(), textBrush.Get());
         };
 
@@ -867,14 +872,19 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
         config.blurStandardDeviation = g_config.GlassBlurSigma * s;
         config.opacity = m_osdOpacity;
         if (g_config.EnableGeekGlass) {
-            config.opacity = g_config.GlassOsdOpacity / 100.0f;
+            // Material Booster Layer (Middle Layer for Depth)
+            ComPtr<ID2D1SolidColorBrush> boosterBrush;
+            float baseAlpha = 0.45f * (g_config.GlassOsdOpacity / 100.0f);
+            D2D1_COLOR_F boosterColor = ScaleUiColor(D2D1::ColorF(0.04f, 0.04f, 0.04f, baseAlpha), hdrWhiteScale);
+            dc->CreateSolidColorBrush(boosterColor, &boosterBrush);
+            dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), boosterBrush.Get());
+
+            config.pBackgroundCommandList = m_bgCommandList.Get();
+            config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
+            geekGlass.DrawGeekGlassPanel(dc, config);
+        } else {
+            dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
         }
-        config.pBackgroundCommandList = m_bgCommandList.Get();
-        config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
-        geekGlass.DrawGeekGlassPanel(dc, config);
-    } else {
-        dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
-    }
     
     if (textLayout && textBrush) {
         D2D1_POINT_2F textOrigin = D2D1::Point2F(x + paddingH, y + paddingV);
