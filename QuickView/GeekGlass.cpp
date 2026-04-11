@@ -1,11 +1,18 @@
 #include "pch.h"
 #include "GeekGlass.h"
+#include "EditState.h"
 #include <cmath>
+
+extern AppConfig g_config;
 
 namespace QuickView::UI::GeekGlass {
 
-void GeekGlassEngine::InitializeResources(ID2D1DeviceContext* pContext) {
-    if (!pContext) return;
+void GeekGlassEngine::InitializeResources(ID2D1RenderTarget* pRT) {
+    if (!pRT) return;
+    
+    // Effects require ID2D1DeviceContext (Windows 8+)
+    ComPtr<ID2D1DeviceContext> pContext;
+    if (FAILED(pRT->QueryInterface(IID_PPV_ARGS(&pContext)))) return;
 
     // Cache expensive D2D effects ahead of time, applying best practice for performance.
     pContext->CreateEffect(CLSID_D2D1GaussianBlur, &m_blurEffect);
@@ -27,7 +34,7 @@ void GeekGlassEngine::ReleaseResources() {
     m_baseTintBrush.Reset();
 }
 
-void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const GeekGlassConfig& config) {
+void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGlassConfig& config) {
     float width = config.panelBounds.right - config.panelBounds.left;
     float height = config.panelBounds.bottom - config.panelBounds.top;
     float currentWidth = m_currentBounds.right - m_currentBounds.left;
@@ -67,19 +74,19 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const 
     m_currentSpecularOpacity = config.specularOpacity;
     m_currentBounds = config.panelBounds;
 
-    // --- Effective tint alpha (clamped to 5% safety floor) ---
-    float effectiveTintAlpha = (std::max)(0.05f, config.tintAlpha);
+    // --- Effective tint alpha (Respect 0% if user requested it) ---
+    float effectiveTintAlpha = config.tintAlpha;
 
     // --- Base Solid Tint (Providing contrast floor) ---
     if (config.tintProfile == 1) { // Custom
         D2D1_COLOR_F tint = config.customTintColor;
         tint.a = effectiveTintAlpha;
-        pContext->CreateSolidColorBrush(tint, &m_baseTintBrush);
+        pRT->CreateSolidColorBrush(tint, &m_baseTintBrush);
     } else { // Auto
         if (config.theme == ThemeMode::Dark) {
-            pContext->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.09f, effectiveTintAlpha), &m_baseTintBrush);
+            pRT->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.09f, effectiveTintAlpha), &m_baseTintBrush);
         } else {
-            pContext->CreateSolidColorBrush(D2D1::ColorF(0.94f, 0.94f, 0.96f, effectiveTintAlpha), &m_baseTintBrush);
+            pRT->CreateSolidColorBrush(D2D1::ColorF(0.94f, 0.94f, 0.96f, effectiveTintAlpha), &m_baseTintBrush);
         }
     }
 
@@ -94,10 +101,10 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const 
         { 0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, config.specularOpacity) }, // Top-Left: Light reflection 
         { 1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f) }  // Bottom-Right: Fade to clear
     };
-    pContext->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pDiagStops);
+    pRT->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pDiagStops);
 
     if (pDiagStops) {
-        pContext->CreateLinearGradientBrush(
+        pRT->CreateLinearGradientBrush(
             D2D1::LinearGradientBrushProperties(diagStart, diagEnd),
             pDiagStops.Get(),
             &m_diagonalBrush
@@ -115,18 +122,18 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const 
             { 0.2f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f) }, // Fast falloff
             { 1.0f, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.40f) }  // Bottom edge contour
         };
-        pContext->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pBevelStops);
+        pRT->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pBevelStops);
     } else {
         D2D1_GRADIENT_STOP stops[] = {
             { 0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.80f) }, // Top edge sharp white
             { 0.2f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.30f) }, // Slower falloff in light mode
             { 1.0f, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f) }  // Bottom faint shadow
         };
-        pContext->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pBevelStops);
+        pRT->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pBevelStops);
     }
 
     if (pBevelStops) {
-        pContext->CreateLinearGradientBrush(
+        pRT->CreateLinearGradientBrush(
             D2D1::LinearGradientBrushProperties(bevelStart, bevelEnd),
             pBevelStops.Get(),
             &m_bevelBrush
@@ -134,15 +141,19 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const 
     }
 }
 
-void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const GeekGlassConfig& config) {
-    if (!pContext) return;
+void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlassConfig& config) {
+    if (!pRT) return;
+
+    // 0. Effects require DeviceContext
+    ComPtr<ID2D1DeviceContext> pContext;
+    pRT->QueryInterface(IID_PPV_ARGS(&pContext));
 
     // 1. Prepare panel geometry
     D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(config.panelBounds, config.cornerRadius, config.cornerRadius);
 
     // Create the rounded rectangle geometry used for clipping
     ComPtr<ID2D1Factory> factory;
-    pContext->GetFactory(&factory);
+    pRT->GetFactory(&factory);
     ComPtr<ID2D1RoundedRectangleGeometry> roundedGeometry;
     if (FAILED(factory->CreateRoundedRectangleGeometry(&roundedRect, &roundedGeometry))) {
         return;
@@ -159,10 +170,10 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const Gee
         D2D1_LAYER_OPTIONS_NONE
     );
 
-    pContext->PushLayer(layerParams, nullptr);
+    pRT->PushLayer(layerParams, nullptr);
 
     // 3. Track execution
-    if (config.enableGeekGlass && config.track == RenderTrack::TrackA_CommandList && config.pBackgroundCommandList && m_blurEffect && m_cropEffect && m_transformEffect) {
+    if (pContext && config.enableGeekGlass && config.track == RenderTrack::TrackA_CommandList && config.pBackgroundCommandList && m_blurEffect && m_cropEffect && m_transformEffect) {
         
         // Feed the command list into transform effect to map DComp coordinates to D2D screen space
         m_transformEffect->SetInput(0, config.pBackgroundCommandList);
@@ -193,11 +204,11 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const Gee
     // Tint, specular, and bevel still render below.
 
     // 4. Update Brushes
-    CreateOrUpdateBrushes(pContext, config);
+    CreateOrUpdateBrushes(pRT, config);
 
     // Render Base Tint Fill
     if (m_baseTintBrush) {
-        pContext->FillRoundedRectangle(&roundedRect, m_baseTintBrush.Get());
+        pRT->FillRoundedRectangle(&roundedRect, m_baseTintBrush.Get());
     }
 
     // Render Diagonal Specular Highlight Fill (with smart luminance-based suppression)
@@ -221,7 +232,7 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const Gee
 
         if (specularScale > 0.001f) {
             m_diagonalBrush->SetOpacity(specularScale);
-            pContext->FillRoundedRectangle(&roundedRect, m_diagonalBrush.Get());
+            pRT->FillRoundedRectangle(&roundedRect, m_diagonalBrush.Get());
             m_diagonalBrush->SetOpacity(1.0f); // Reset for next frame
         }
     }
@@ -232,11 +243,39 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const Gee
         D2D1_ROUNDED_RECT strokeRect = roundedRect;
         strokeRect.rect.left += 0.5f;   strokeRect.rect.top += 0.5f;
         strokeRect.rect.right -= 0.5f;  strokeRect.rect.bottom -= 0.5f;
-        pContext->DrawRoundedRectangle(&strokeRect, m_bevelBrush.Get(), 1.0f);
+        pRT->DrawRoundedRectangle(&strokeRect, m_bevelBrush.Get(), 1.0f);
     }
 
     // 5. Unclip
-    pContext->PopLayer();
+    pRT->PopLayer();
+}
+
+GeekGlassConfig GetGlobalThemeConfig() {
+    GeekGlassConfig config;
+    config.enableGeekGlass = g_config.EnableGeekGlass;
+    config.theme = IsLightThemeActive() ? ThemeMode::Light : ThemeMode::Dark;
+    
+    config.blurStandardDeviation = g_config.GlassBlurSigma;
+    config.tintAlpha = g_config.GlassTintAlpha;
+    config.specularOpacity = g_config.GlassSpecularOpacity;
+    
+    // GlassModalsOpacity is 0-100 percentage
+    config.opacity = g_config.GlassModalsOpacity / 100.0f;
+
+    config.tintProfile = g_config.GlassTintProfile;
+    config.customTintColor = D2D1::ColorF(
+        g_config.GlassCustomTintR,
+        g_config.GlassCustomTintG,
+        g_config.GlassCustomTintB
+    );
+    
+    // Corner radius synced with global setting
+    config.cornerRadius = 8.0f; // Default for context menus
+    
+    // Use Track B for context menus by default as they use UpdateLayeredWindow
+    config.track = RenderTrack::TrackB_DWM;
+
+    return config;
 }
 
 } // namespace QuickView::UI::GeekGlass

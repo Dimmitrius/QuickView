@@ -59,16 +59,16 @@ namespace QuickView::UI::GeekGlass {
         ~GeekGlassEngine() { ReleaseResources(); }
 
         // Initializes shared resources (effects). Call once after device creation.
-        void InitializeResources(ID2D1DeviceContext* pContext);
+        void InitializeResources(ID2D1RenderTarget* pRT);
         void ReleaseResources();
 
         // Performs the unified effect composition: 
         // Background Blur + Diagonal Gradient Tint + 1px Physical Highlight Bevel
-        void DrawGeekGlassPanel(ID2D1DeviceContext* pContext, const GeekGlassConfig& config);
+        void DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlassConfig& config);
 
     private:
         // Caches brushes based on dimensions to avoid constant recreation overhead
-        void CreateOrUpdateBrushes(ID2D1DeviceContext* pContext, const GeekGlassConfig& config);
+        void CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGlassConfig& config);
 
         ComPtr<ID2D1Effect> m_blurEffect;
         ComPtr<ID2D1Effect> m_cropEffect;
@@ -86,5 +86,8 @@ namespace QuickView::UI::GeekGlass {
         float m_currentSpecularOpacity = 0.15f;
         D2D1_RECT_F m_currentBounds = {};
     };
+    
+    // Global helper to map AppConfig (from EditState.h) to GeekGlassConfig
+    GeekGlassConfig GetGlobalThemeConfig();
 
 } // namespace QuickView::UI::GeekGlass

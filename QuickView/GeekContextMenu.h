@@ -13,6 +13,7 @@
 
 #include "pch.h"
 #include "GeekIconLibrary.h"
+#include "GeekGlass.h"
 #include <d2d1_1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
@@ -138,6 +139,7 @@ private:
     void RenderItem(const GeekMenuItem& item, int index);
     void RenderSeparator(float y);
     void RenderBevel();
+    void RenderAndUI();          // The new unified render + UpdateLayeredWindow path
     void ApplyWindowRegion();    // DWM rounded window region
 
     // Hit Testing (coordinates are local to this menu window)
@@ -171,7 +173,7 @@ private:
 
     // D2D
     ComPtr<ID2D1Factory1> m_factory;
-    ComPtr<ID2D1HwndRenderTarget> m_rt;
+    ComPtr<ID2D1DCRenderTarget> m_rt;
     ComPtr<IDWriteFactory> m_dwFactory;
     ComPtr<IDWriteTextFormat> m_itemFont;
     ComPtr<IDWriteTextFormat> m_shortcutFont;
@@ -217,6 +219,7 @@ private:
     // Menu chain
     GeekContextMenu* m_parentMenu = nullptr;
     std::unique_ptr<GeekContextMenu> m_childMenu;
+    QuickView::UI::GeekGlass::GeekGlassEngine m_glassEngine;
 
     // Layout metrics (in DPI-scaled pixels)
     float m_menuW = 0;

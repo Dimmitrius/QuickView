@@ -135,9 +135,7 @@ void GeekContextMenu::ShowMenu(HWND parent, int sx, int sy,
     if (!menu->m_hwnd) return;
     SetWindowLongPtrW(menu->m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(menu.get()));
 
-    // Make the window fully transparent instantly before it shown
-    SetLayeredWindowAttributes(menu->m_hwnd, 0, 0, LWA_ALPHA);
-
+    // Note: RenderAndUI will handle UpdateLayeredWindow with initial alpha
     menu->m_hasAcrylic = menu->ApplyAcrylic();
     MARGINS margins = { -1, -1, -1, -1 };
     DwmExtendFrameIntoClientArea(menu->m_hwnd, &margins);
@@ -193,9 +191,7 @@ void GeekContextMenu::ShowSubmenuPopup(HWND parent, int sx, int sy,
     if (!sub->m_hwnd) return;
     SetWindowLongPtrW(sub->m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(sub.get()));
 
-    // Start fully transparent
-    SetLayeredWindowAttributes(sub->m_hwnd, 0, 0, LWA_ALPHA);
-
+    // sub window setup
     sub->m_hasAcrylic = sub->ApplyAcrylic();
     MARGINS margins = { -1, -1, -1, -1 };
     DwmExtendFrameIntoClientArea(sub->m_hwnd, &margins);
@@ -258,13 +254,12 @@ LRESULT CALLBACK GeekContextMenu::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 LRESULT GeekContextMenu::HandleMsg(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_PAINT: {
-        PAINTSTRUCT ps;
-        BeginPaint(hwnd, &ps);
-        Paint();
-        EndPaint(hwnd, &ps);
-        return 0;
+      ValidateRect(hwnd, nullptr);
+      RenderAndUI();
+      return 0;
     }
-    case WM_ERASEBKGND: return 1;
+    case WM_ERASEBKGND:
+      return 1;
 
     case WM_MOUSEMOVE: {
         POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
@@ -328,8 +323,8 @@ bool GeekContextMenu::ApplyAcrylic() {
     if (!fn || !m_hwnd) return false;
     ACCENT_POLICY accent = {};
     accent.nAccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
-    accent.nFlags = 2;
-    accent.nColor = m_isLight ? 0x80F0F0F0 : 0x80101018;
+    accent.nFlags = 0; // Standard acrylic
+    accent.nColor = m_isLight ? 0x0AF0F0F0 : 0x0A101018; // Ultra-low 0x0A alpha (4%) to keep blur active with minimal tint interference
     WINCOMPATTRDATA data = {};
     data.nAttribute = 19;
     data.pvData = &accent;
@@ -349,15 +344,16 @@ void GeekContextMenu::CreateResources() {
                         reinterpret_cast<IUnknown**>(m_dwFactory.GetAddressOf()));
     if (!m_factory || !m_dwFactory) return;
 
+    m_rt.Reset();
     RECT rc; GetClientRect(m_hwnd, &rc);
     auto rtProps = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-    auto hwndProps = D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right, rc.bottom));
-    m_factory->CreateHwndRenderTarget(rtProps, hwndProps, &m_rt);
+    m_factory->CreateDCRenderTarget(&rtProps, &m_rt);
     if (!m_rt) return;
-    m_rt->SetDpi(96.0f * m_scale, 96.0f * m_scale);
-    m_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+    // Initialize Glass Engine
+    m_glassEngine.InitializeResources(m_rt.Get());
 
     // Text formats
     m_dwFactory->CreateTextFormat(L"Segoe UI Variable Small", nullptr,
@@ -395,8 +391,12 @@ void GeekContextMenu::CreateResources() {
     m_rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, L ? 0.50f : 0.12f), &m_bevelLightBrush);
     m_rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, L ? 0.06f : 0.25f), &m_bevelDarkBrush);
     // Capsule
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0,0,0,0.05f) : D2D1::ColorF(1,1,1,0.08f)), &m_capsuleBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0,0,0,0.08f) : D2D1::ColorF(1,1,1,0.10f)), &m_capsuleBorderBrush);
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0, 0, 0, 0.12f)
+                                               : D2D1::ColorF(1, 1, 1, 0.15f)),
+                                &m_capsuleBrush);
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0, 0, 0, 0.15f)
+                                               : D2D1::ColorF(1, 1, 1, 0.18f)),
+                                &m_capsuleBorderBrush);
 
     // Diagonal gradient
     auto sz = m_rt->GetSize();
@@ -432,6 +432,7 @@ void GeekContextMenu::DiscardResources() {
     m_bevelLightBrush.Reset(); m_bevelDarkBrush.Reset();
     m_capsuleBrush.Reset(); m_capsuleBorderBrush.Reset();
     m_clipGeometry.Reset(); m_clipLayer.Reset();
+    m_glassEngine.ReleaseResources();
 }
 
 // ============================================================
@@ -473,54 +474,12 @@ SIZE GeekContextMenu::GetWindowSize() const {
 }
 
 // ============================================================
-// Paint (Layer Clipping for rounded corners)
+// Paint
 // ============================================================
-void GeekContextMenu::Paint() {
-    if (!m_rt) return;
-    m_rt->BeginDraw();
-    m_rt->Clear(D2D1::ColorF(0, 0, 0, 0));
-
-    if (!m_hasAcrylic) {
-        auto sz = m_rt->GetSize();
-        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(0, 0, sz.width, sz.height), CORNER_R, CORNER_R);
-        ComPtr<ID2D1SolidColorBrush> fb;
-        if (m_isLight) m_rt->CreateSolidColorBrush(D2D1::ColorF(0.96f, 0.96f, 0.97f, 0.96f), &fb);
-        else           m_rt->CreateSolidColorBrush(D2D1::ColorF(0.11f, 0.11f, 0.13f, 0.97f), &fb);
-        if (fb) m_rt->FillRoundedRectangle(rr, fb.Get());
-    }
-
-    m_rt->SetTransform(D2D1::Matrix3x2F::Identity());
-
-    // Push rounded clip layer — everything rendered inside is clipped to rounded rect
-    if (m_clipGeometry && m_clipLayer) {
-        m_rt->PushLayer(
-            D2D1::LayerParameters(D2D1::InfiniteRect(), m_clipGeometry.Get()),
-            m_clipLayer.Get());
-    }
-
-    RenderGlassOverlay();
-    RenderCapsule();
-    RenderActionRow();
-    RenderItems();
-
-    if (m_clipGeometry && m_clipLayer) m_rt->PopLayer();
-
-    // Bevel drawn OVER the clip (at window edges)
-    m_rt->SetTransform(D2D1::Matrix3x2F::Identity());
-    RenderBevel();
-
-    m_rt->EndDraw();
-}
-
+void GeekContextMenu::Paint() { RenderAndUI(); }
 // ============================================================
 // Render Helpers
 // ============================================================
-void GeekContextMenu::RenderGlassOverlay() {
-    if (!m_diagBrush) return;
-    auto sz = m_rt->GetSize();
-    m_rt->FillRectangle(D2D1::RectF(0, 0, sz.width, sz.height), m_diagBrush.Get());
-}
-
 void GeekContextMenu::RenderCapsule() {
     if (m_actions.empty() || !m_capsuleBrush) return;
     // Capsule: rounded rect spanning all action buttons
@@ -840,9 +799,7 @@ void GeekContextMenu::StartAnimation() {
     if (!g_config.GlassUIAnimations) {
         m_animating = false;
         m_animT = 1.0f;
-        SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
-        SetWindowPos(m_hwnd, nullptr, m_targetX, m_targetY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        RenderAndUI();
         return;
     }
     m_animating = true;
@@ -860,18 +817,90 @@ void GeekContextMenu::TickAnimation() {
         m_animating = false;
         KillTimer(m_hwnd, TIMER_ANIM);
     }
+
+    // Update the window via the unified render path
+    RenderAndUI();
+}
+
+void GeekContextMenu::RenderAndUI() {
+  if (!m_rt || !m_hwnd)
+    return;
+
+  RECT rc;
+  GetClientRect(m_hwnd, &rc);
+  int width = rc.right - rc.left;
+  int height = rc.bottom - rc.top;
+  if (width <= 0 || height <= 0)
+    return;
+
+  // 1. Prepare Memory DC and 32-bit DIB Section
+  BITMAPINFO bmi = {};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = width;
+  bmi.bmiHeader.biHeight = -height; // Top-down
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+
+  void *pBits = nullptr;
+  HDC hdcScreen = GetDC(nullptr);
+  HBITMAP hBitmap =
+      CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+  HDC hdcMem = CreateCompatibleDC(hdcScreen);
+  HGDIOBJ oldBitmap = SelectObject(hdcMem, hBitmap);
+  ReleaseDC(nullptr, hdcScreen);
+
+  // 2. Bind DCRenderTarget and Begin Draw
+  m_rt->BindDC(hdcMem, &rc);
+  m_rt->SetDpi(96.0f * m_scale, 96.0f * m_scale);
+  m_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+  m_rt->BeginDraw();
+  m_rt->Clear(D2D1::ColorF(0, 0, 0, 0.0f));
+
+  // 3. Render Geek Glass Panel (Track B: DWM-based blur)
+  auto config = QuickView::UI::GeekGlass::GetGlobalThemeConfig();
+  config.panelBounds =
+      D2D1::RectF(0, 0, (float)width / m_scale, (float)height / m_scale);
+  config.cornerRadius = CORNER_R;
+  config.track = QuickView::UI::GeekGlass::RenderTrack::TrackB_DWM;
+
+    m_glassEngine.DrawGeekGlassPanel(m_rt.Get(), config);
+
+    // 4. Render Menu Content (Syncing detail brushes with master opacity for consistency)
+    if (m_capsuleBrush) m_capsuleBrush->SetOpacity(config.opacity);
+    if (m_capsuleBorderBrush) m_capsuleBorderBrush->SetOpacity(config.opacity);
+    if (m_bevelLightBrush) m_bevelLightBrush->SetOpacity(config.opacity);
+    if (m_bevelDarkBrush) m_bevelDarkBrush->SetOpacity(config.opacity);
+    if (m_sepBrush) m_sepBrush->SetOpacity(config.opacity);
     
-    // Smooth transition interpolators
-    // Ease-out curve for alpha and position (deceleration)
-    float easeT = 1.0f - std::pow(1.0f - m_animT, 3.0f);
-    
-    BYTE alpha = (BYTE)(255.0f * easeT);
-    SetLayeredWindowAttributes(m_hwnd, 0, alpha, LWA_ALPHA);
-    
-    int offsetY = (int)(10.0f * (1.0f - easeT));
-    SetWindowPos(m_hwnd, nullptr, m_targetX, m_targetY + offsetY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-    
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    RenderCapsule();
+    RenderActionRow();
+    RenderItems();
+    RenderBevel();
+
+  m_rt->EndDraw();
+
+  // 5. Update Window Position and Alpha via UpdateLayeredWindow
+  float easeT = 1.0f;
+  if (m_animating) {
+    easeT = 1.0f - std::pow(1.0f - m_animT, 3.0f);
+  }
+
+  BLENDFUNCTION blend = {AC_SRC_OVER, 0, (BYTE)(255 * easeT), AC_SRC_ALPHA};
+  POINT ptSrc = {0, 0};
+  SIZE sizeWin = {width, height};
+
+  int offsetY = (int)(10.0f * (1.0f - easeT));
+  POINT ptDst = {m_targetX, m_targetY + offsetY};
+
+  UpdateLayeredWindow(m_hwnd, nullptr, &ptDst, &sizeWin, hdcMem, &ptSrc, 0,
+                      &blend, ULW_ALPHA);
+
+  // 6. Cleanup
+  SelectObject(hdcMem, oldBitmap);
+  DeleteDC(hdcMem);
+  DeleteObject(hBitmap);
 }
 
 } // namespace QuickView::UI::Menu
