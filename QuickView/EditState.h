@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "LosslessTransform.h" // For EditQuality enum
 #include <d2d1.h>
+#include "ImageTypes.h"
 
 // EditQuality enum definition moved to LosslessTransform.h
 
@@ -347,6 +348,56 @@ struct ViewState {
         IsPendingFullscreenExitDrag = false;
     }
 };
+
+// Animation state
+struct AnimationPlaybackState {
+    bool IsAnimated = false;          
+    bool IsPlaying = true;            
+    bool InspectorMode = false;       
+    bool ShowDirtyRect = false;       
+    uint32_t TotalFrames = 1;         
+    uint32_t CurrentFrameIndex = 0;   
+    uint32_t CurrentFrameDelayTime = 0;
+    QuickView::FrameDisposalMode CurrentDisposal = QuickView::FrameDisposalMode::Keep;
+    
+    bool IsScrubbing = false;
+    float ScrubberHoverPercent = -1.0f;
+    
+    // Dirty rect in image-space coordinates
+    int DirtyRcLeft = 0, DirtyRcTop = 0, DirtyRcRight = 0, DirtyRcBottom = 0;
+    bool HasDirtyRect = false;
+    
+    // Image-to-screen transform (for dirty rect overlay)
+    float FitScale = 1.0f;
+    float FitOffsetX = 0.0f;
+    float FitOffsetY = 0.0f;
+    
+    // Original dimensions for DComp projection mapping
+    float ImageWidth = 0.0f;
+    float ImageHeight = 0.0f;
+    float WindowWidth = 0.0f;
+    float WindowHeight = 0.0f;
+    
+    void Reset() {
+        IsAnimated = false;
+        IsPlaying = true;
+        InspectorMode = false;
+        ShowDirtyRect = false;
+        TotalFrames = 1;
+        CurrentFrameIndex = 0;
+        CurrentFrameDelayTime = 0;
+        CurrentDisposal = QuickView::FrameDisposalMode::Keep;
+        IsScrubbing = false;
+        ScrubberHoverPercent = -1.0f;
+        DirtyRcLeft = DirtyRcTop = DirtyRcRight = DirtyRcBottom = 0;
+        HasDirtyRect = false;
+
+        FitScale = 1.0f;
+        FitOffsetX = FitOffsetY = 0.0f;
+        ImageWidth = ImageHeight = WindowWidth = WindowHeight = 0.0f;
+        }
+};
+extern AnimationPlaybackState g_animationState;
 
 // Runtime State (Reset on Restart)
 struct RuntimeConfig {

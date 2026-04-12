@@ -123,9 +123,9 @@ public:
     
     bool RenderAll(HWND hwnd);  // 渲染所有需要更新的层
     
-    // ===== State Injection (Decoupled from main.cpp globals) =====
     void UpdateMetadata(const CImageLoader::ImageMetadata& metadata, const std::wstring& imagePath);
     void UpdateViewState(const ViewState& viewState);
+    void UpdateAnimationState(const AnimationPlaybackState& animState);
     void UpdateHoverState(POINT mousePos, int hoverRowIndex);
     
     // ===== Glass Rendering Hooks =====
@@ -222,6 +222,9 @@ private:
     AdaptiveUiPalette BuildAdaptivePalette(float luminance, float* ioBlend) const;
     static D2D1_COLOR_F LerpColor(const D2D1_COLOR_F& a, const D2D1_COLOR_F& b, float t);
     
+    // [v10.5] Animation Scrubber & UI
+    void DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd);
+    
 public:
     // ===== Text Measurement Helpers =====
     float MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format = nullptr) const;
@@ -243,6 +246,7 @@ private:
     CImageLoader::ImageMetadata m_metadata;
     std::wstring m_imagePath;
     ViewState m_viewState;
+    AnimationPlaybackState m_animState;
     std::vector<InfoRow> m_infoGrid;
     POINT m_lastMousePos = {};
     int m_hoverRowIndex = -1;

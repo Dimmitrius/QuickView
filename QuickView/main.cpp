@@ -165,6 +165,7 @@ static void SyncDCompState(HWND hwnd, float winW, float winH, bool animate);
 
 static const wchar_t* g_szClassName = L"QuickViewClass";
 static const wchar_t* g_szWindowTitle = L"QuickView 2026";
+void HandleAnimFrameStep(HWND hwnd, bool forward); // [v10.5] fwd decl
 static std::unique_ptr<CRenderEngine> g_renderEngine;
 static std::unique_ptr<CImageLoader> g_imageLoader;
 static std::unique_ptr<ImageEngine> g_imageEngine;
@@ -174,7 +175,6 @@ static std::unique_ptr<UIRenderer> g_uiRenderer;  // 鐙珛 UI 灞傛覆鏌�
 static InputController g_inputController;  // Quantum Stream: 杈撳叆鐘舵€佹満
 CRenderEngine* g_pRenderEngine = nullptr; // Global raw alias for linker compatibility
 
-// [Fix] Fullscreen State Tracking
 bool g_isFullScreen = false;
 static WINDOWPLACEMENT g_savedWindowPlacement = { sizeof(WINDOWPLACEMENT) };
 
@@ -236,6 +236,10 @@ struct ImageResource {
     QuickView::GpuShaderPayload shaderPayload = {};
     std::unique_ptr<QuickView::AuxLayer> auxLayer;
 
+    // [v10.5] Animation state
+    std::shared_ptr<QuickView::IAnimationDecoder> animator;
+    QuickView::AnimationFrameMeta frameMeta;
+
     void Reset() {
         bitmap.Reset();
         svgDoc.Reset();
@@ -244,6 +248,8 @@ struct ImageResource {
         blendOp = QuickView::GpuBlendOp::None;
         shaderPayload = {};
         auxLayer.reset();
+        animator.reset();
+        frameMeta = {};
     }
 
     ImageResource() = default;
@@ -264,6 +270,8 @@ struct ImageResource {
         if (auxLayer) {
             cloned.auxLayer = auxLayer->Clone();
         }
+        cloned.animator = animator;
+        cloned.frameMeta = frameMeta;
         return cloned;
     }
     
@@ -300,6 +308,12 @@ static bool g_isBlurry = false; // For Motion Blur (Ghost)
 static bool g_isCrossFading = false;
 bool g_slowMotionMode = false; // [Debug] Slow crossfade for timing analysis
 static ComPtr<ID2D1Bitmap> g_ghostBitmap; // For Cross-Fade
+
+// [v10.5] Animation Control
+static bool g_animPlaying = true;
+static int g_animInspectorFrame = -1; // -1 means playing normally
+static bool g_showAnimDirtyRect = false; // [v10.5] Dirty rect debug overlay
+#define IDT_ANIMATION 105
 OSDState g_osd; // Removed static, explicitly Global
 
 DWORD g_toolbarHideTime = 0; // For auto-hide delay
@@ -880,91 +894,7 @@ static bool CopyToClipboard(HWND hwnd, const std::wstring& text) {
     return hMem != nullptr;
 }
 
-// Helper: Format bytes with thousand separators (e.g., 1,138,997 B)
-static std::wstring FormatBytesWithCommas(UINT64 bytes) {
-    std::wstring num = std::to_wstring(bytes);
-    int insertPos = (int)num.length() - 3;
-    while (insertPos > 0) {
-        num.insert(insertPos, L",");
-        insertPos -= 3;
-    }
-    return num + L" B";
-}
 
-static std::wstring FormatBytesShort(UINT64 bytes) {
-    if (bytes == 0) return L"-";
-    const wchar_t* units[] = { L"B", L"KB", L"MB", L"GB", L"TB" };
-    double size = (double)bytes;
-    int unit = 0;
-    while (size >= 1024.0 && unit < 4) {
-        size /= 1024.0;
-        ++unit;
-    }
-    wchar_t buf[64];
-    if (unit == 0) {
-        swprintf_s(buf, L"%llu B", (unsigned long long)bytes);
-    } else if (size < 10.0) {
-        swprintf_s(buf, L"%.2f %s", size, units[unit]);
-    } else if (size < 100.0) {
-        swprintf_s(buf, L"%.1f %s", size, units[unit]);
-    } else {
-        swprintf_s(buf, L"%.0f %s", size, units[unit]);
-    }
-    return buf;
-}
-
-static std::wstring FormatMegaPixels(UINT width, UINT height) {
-    if (width == 0 || height == 0) return L"-";
-    double mp = (double)width * (double)height / 1000000.0;
-    wchar_t buf[64];
-    swprintf_s(buf, L"%.2f MP", mp);
-    return buf;
-}
-
-static std::wstring FormatOptional(const std::wstring& value) {
-    return value.empty() ? L"-" : value;
-}
-
-// Helper: Calculate visible rect in Document Space (without margin)
-static D2D1_RECT_F GetVisibleRect() {
-     float screenW = g_lastSurfaceSize.width > 0 ? g_lastSurfaceSize.width : (float)GetSystemMetrics(SM_CXSCREEN);
-     float screenH = g_lastSurfaceSize.height > 0 ? g_lastSurfaceSize.height : (float)GetSystemMetrics(SM_CYSCREEN);
-
-     D2D1_POINT_2F pMin = {0,0};
-     D2D1_POINT_2F pMax = {screenW, screenH};
-     
-     auto mapPt = [&](D2D1_POINT_2F p) -> D2D1_POINT_2F {
-          // 1. Inverse DComp Zoom/Pan
-          float x = (p.x - g_viewState.PanX) / g_viewState.Zoom;
-          float y = (p.y - g_viewState.PanY) / g_viewState.Zoom;
-          
-          // 2. Inverse D2D Fit/Offset
-          x = (x - g_lastFitOffset.x) / g_lastFitScale;
-          y = (y - g_lastFitOffset.y) / g_lastFitScale;
-          return {x, y};
-     };
-     
-     D2D1_POINT_2F rMin = mapPt(pMin);
-     D2D1_POINT_2F rMax = mapPt(pMax);
-     
-     D2D1_RECT_F rect = D2D1::RectF(rMin.x, rMin.y, rMax.x, rMax.y);
-
-     // [SVG] Convert from Bitmap Space to Document Space
-     if (g_currentMetadata.Format == L"SVG" && g_imageResource) {
-         D2D1_SIZE_F bmpSize = g_imageResource.GetSize();
-         if (bmpSize.width > 0 && g_currentMetadata.Width > 0) {
-             float scaleX = (float)g_currentMetadata.Width / bmpSize.width;
-             float scaleY = (float)g_currentMetadata.Height / bmpSize.height;
-             
-             rect.left *= scaleX;
-             rect.right *= scaleX;
-             rect.top *= scaleY;
-             rect.bottom *= scaleY;
-         }
-     }
-     
-     return rect;
-}
 
 // --- Persistence Helpers ---
 
@@ -1133,17 +1063,7 @@ static bool IsCompareContextLeft() {
     return IsCompareModeActive() && g_compare.contextPane == ComparePane::Left;
 }
 
-static const std::wstring& GetCompareContextPath() {
-    return IsCompareContextLeft() ? g_compare.left.path : g_imagePath;
-}
 
-static const CImageLoader::ImageMetadata& GetCompareContextMetadata() {
-    return IsCompareContextLeft() ? g_compare.left.metadata : g_currentMetadata;
-}
-
-static bool HasCompareContextImage() {
-    return IsCompareContextLeft() ? g_compare.left.valid : (bool)g_imageResource;
-}
 
 static float ClampCompareRatio(float value) {
     if (value < 0.001f) return 0.0f;
@@ -1334,71 +1254,7 @@ static bool IsNearCompareDivider(HWND hwnd, const POINT& ptClient, float thresho
     return fabsf((float)ptClient.x - splitX) <= threshold;
 }
 
-static std::wstring BuildCompareInfoMessage(const CImageLoader::ImageMetadata& l, const CImageLoader::ImageMetadata& r) {
-    std::wstring msg;
-    auto appendLine = [&](const std::wstring& line) {
-        msg += line;
-        msg += L"\n";
-    };
-    auto formatFormat = [&](const CImageLoader::ImageMetadata& m) -> std::wstring {
-        if (m.Format.empty()) return L"-";
-        if (m.FormatDetails.empty()) return m.Format;
-        return m.Format + L" (" + m.FormatDetails + L")";
-    };
-    auto formatLoader = [&](const CImageLoader::ImageMetadata& m) -> std::wstring {
-        std::wstring name = FormatOptional(m.LoaderName);
-        if (m.LoadTimeMs > 0) {
-            name += L" (" + std::to_wstring(m.LoadTimeMs) + L" ms)";
-        }
-        return name;
-    };
-    auto betterTag = [&](int cmp) -> std::wstring {
-        if (cmp > 0) return L"L";
-        if (cmp < 0) return L"R";
-        return L"=";
-    };
-    auto hasFileTime = [&](const FILETIME& ft) -> bool {
-        return ft.dwLowDateTime != 0 || ft.dwHighDateTime != 0;
-    };
 
-    const uint64_t lPixels = (uint64_t)l.Width * (uint64_t)l.Height;
-    const uint64_t rPixels = (uint64_t)r.Width * (uint64_t)r.Height;
-    const int resCmp = (lPixels > 0 && rPixels > 0) ? (lPixels > rPixels ? 1 : (lPixels < rPixels ? -1 : 0)) : 0;
-    std::wstring lRes = (l.Width && l.Height)
-        ? (std::to_wstring(l.Width) + L"x" + std::to_wstring(l.Height) + L" (" + FormatMegaPixels(l.Width, l.Height) + L")")
-        : L"-";
-    std::wstring rRes = (r.Width && r.Height)
-        ? (std::to_wstring(r.Width) + L"x" + std::to_wstring(r.Height) + L" (" + FormatMegaPixels(r.Width, r.Height) + L")")
-        : L"-";
-    appendLine(L"Resolution: L " + lRes + L" | R " + rRes + L" | Better: " + betterTag(resCmp));
-
-    const int sizeCmp = (l.FileSize > 0 && r.FileSize > 0) ? (l.FileSize < r.FileSize ? 1 : (l.FileSize > r.FileSize ? -1 : 0)) : 0;
-    std::wstring lSize = (l.FileSize > 0) ? (FormatBytesShort(l.FileSize) + L" (" + FormatBytesWithCommas(l.FileSize) + L")") : L"-";
-    std::wstring rSize = (r.FileSize > 0) ? (FormatBytesShort(r.FileSize) + L" (" + FormatBytesWithCommas(r.FileSize) + L")") : L"-";
-    appendLine(L"File size:  L " + lSize + L" | R " + rSize + L" | Better: " + betterTag(sizeCmp) + L" (smaller)");
-
-    appendLine(L"Format:     L " + formatFormat(l) + L" | R " + formatFormat(r));
-    appendLine(L"ColorSpace: L " + FormatOptional(l.ColorSpace) + L" | R " + FormatOptional(r.ColorSpace));
-
-    int dateCmp = 0;
-    if (hasFileTime(l.LastWriteTime) && hasFileTime(r.LastWriteTime)) {
-        dateCmp = CompareFileTime(&l.LastWriteTime, &r.LastWriteTime);
-    }
-    std::wstring dateTag = (dateCmp == 0) ? L"-" : betterTag(dateCmp);
-    appendLine(L"Date:       L " + FormatOptional(l.Date) + L" | R " + FormatOptional(r.Date) + L" | Newer: " + dateTag);
-
-    const int loadCmp = (l.LoadTimeMs > 0 && r.LoadTimeMs > 0) ? (l.LoadTimeMs < r.LoadTimeMs ? 1 : (l.LoadTimeMs > r.LoadTimeMs ? -1 : 0)) : 0;
-    appendLine(L"Loader:     L " + formatLoader(l) + L" | R " + formatLoader(r) + L" | Faster: " + betterTag(loadCmp));
-
-    std::wstring lExif = l.GetCompactString();
-    std::wstring rExif = r.GetCompactString();
-    if (!lExif.empty() || !rExif.empty()) {
-        appendLine(L"EXIF:       L " + FormatOptional(lExif) + L" | R " + FormatOptional(rExif));
-    }
-
-    if (!msg.empty()) msg.pop_back(); // remove trailing newline
-    return msg;
-}
 
 static void DrawResourceIntoViewport(ID2D1DeviceContext* ctx,
                                      const ImageResource& res,
@@ -2015,39 +1871,7 @@ static UINT GetSvgSurfaceSizeLimit() {
     return (std::min)(textureLimit, memoryLimit);
 }
 
-static SvgSurfaceSpec CalculateSvgSurfaceSpec(float viewportW, float viewportH, const ImageResource& res, float zoom) {
-    SvgSurfaceSpec spec{};
-    if (!res.isSvg || res.svgW <= 0.0f || res.svgH <= 0.0f) {
-        return spec;
-    }
 
-    viewportW = std::max(1.0f, viewportW);
-    viewportH = std::max(1.0f, viewportH);
-
-    const float effectiveZoom = std::max(1.0f, zoom);
-    const float superSample = 2.0f;
-
-    spec.RawW = viewportW * effectiveZoom * superSample;
-    spec.RawH = viewportH * effectiveZoom * superSample;
-
-    spec.SurfaceScale = std::min(spec.RawW / res.svgW, spec.RawH / res.svgH);
-
-    const float maxSurfaceSize = (float)GetSvgSurfaceSizeLimit();
-    const float maxScale = std::min(maxSurfaceSize / res.svgW,
-                                    maxSurfaceSize / res.svgH);
-    if (spec.SurfaceScale > maxScale) spec.SurfaceScale = maxScale;
-
-    const float minScale = std::min(viewportW / res.svgW, viewportH / res.svgH);
-    if (spec.SurfaceScale < minScale) spec.SurfaceScale = minScale;
-
-    spec.Width = std::max(1u, static_cast<UINT>(std::lround(res.svgW * spec.SurfaceScale)));
-    spec.Height = std::max(1u, static_cast<UINT>(std::lround(res.svgH * spec.SurfaceScale)));
-
-    spec.FitScale = std::min((float)spec.Width / res.svgW, (float)spec.Height / res.svgH);
-    spec.OffsetX = (spec.Width - res.svgW * spec.FitScale) / 2.0f;
-    spec.OffsetY = (spec.Height - res.svgH * spec.FitScale) / 2.0f;
-    return spec;
-}
 
 static D2D1_MATRIX_3X2_F CombineWithCurrentTransform(ID2D1DeviceContext* ctx, const D2D1_MATRIX_3X2_F& transform) {
     D2D1_MATRIX_3X2_F current = D2D1::Matrix3x2F::Identity();
@@ -2319,8 +2143,12 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
         D2D1_MATRIX_3X2_F transform = BuildSvgViewportTransform((float)winW, (float)winH, res, vs);
         DrawSvgWithViewportTransform(ctx, res, transform);
         
-        g_lastFitScale = std::min((float)winW / std::max(1.0f, vs.VisualSize.width),
-                                  (float)winH / std::max(1.0f, vs.VisualSize.height));
+        float scale = std::min((float)winW / std::max(1.0f, vs.VisualSize.width),
+                               (float)winH / std::max(1.0f, vs.VisualSize.height));
+        if (g_runtime.LockWindowSize && !g_config.UpscaleSmallImagesWhenLocked && scale > 1.0f) {
+            scale = 1.0f;
+        }
+        g_lastFitScale = scale;
         g_lastFitOffset = D2D1::Point2F(((float)winW - vs.VisualSize.width * g_lastFitScale) * 0.5f,
                                         ((float)winH - vs.VisualSize.height * g_lastFitScale) * 0.5f);
         
@@ -2366,6 +2194,11 @@ static bool RenderImageToDComp(HWND hwnd, ImageResource& res, bool isFastUpgrade
         }
 
         float scale = std::min((float)surfW / scaleCalcW, (float)surfH / scaleCalcH);
+        
+        // [Fix] Enforce small image scaling rules for g_lastFitScale to match UIRenderer projection
+        if (g_runtime.LockWindowSize && !g_config.UpscaleSmallImagesWhenLocked && scale > 1.0f) {
+            scale = 1.0f;
+        }
 
         // Store Metrics (Logical Scale)
         g_lastFitScale = scale;
@@ -5028,9 +4861,8 @@ void AdjustWindowForOverlay(HWND hwnd, bool isClosed) {
     int targetW = currentW;
     int targetH = currentH;
 
-    D2D1_SIZE_F logicSize = GetLogicalImageSize();
-    float imgW = logicSize.width;
-    float imgH = logicSize.height;
+    float imgW = GetLogicalImageSize().width;
+    float imgH = GetLogicalImageSize().height;
     if (imgW <= 0 || imgH <= 0) return;
 
     RECT rcClient; GetClientRect(hwnd, &rcClient);
@@ -5679,51 +5511,6 @@ static void TickSmoothWindowZoom(HWND hwnd) {
 }
 
 // [Fix] Draw Internal Background (Grid/Color) explicitly.
-// Used by OnResize to ensure background is drawn in the same frame as Image Transform.
-static void DrawLocalBackground(ID2D1DeviceContext* context, float widthPixels, float heightPixels) {
-    if (!context) return;
-    
-    // DPI Logic
-    float dpiX, dpiY;
-    context->GetDpi(&dpiX, &dpiY);
-    if (dpiX == 0) dpiX = 96.0f;
-    if (dpiY == 0) dpiY = 96.0f;
-    
-    float logicW = widthPixels * 96.0f / dpiX;
-    float logicH = heightPixels * 96.0f / dpiY;
-    
-    context->SetTransform(D2D1::Matrix3x2F::Identity());
-    
-    D2D1_COLOR_F bgColor = ResolveCanvasColor();
-    context->Clear(bgColor);
-    
-    // Draw checkerboard grid
-    if (g_config.CanvasColor == 2 || g_config.CanvasShowGrid) {
-        float bgLuma = (bgColor.r * 0.299f + bgColor.g * 0.587f + bgColor.b * 0.114f);
-        D2D1_COLOR_F overlayColor = (bgLuma < 0.5f) ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.15f);
-
-        float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        overlayColor = D2D1::ColorF(
-            (std::max)(0.0f, overlayColor.r * hdrWhiteScale),
-            (std::max)(0.0f, overlayColor.g * hdrWhiteScale),
-            (std::max)(0.0f, overlayColor.b * hdrWhiteScale),
-            overlayColor.a);
-
-        ComPtr<ID2D1SolidColorBrush> brushOverlay;
-        context->CreateSolidColorBrush(overlayColor, &brushOverlay);
-        
-        const float gridSize = 16.0f;
-        for (float y = 0; y < logicH; y += gridSize) {
-            for (float x = 0; x < logicW; x += gridSize) {
-                int cx = (int)(x / gridSize);
-                int cy = (int)(y / gridSize);
-                if ((cx + cy) % 2 != 0) {
-                   context->FillRectangle(D2D1::RectF(x, y, x + gridSize, y + gridSize), brushOverlay.Get());
-                }
-            }
-        }
-    }
-}
 
 void PerformTransform(HWND hwnd, TransformType type) {
     bool isLeft = IsCompareModeActive() && (g_compare.selectedPane == ComparePane::Left);
@@ -5991,28 +5778,7 @@ static bool TryRunToolProcessFromCommandLine(int* outExitCode) {
 
 // [Phase 0] Lightweight INI read 鈥?only the SingleInstance flag.
 // Called BEFORE COM/D2D/Config initialization.
-static bool ReadSingleInstanceFlag() {
-    // Attempt portable path first (same dir as exe), then AppData.
-    wchar_t exeDir[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, exeDir, MAX_PATH);
-    wchar_t* sep = wcsrchr(exeDir, L'\\');
-    if (sep) *(sep + 1) = L'\0';
 
-    wchar_t portablePath[MAX_PATH]{};
-    wcscpy_s(portablePath, exeDir);
-    wcscat_s(portablePath, L"QuickView.ini");
-
-    const wchar_t* iniPath = portablePath;
-    if (GetFileAttributesW(iniPath) == INVALID_FILE_ATTRIBUTES) {
-        // Fallback to AppData
-        wchar_t appData[MAX_PATH]{};
-        SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appData);
-        static wchar_t appDataPath[MAX_PATH]{};
-        swprintf_s(appDataPath, L"%s\\QuickView\\QuickView.ini", appData);
-        iniPath = appDataPath;
-    }
-    return GetPrivateProfileIntW(L"General", L"SingleInstance", 1, iniPath) != 0;
-}
 
 // [Phase 0] Master flag 鈥?true if this process runs the pipe server.
 static bool g_isMasterProcess = false;
@@ -6489,6 +6255,53 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_TIMER: {
         static const UINT_PTR OSD_TIMER_ID = 994;
+        
+        if (wParam == IDT_ANIMATION) {
+            if (!g_animPlaying || !g_imageResource.animator) {
+                KillTimer(hwnd, IDT_ANIMATION);
+                return 0;
+            }
+            
+            auto nextFrame = g_imageResource.animator->GetNextFrame();
+            if (!nextFrame || !nextFrame->pixels) {
+                // EOF: Loop back to frame 0
+                OutputDebugStringW(L"[Anim] EOF reached, looping to frame 0\n");
+                nextFrame = g_imageResource.animator->SeekToFrame(0);
+            }
+            
+            if (nextFrame && nextFrame->pixels) {
+                ComPtr<ID2D1Bitmap> newBitmap;
+                HRESULT hr = g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap);
+                if (SUCCEEDED(hr)) {
+                    g_imageResource.bitmap = newBitmap;
+                    g_imageResource.frameMeta = nextFrame->frameMeta;
+                    
+                    // Update timer delay with speed multiplier
+                    uint32_t delayMs = g_imageResource.frameMeta.delayMs;
+                    if (delayMs < 10) delayMs = 100;
+                    float speedMult = g_toolbar.GetAnimSpeedMultiplier();
+                    if (speedMult > 0.01f) delayMs = (uint32_t)(delayMs / speedMult);
+                    if (delayMs < 1) delayMs = 1;
+                    SetTimer(hwnd, IDT_ANIMATION, delayMs, NULL);
+                    
+                    // Must re-render to DComp surface (not just RequestRepaint)
+                    RenderImageToDComp(hwnd, g_imageResource, true);
+                    if (g_compEngine) {
+                        RECT rc; GetClientRect(hwnd, &rc);
+                        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
+                        g_compEngine->Commit();
+                    }
+                    RequestRepaint(PaintLayer::Dynamic); // For scrubber UI
+                } else {
+                    OutputDebugStringW(L"[Anim] UploadRawFrameToGPU FAILED\n");
+                }
+            } else {
+                OutputDebugStringW(L"[Anim] SeekToFrame(0) also returned null, stopping\n");
+                KillTimer(hwnd, IDT_ANIMATION);
+            }
+            return 0;
+        }
+
         if (wParam == IDT_SMOOTH_WINDOW_ZOOM) {
             TickSmoothWindowZoom(hwnd);
             return 0;
@@ -7932,6 +7745,49 @@ SKIP_EDGE_NAV:;
                 case ToolbarButtonID::None:
                     RequestRepaint(PaintLayer::Static);
                     break;
+                // [v10.5] Animation Toolbar Buttons
+                case ToolbarButtonID::AnimPlayPause:
+                    if (g_imageResource.animator) {
+                        SendMessage(hwnd, WM_KEYDOWN, VK_SPACE, 0);
+                    }
+                    break;
+                case ToolbarButtonID::AnimPrevFrame:
+                    HandleAnimFrameStep(hwnd, false);
+                    break;
+                case ToolbarButtonID::AnimNextFrame:
+                    HandleAnimFrameStep(hwnd, true);
+                    break;
+                case ToolbarButtonID::AnimDirtyRect:
+                    if (g_imageResource.animator) {
+                        g_showAnimDirtyRect = !g_showAnimDirtyRect;
+                        g_osd.Show(hwnd, g_showAnimDirtyRect ? L"[Animation] Dirty Rect: ON" : L"[Animation] Dirty Rect: OFF", true);
+                        RequestRepaint(PaintLayer::Dynamic);
+                    }
+                    break;
+                case ToolbarButtonID::AnimSeek: {
+                    float targetProgress = 0.0f;
+                    if (g_imageResource.animator && g_toolbar.GetAnimSeekTarget(targetProgress)) {
+                        uint32_t total = g_imageResource.animator->GetTotalFrames();
+                        if (total > 0) {
+                            g_animPlaying = false; // Pause when seeking
+                            KillTimer(hwnd, IDT_ANIMATION);
+                            uint32_t targetFrame = (uint32_t)(std::round(targetProgress * (total - 1)));
+                            auto nextFrame = g_imageResource.animator->SeekToFrame(targetFrame);
+                            if (nextFrame && nextFrame->pixels) {
+                                ComPtr<ID2D1Bitmap> newBitmap;
+                                if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
+                                    g_imageResource.bitmap = newBitmap;
+                                    g_imageResource.frameMeta = nextFrame->frameMeta;
+                                    RenderImageToDComp(hwnd, g_imageResource, true);
+                                    if (g_compEngine) { RECT rc; GetClientRect(hwnd, &rc); SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom); g_compEngine->Commit(); }
+                                    RequestRepaint(PaintLayer::Dynamic);
+                                }
+                            }
+                            g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
+                        }
+                    }
+                    break;
+                }
                 default:
                     break;
             }
@@ -8177,7 +8033,7 @@ SKIP_EDGE_NAV:;
             if (IsCompareModeActive()) {
                 ComparePane pane = HitTestComparePane(hwnd, dropPt);
                 if (pane == ComparePane::Left) {
-                    LoadImageIntoCompareLeftSlot(hwnd, path, [hwnd](bool success){
+                    LoadImageIntoCompareLeftSlot(hwnd, path, [](bool success){
                         if (success) {
                             g_compare.activePane = ComparePane::Left;
                             MarkCompareDirty();
@@ -8205,6 +8061,7 @@ SKIP_EDGE_NAV:;
         }
         break;
 
+    case WM_SYSKEYDOWN:
     case WM_KEYDOWN: {
         // Verification Control (Phase 5 - Ctrl+1..5)
         if (GetKeyState(VK_CONTROL) & 0x8000) {
@@ -8295,17 +8152,63 @@ SKIP_EDGE_NAV:;
         
         // ?F10 绌?(F10 閫氬父浜х敓 WM_SYSKEYDOWN)
         // 鍏朵粬绯荤粺閿粛浜ょ粰 DefWindowProc 澶勭悊
-        if (message == WM_SYSKEYDOWN && wParam != VK_F10) {
+        if (message == WM_SYSKEYDOWN && wParam != VK_F10 && wParam != VK_LEFT && wParam != VK_RIGHT) {
             break; // 鍏朵粬绯荤粺閿氦缁欓粯璁ゅ?
         }
         
         switch (wParam) {
         // Navigation
-        case VK_LEFT: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, -1); break;
-        case VK_RIGHT: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, 1); break;
+        case VK_LEFT: 
+            if (alt && g_imageResource.animator) {
+                HandleAnimFrameStep(hwnd, false);
+            } else if (CheckUnsavedChanges(hwnd)) {
+                Navigate(hwnd, -1);
+            }
+            break;
+        case VK_RIGHT: 
+            if (alt && g_imageResource.animator) {
+                HandleAnimFrameStep(hwnd, true);
+            } else if (CheckUnsavedChanges(hwnd)) {
+                Navigate(hwnd, 1);
+            }
+            break;
+        case VK_OEM_COMMA: // Comma (,): Previous Frame
+            if (g_imageResource.animator) {
+                SendMessage(hwnd, WM_COMMAND, (WPARAM)ToolbarButtonID::AnimPrevFrame, 0);
+            }
+            break;
+        case VK_OEM_PERIOD: // Period (.): Next Frame
+            if (g_imageResource.animator) {
+                SendMessage(hwnd, WM_COMMAND, (WPARAM)ToolbarButtonID::AnimNextFrame, 0);
+            }
+            break;
         case VK_UP: SendMessage(hwnd, WM_KEYDOWN, VK_ADD, 0); break; // Up: Zoom In
         case VK_DOWN: SendMessage(hwnd, WM_KEYDOWN, VK_SUBTRACT, 0); break; // Down: Zoom Out
-        case VK_SPACE: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, 1); break;
+        case VK_SPACE: 
+            if (g_imageResource.animator) {
+                g_animPlaying = !g_animPlaying;
+                if (g_animPlaying) {
+                    g_animInspectorFrame = -1;
+                    uint32_t delayMs = g_imageResource.frameMeta.delayMs;
+                    if (delayMs < 10) delayMs = 100;
+                    SetTimer(hwnd, IDT_ANIMATION, delayMs, NULL);
+                    g_osd.Show(hwnd, L"[Animation] Playing", true);
+                } else {
+                    KillTimer(hwnd, IDT_ANIMATION);
+                    g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
+                }
+                RequestRepaint(PaintLayer::Dynamic);
+            } else if (CheckUnsavedChanges(hwnd)) {
+                Navigate(hwnd, 1);
+            }
+            break;
+        case VK_SHIFT:
+            if (g_imageResource.animator && !ctrl && !alt) {
+                g_showAnimDirtyRect = !g_showAnimDirtyRect;
+                g_osd.Show(hwnd, g_showAnimDirtyRect ? L"[Animation] Dirty Rect: ON" : L"[Animation] Dirty Rect: OFF", true);
+                RequestRepaint(PaintLayer::Dynamic);
+            }
+            break;
         case VK_PRIOR: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, -1); break; // Page Up
         case VK_NEXT: if (CheckUnsavedChanges(hwnd)) Navigate(hwnd, 1); break; // Page Down
         case VK_HOME: if (CheckUnsavedChanges(hwnd)) NavigateEdge(hwnd, false); break; // Home
@@ -8623,7 +8526,7 @@ SKIP_EDGE_NAV:;
                     EnterCompareMode(hwnd);
                 }
                 if (IsCompareModeActive()) {
-                    LoadImageIntoCompareLeftSlot(hwnd, path, [hwnd](bool success){
+                    LoadImageIntoCompareLeftSlot(hwnd, path, [](bool success){
                         if (success) {
                             g_compare.activePane = ComparePane::Left;
                             MarkCompareDirty();
@@ -8659,7 +8562,7 @@ SKIP_EDGE_NAV:;
             ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
                     if (IsCompareModeActive() && g_compare.contextPane == ComparePane::Left) {
-                        LoadImageIntoCompareLeftSlot(hwnd, szFile, [hwnd](bool success){
+                        LoadImageIntoCompareLeftSlot(hwnd, szFile, [](bool success){
                             if (success) {
                                 g_compare.activePane = ComparePane::Left;
                                 MarkCompareDirty();
@@ -9210,7 +9113,7 @@ SKIP_EDGE_NAV:;
              
              if (!contextPath.empty()) {
                  if (contextLeft) {
-                     LoadImageIntoCompareLeftSlot(hwnd, contextPath, [hwnd](bool success){
+                     LoadImageIntoCompareLeftSlot(hwnd, contextPath, [](bool success){
                          if (success) {
                              g_compare.activePane = ComparePane::Left;
                              MarkCompareDirty();
@@ -9655,12 +9558,19 @@ void ProcessEngineEvents(HWND hwnd) {
                          g_imageResource.bitmap = bitmap;
                          g_isImageDirty = false; // [v10.3.1] Force refresh consumed, preventing redundant OnPaint cycle
                          
-                         // [v10.3.1] Restore AuxLayer from frame if present (ensures UI/Renderer consistency)
+                         // [v10.3.1] Restore AuxLayer from frame if present
                          if (evt.rawFrame && evt.rawFrame->auxLayer) {
                              g_imageResource.blendOp = evt.rawFrame->blendOp;
                              g_imageResource.shaderPayload = evt.rawFrame->shaderPayload;
                              g_imageResource.auxLayer = evt.rawFrame->auxLayer->Clone();
                          }
+                         
+                         // [v10.5] Animation State
+                         if (evt.rawFrame) {
+                             g_imageResource.animator = evt.rawFrame->animator;
+                             g_imageResource.frameMeta = evt.rawFrame->frameMeta;
+                         }
+
                          resourceReady = true;
                     }
                 }
@@ -9943,6 +9853,16 @@ void ProcessEngineEvents(HWND hwnd) {
                 // views are sharp instead of waiting for the wheel/pinch interaction timer.
                 TryUpgradeBitmapSurface(hwnd);
                 KillTimer(hwnd, 995); // Stop UI heartbeat timer
+                
+                // [v10.5] Start Animation Timer
+                if (!isPreview && g_imageResource.animator) {
+                    g_animPlaying = true;
+                    uint32_t delayMs = g_imageResource.frameMeta.delayMs;
+                    if (delayMs < 10) delayMs = 100;
+                    SetTimer(hwnd, IDT_ANIMATION, delayMs, NULL);
+                } else if (!isPreview) {
+                    KillTimer(hwnd, IDT_ANIMATION);
+                }
                 
                 // Cursor Update
                 POINT pt;
@@ -10284,16 +10204,7 @@ static bool TryBuildPhase1WicEmbeddedFrame(const std::wstring& path, std::shared
     return CopyWicSourceToRawFrame(thumb.Get(), outFrame);
 }
 
-// With SIIGBF_THUMBNAILONLY the Shell API never returns icons.
-// This is a defensive-only check for typical Windows icon dimensions.
-static bool IsLikelyShellIconFallback(const std::shared_ptr<QuickView::RawImageFrame>& frame) {
-    if (!frame || !frame->IsValid()) return false;
-    int w = frame->width;
-    int h = frame->height;
-    // Reject standard icon sizes (16/32/48/64/128)
-    if (w == h && (w == 16 || w == 32 || w == 48 || w == 64 || w == 128)) return true;
-    return false;
-}
+
 
 static bool ApplyPhase1PlaceholderFrame(
     HWND hwnd,
@@ -10379,11 +10290,11 @@ static void PrimePhase1Placeholder(HWND hwnd, const std::wstring& path, ImageID 
     UINT sourceH = 0;
     TryReadPhase1DimensionsFromHeader(path, &sourceW, &sourceH);
 
-    // [Fix] For non-Titan images, skip Shell/WIC thumbnail extraction entirely.
+    // [Phase 1 Optimization]
     // Non-Titan decoding is fast enough (<100ms typical) that showing a ~256px
     // Shell cached thumbnail as placeholder causes visible flicker instead of
     // helping perception. Only use skeleton placeholder so the full decode
-    // result appears directly. Titan images (>8192px or >50MP) still benefit
+    // (>8192px or >50MP) still benefit
     // from the placeholder chain because their decode can take 1-5 seconds.
     {
         bool isTitan = g_isNavigatingToTitan;
@@ -10398,12 +10309,8 @@ static void PrimePhase1Placeholder(HWND hwnd, const std::wstring& path, ImageID 
     // Shell thumbnail: multi-level cache-only extraction (no disk decode, safe for UI thread)
     std::shared_ptr<QuickView::RawImageFrame> shellFrame;
     if (TryBuildPhase1ShellCachedFrame(path, &shellFrame)) {
-        if (IsLikelyShellIconFallback(shellFrame)) {
-            OutputDebugStringW(L"[Phase1] Shell cache returned icon-like bitmap. Treat as cache miss.\n");
-        } else {
-            if (ApplyPhase1PlaceholderFrame(hwnd, path, imageId, shellFrame, sourceW, sourceH, L"Shell Cache Thumbnail")) {
-                return;
-            }
+        if (ApplyPhase1PlaceholderFrame(hwnd, path, imageId, shellFrame, sourceW, sourceH, L"Shell Cache Thumbnail")) {
+            return;
         }
     }
 
@@ -10467,9 +10374,7 @@ static void DispatchNavigationToEngine(
     uint64_t navToken,
     int navigatorIndex,
     QuickView::BrowseDirection dir) {
-    if (!g_imageEngine || path.empty()) return;
-
-    g_imageEngine->NavigateTo(path, fileSize, navToken);
+    if (g_imageEngine) g_imageEngine->NavigateTo(path, fileSize, navToken);
     if (navigatorIndex != -1) {
         g_imageEngine->UpdateView(navigatorIndex, dir);
     }
@@ -10573,7 +10478,6 @@ static void EnqueuePhase2NavigationTask(
     task.navToken = navToken;
     task.imageId = imageId;
     task.dir = dir;
-    task.enqueueTick = GetTickCount64();
     task.serial = ++g_phase2NavSerial;
 
     bool dropped = false;
@@ -10620,7 +10524,6 @@ static void EnqueuePhase2NavigationTask(
 } // namespace
 
 // [v8.16] Added BrowseDirection to prevent resetting direction to IDLE
-// [v8.16] Added BrowseDirection to prevent resetting direction to IDLE
 void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::BrowseDirection dir) {
 
     if (!g_imageEngine || path.empty()) return;
@@ -10663,9 +10566,7 @@ void StartNavigation(HWND hwnd, std::wstring path, bool showOSD, QuickView::Brow
         g_editState.OriginalFilePath = path;
     }
     
-    g_isLoading = true;
-    
-    // [Fix] Reliable Titan Detection
+ // [Fix] Reliable Titan Detection
     // Use the robust Phase 2 logic (which checks exact dimensions + file size) 
     // to determine if we should show the Titan decode progress bar.
     int idx = g_navigator.FindIndex(path);
@@ -10811,9 +10712,7 @@ FireAndForget UpdateCompareLeftHistogramAsync(HWND hwnd, std::wstring path) {
             g_compare.left.metadata.HasEntropy = histMeta.HasEntropy;
         }
 
-        if (hasFullMeta || hasHist) {
-            RequestRepaint(PaintLayer::All);
-        }
+        RequestRepaint(PaintLayer::All);
     }
 }
 
@@ -10927,7 +10826,7 @@ void NavigateEdge(HWND hwnd, bool toLast) {
         std::wstring path = toLast ? tempNav.Last() : tempNav.First();
 
         if (!path.empty()) {
-            LoadImageIntoCompareLeftSlot(hwnd, path, [hwnd](bool success){
+            LoadImageIntoCompareLeftSlot(hwnd, path, [](bool success){
                 if (success) {
                     g_compare.activePane = ComparePane::Left;
                     g_compare.contextPane = ComparePane::Left;
@@ -10942,15 +10841,16 @@ void NavigateEdge(HWND hwnd, bool toLast) {
     if (g_navigator.Count() <= 0) return;
     if (!CheckUnsavedChanges(hwnd)) return;
 
-    std::wstring path = toLast ? g_navigator.Last() : g_navigator.First();
+    std::wstring path = (toLast)
+        ? g_navigator.Last()
+        : g_navigator.First();
 
     if (IsCompareModeActive()) {
         if (!path.empty()) {
             g_compare.activePane = ComparePane::Right;
             g_compare.contextPane = ComparePane::Right;
             g_compare.selectedPane = ComparePane::Right;
-            g_editState.Reset();
-            g_viewState.Reset();
+           g_viewState.Reset();
             QuickView::BrowseDirection browseDir = toLast
                 ? QuickView::BrowseDirection::FORWARD
                 : QuickView::BrowseDirection::BACKWARD;
@@ -10981,10 +10881,11 @@ void Navigate(HWND hwnd, int direction) {
             : tempNav.Previous();
 
         if (!path.empty()) {
-            LoadImageIntoCompareLeftSlot(hwnd, path, [hwnd, tempNav, direction](bool success){
+            LoadImageIntoCompareLeftSlot(hwnd, path, [](bool success){
                 if (success) {
                     g_compare.activePane = ComparePane::Left;
                     g_compare.contextPane = ComparePane::Left;
+                    g_compare.selectedPane = ComparePane::Left;
                     MarkCompareDirty();
                     RequestRepaint(PaintLayer::Image | PaintLayer::Static);
                 }
@@ -11146,10 +11047,6 @@ void OnPaint(HWND hwnd) {
                  QuickView::RegionRect vp = { (int)viewL, (int)viewT, (int)viewW, (int)viewH };
                  
                  // Calculate Base Preview Ratio (Preview / Original)
-                 // [Fix5] Use the MINIMUM ratio of both dimensions to ensure the worst-case
-                 // dimension triggers tiles. For tall/narrow images (e.g. 1080x9123 decoded to
-                 // 3840x2160), width ratio can exceed 1.0 while height ratio is tiny (0.24).
-                 // Also clamp to 1.0: a preview can never have more detail than the original.
                  float baseRatio = 0.0f;
                  float previewW = g_imageResource.GetSize().width;
                  float previewH = g_imageResource.GetSize().height;
@@ -11195,8 +11092,7 @@ void OnPaint(HWND hwnd) {
                   bool dispatchChanged = (curDispatchSerial != lastDispatchSerial);
                   bool forceReseed = g_forceTitanTileReseed.exchange(false, std::memory_order_acq_rel);
                   if (imageChanged) {
-                      lastVP = { -1, -1, -1, -1 };
-                      lastAbsZoom = -1.0f;
+                                       lastAbsZoom = -1.0f;
                       lastTileImageId = curTileImageId;
                   }
                   if (dispatchChanged) {
@@ -11253,13 +11149,7 @@ void OnPaint(HWND hwnd) {
         }
 
         RECT rect; GetClientRect(hwnd, &rect);
-        // D2D1_SIZE_F size = context->GetSize(); // Replaced by logicW/logicH
-        // CalculateWindowControls(logicW, logicH); // Actually CalculateWindowControls takes size.
-        // But logicW/logicH IS the size in DIPs.
-        D2D1_SIZE_F logicSize = D2D1::SizeF(logicW, logicH);
-        // CalculateWindowControls removed - hit testing now in UIRenderer
-        // DrawWindowControls, OSD, InfoPanel, etc moved to UIRenderer (DComp Surface)
-        // Legacy rendering logic removed. Pure DComp architecture.
+
     }
     
     // Render UI to independent DComp Surface
@@ -11380,6 +11270,53 @@ void OnPaint(HWND hwnd) {
             g_uiRenderer->OnResize((UINT)rc.right, (UINT)rc.bottom);
         }
         
+        // Pass animation state
+        AnimationPlaybackState animState;
+        if (g_imageResource.animator) {
+            animState.IsAnimated = true;
+            animState.IsPlaying = g_animPlaying;
+            animState.InspectorMode = !g_animPlaying;
+            animState.ShowDirtyRect = g_showAnimDirtyRect;
+            animState.TotalFrames = g_imageResource.animator->GetTotalFrames();
+            animState.CurrentFrameIndex = g_imageResource.frameMeta.index;
+            animState.CurrentFrameDelayTime = g_imageResource.frameMeta.delayMs;
+            animState.CurrentDisposal = g_imageResource.frameMeta.disposal;
+            
+            // Dirty rect info
+            auto& fm = g_imageResource.frameMeta;
+            if (fm.isDelta && (fm.rcRight > fm.rcLeft || fm.rcBottom > fm.rcTop)) {
+                animState.HasDirtyRect = true;
+                animState.DirtyRcLeft = fm.rcLeft;
+                animState.DirtyRcTop = fm.rcTop;
+                animState.DirtyRcRight = fm.rcRight;
+                animState.DirtyRcBottom = fm.rcBottom;
+            }
+            
+            // Pass image-to-screen transform for dirty rect overlay
+            animState.FitScale = g_lastFitScale;
+            animState.FitOffsetX = g_lastFitOffset.x;
+            animState.FitOffsetY = g_lastFitOffset.y;
+            animState.ImageWidth = g_imageResource.GetSize().width;
+            animState.ImageHeight = g_imageResource.GetSize().height;
+            RECT rcT; GetClientRect(hwnd, &rcT);
+            animState.WindowWidth = (float)(rcT.right - rcT.left);
+            animState.WindowHeight = (float)(rcT.bottom - rcT.top);
+        }
+        g_uiRenderer->UpdateAnimationState(animState);
+        
+        // [v10.5] Sync Toolbar animation mode
+        bool hasAnim = (g_imageResource.animator != nullptr);
+        bool supportsDirtyRect = hasAnim ? g_imageResource.animator->SupportsDirtyRect() : false;
+        g_toolbar.SetAnimationMode(hasAnim, hasAnim && g_animPlaying, g_showAnimDirtyRect, supportsDirtyRect);
+        if (hasAnim && animState.TotalFrames > 1) {
+            float progress = (float)animState.CurrentFrameIndex / (float)(animState.TotalFrames - 1);
+            g_toolbar.SetAnimProgress(progress);
+        }
+        {
+            RECT rc; GetClientRect(hwnd, &rc);
+            g_toolbar.UpdateLayout((float)rc.right, (float)rc.bottom);
+        }
+        
         g_uiRenderer->Render(hwnd);
     }
     
@@ -11426,7 +11363,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
     int finalWinW = 0;
     int finalWinH = 0;
     bool willResizeWindow = false;
-    bool resizeIsScreenLimited = false;
+
 
     RECT bounds = { 0, 0, 0, 0 };
 
@@ -11450,7 +11387,7 @@ void PerformSmartZoom(HWND hwnd, float newTotalScale, const POINT* centerPt, boo
          bool cappedH = false;
          if (finalWinW > maxW) { finalWinW = maxW; cappedW = true; }
          if (finalWinH > maxH) { finalWinH = maxH; cappedH = true; }
-         resizeIsScreenLimited = cappedW || cappedH;
+ 
          
          if (finalWinW < (int)GetMinWindowWidth()) finalWinW = (int)GetMinWindowWidth();
          if (finalWinH < (int)GetMinWindowWidth()) finalWinH = (int)GetMinWindowWidth();
@@ -11635,4 +11572,43 @@ std::vector<std::wstring>& GetSystemIccProfiles() {
         initialized = true;
     }
     return profiles;
+}
+
+// [v10.5] Animation Frame Stepping Helper
+void HandleAnimFrameStep(HWND hwnd, bool forward) {
+    if (!g_imageResource.animator) return;
+    
+    // Pause if playing
+    if (g_animPlaying) {
+        g_animPlaying = false;
+        KillTimer(hwnd, IDT_ANIMATION);
+        g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
+    }
+    
+    uint32_t total = g_imageResource.animator->GetTotalFrames();
+    if (total <= 1) return;
+    
+    uint32_t current = g_imageResource.frameMeta.index;
+    uint32_t target = 0;
+    if (forward) {
+        target = (current + 1) % total;
+    } else {
+        target = (current > 0) ? current - 1 : total - 1;
+    }
+    
+    auto nextFrame = g_imageResource.animator->SeekToFrame(target);
+    if (nextFrame && nextFrame->pixels) {
+        ComPtr<ID2D1Bitmap> newBitmap;
+        if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
+            g_imageResource.bitmap = newBitmap;
+            g_imageResource.frameMeta = nextFrame->frameMeta;
+            RenderImageToDComp(hwnd, g_imageResource, true);
+            if (g_compEngine) {
+                RECT rc; GetClientRect(hwnd, &rc);
+                SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom, false);
+                g_compEngine->Commit();
+            }
+            RequestRepaint(PaintLayer::Dynamic);
+        }
+    }
 }
