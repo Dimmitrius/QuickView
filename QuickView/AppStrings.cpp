@@ -880,50 +880,50 @@ struct EN {
   static constexpr const wchar_t *HUD_Label_High = L"High: ";
   static constexpr const wchar_t *HUD_Label_Low = L"Low: ";
   static constexpr const wchar_t *HUD_Label_Ref = L"Ref: ";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Geek Glass Engine (GPU Accelerated)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Geek Glass Effects";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Interaction Animation (Disable for zero-latency hard cuts)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Core Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Blur Sigma (Radius)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Disabled when Geek Glass is off";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Density (Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Controls the base color depth of the glass. 20-40% recommended for maximum clarity.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflectivity (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Controls the intensity of diagonal specular highlights. Automatically suppressed on dark backgrounds.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Assets (Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI Stroke Weight";
-  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Ultra Fine (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glass Tint Profile";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tint Mode";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Adaptive (Auto)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Personalized (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Glass Base Color";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Layered Material Density Matrix (Expert)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD Overlay Density";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Controls opacity of transient overlays (Loading bars, OSD, Zoom info).";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"UI Panels Density";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Controls material density of the Toolbar and side Property panels.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Modal Windows Density";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Controls material density of Settings, About and Dialog windows.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Context Menus Density";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Controls material density of right-click menus and dropdowns.";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Assets";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Stroke Weight";
+  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard";
+  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Fine";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"Tint Profile";
+  static constexpr const wchar_t *Settings_Label_TintProfile = L"Mode";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"Adaptive";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"Custom";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Base Color";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Density Matrix";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Transient overlay density.";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"Panels";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Toolbar/Side panel density.";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Modals";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Dialog/Settings density.";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Menus";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Context menu density.";
   static constexpr const wchar_t *Settings_Tooltip_CMS = L"Enable Color Management System.\nWhen enabled, applies high-precision color space conversion via GPU to restore true colors.\nDisabling it reduces GPU load, but may result in oversaturated colors on wide-gamut displays.";
   static constexpr const wchar_t *Settings_Tooltip_CmsIntent = L"Rendering Intent for color space conversion.\nPerceptual: Compresses out-of-gamut colors to preserve details and gradients (ideal for photos).\nRelative Colorimetric: Preserves in-gamut colors and clips out-of-gamut ones (ideal for UI and icons).";
   static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"Enable 16-bit floating-point rendering pipeline (scRGB).\nWhen enabled, perfectly renders photo highlights on HDR-capable displays by breaking the SDR limit.\nDisabling it forces mapping to SDR output.\nNote: Enabling increases VRAM usage.";
   static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR to SDR Tone Mapping strategy:\nDetermines how HDR images are displayed on SDR monitors.\nPerceptual: Preserves highlight details by smoothly compressing the luminance curve (softer look).\nColorimetric: Strict luminance mapping; highlights exceeding the monitor limit are clipped.";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"Auto: 100% scale when image is smaller than screen, fit to screen when larger.";
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glass Engine (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Glass";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Animation";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Material";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Blur";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Requires Enable";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"Density";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Color depth.";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Gloss";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Highlight intensity.";
  
-  static constexpr const wchar_t *Settings_Tab_Theme = L"Personalization";
-  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Interface Theme";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Auto Adapt";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Dark Mode";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Light Mode";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Custom Mode";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Global Ambient Dimmer";
-  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Adds an immersive shadow backdrop when modals, galleries, or settings are active.";
-  static constexpr const wchar_t *Settings_Label_AccentColor = L"Accent Color";
-  static constexpr const wchar_t *Settings_Label_TextColor = L"Text Main Color";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"Theme";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Mode";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Auto";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Dark";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Light";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Custom";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Dimmer";
+  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Background shadow.";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"Accent";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"Color";
 };
 
 // ----------------------------------------------------------------
@@ -1372,44 +1372,44 @@ struct CN {
   static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR 至 SDR 降级策略 (Tone Mapping)：\n当 HDR 图片在 SDR 显示器上显示时的映射方式。\n感知模式：保留高光细节，平滑压缩亮度曲线，观感柔和。\n色度模式：保持严格亮度映射，超出显示器极限的亮度将被直接裁剪。";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"自动：图片小于屏幕尺寸时 100% 缩放，图片大于屏幕尺寸时适应屏幕尺寸缩放。";
  
-  static constexpr const wchar_t *Settings_Tab_Theme = L"个性化";
-  static constexpr const wchar_t *Settings_Label_ThemeMode = L"界面主题";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"自动适配";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"深色模式";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"浅色模式";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"个性自选";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"背景氛围遮罩";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"主题";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"主题模式";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"自动";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"深色";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"浅色";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"自定义";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"环境遮罩";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"在画廊模式、设置窗口或对话框开启时，在后端添加沉浸式阴影遮罩。";
-  static constexpr const wchar_t *Settings_Label_AccentColor = L"全局主色调";
-  static constexpr const wchar_t *Settings_Label_TextColor = L"字体主色调";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"极客玻璃拟物引擎 (GPU 加速)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"启用极客玻璃拟物渲染";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互动画反馈 (关闭即为无延迟硬切)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心材质参数";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"模糊半径 (Blur Sigma)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"关闭极客玻璃后该项失效";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"玻璃底色深度 (Tint Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃内部颜色的染色深度。建议值 20%-40% 以维持最大穿透力。";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光泽亮度 (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板对角线光泽的强度。在纯黑背景下引擎会自动抑制。";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"矢量细分组件 (UI Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI 线框粗细 (Stroke)";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"强调色";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"文本颜色";
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"玻璃引擎 (GPU加速)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"启用玻璃渲染";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互动画";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心材质";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"模糊半径";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"启用玻璃渲染后生效";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"厚度 (浓度)";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃底色深度。";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光泽亮度";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板光泽强度。";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"边缘";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"线框粗细";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"标准 (1.5px)";
   static constexpr const wchar_t *Settings_Option_StrokeFine = L"极细 (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"玻璃着色配置 (Material)";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"玻璃着色";
   static constexpr const wchar_t *Settings_Label_TintProfile = L"着色模式";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"自动适配 (Adaptive)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"个性自选 (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"玻璃自定义底色";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"分层材质浓度矩阵 (专家级)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"信息提示浓度 (OSD)";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"控制加载进度条、播放提示、缩放信息等浮层的透明度。";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"工具面板浓度 (Panels)";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"控制底部工具栏、侧边属性面板的质感浓度。";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"模态视窗浓度 (Modals)";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"控制设置窗口、对话框等模态视窗的质感浓度。";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右键菜单浓度 (Menus)";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右键菜单、下拉列表等交互组件的质感浓度。";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"自动";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"自定义";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"自定义底色";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"材质浓度";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"信息提示 (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"控制加载进度条、播放提示、缩放信息等浮层的厚度。";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"工具面板";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"控制底部工具栏、侧边面板的厚度。";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"模态窗口";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"控制设置、关于和对话框的厚度。";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右键菜单";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右键菜单、下拉列表的厚度。";
 };
 
 // ----------------------------------------------------------------
@@ -1672,7 +1672,7 @@ struct TW {
   static constexpr const wchar_t *Context_SoftProofProfile = L"打樣設定檔";
   static constexpr const wchar_t *Context_SoftProofCustom = L"自訂...";
   static constexpr const wchar_t *Settings_Value_ComingSoon = L"敬請期待";
-  static constexpr const wchar_t *Settings_Label_ForceRaw = L"強制 RAW 解碼";
+  static constexpr const wchar_t *Settings_Label_ForceRaw = L"強制 RAW 解码";
   static constexpr const wchar_t *Settings_Label_AddToOpenWith =
       L"新增至開啟方式";
   static constexpr const wchar_t *Settings_Label_CustomEditor = L"自訂圖片編輯器";
@@ -1700,7 +1700,7 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
   static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意圖";
   static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相對色度";
-  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意圖";
+  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意图";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates = L"檢查更新";
   static constexpr const wchar_t *Settings_Action_ViewUpdate = L"檢視更新";
@@ -1785,7 +1785,7 @@ struct TW {
   static constexpr const wchar_t *Help_Action_NextPrev = L"切換圖片";
   static constexpr const wchar_t *Help_Action_Zoom = L"縮放";
   static constexpr const wchar_t *Help_Action_SmartZoom =
-      L"智能縮放 (100% / 適應窗口)";
+      L"智能缩放 (100% / 適應窗口)";
   static constexpr const wchar_t *Help_Desc_Copy = L"復制圖像";
   static constexpr const wchar_t *Help_Desc_Edit = L"編輯";
 
@@ -1793,7 +1793,7 @@ struct TW {
   static constexpr const wchar_t *Help_Tip_ContextScope =
       L"注意：快捷鍵或右鍵操作僅影響當前進程，設置中的配置為程序永久配置。";
   static constexpr const wchar_t *Help_Tip_Rotation =
-      L"旋轉說明：/邊緣適配/有損 "
+      L"旋转说明：/边缘适配/有损 "
       L"是由於某些圖片格式特性造成的無法完整無損操作。邊緣適配通常只損失邊緣N個"
       L"像素，接近無損。";
   static constexpr const wchar_t *Help_Tip_VideoWall =
@@ -1840,37 +1840,48 @@ struct TW {
   static constexpr const wchar_t *HUD_Label_Ref = L"參考: ";
   static constexpr const wchar_t *Settings_Tooltip_CMS = L"啟用色彩管理 (Color Management System)。\n開啟後，將透過 GPU 進行高精度色彩空間轉換以還原真實色彩。\n關閉可降低效能消耗，但在廣色域螢幕上可能導致顏色過飽和。";
   static constexpr const wchar_t *Settings_Tooltip_CmsIntent = L"色彩空間轉換策略 (Rendering Intent)。\n感知模式 (Perceptual)：壓縮超出色域的顏色，保留細節和漸變，適合照片。\n相對比色 (Relative Colorimetric)：保留在色域內的顏色，超出部分裁剪，適合 UI 和圖示。";
-  static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"啟用 16-bit 浮點渲染管線 (scRGB)。\n開啟後，在支援 HDR 的顯示器上能突破 SDR 亮度限制，完美呈現照片高光。\n關閉將強制降級對映至 SDR 輸出。\n注意：開啟會增加顯示卡記憶體佔用。";
-  static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR 至 SDR 降級策略 (Tone Mapping)：\n當 HDR 圖片在 SDR 顯示器上顯示時的對映方式。\n感知模式：保留高光細節，平滑壓縮亮度曲線，觀感柔和。\n色度模式：保持嚴格亮度對映，超出顯示器極限的亮度將被直接裁剪。";
+  static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"啟用 16-bit 浮點渲染管线 (scRGB)。\n開啟後，在支援 HDR 的顯示器上能突破 SDR 亮度限制，完美呈現照片高光。\n關閉將強制降級對映至 SDR 輸出。\n注意：開啟會增加顯示卡記憶體佔用。";
+  static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR 至 SDR 降级策略 (Tone Mapping)：\n當 HDR 圖片在 SDR 顯示器上顯示時的對映方式。\n感知模式：保留高光細節，平滑壓縮亮度曲線，觀感柔和。\n色度模式：保持嚴格亮度對映，超出顯示器極限的亮度將被直接裁剪。";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"自動：圖片小於螢幕尺寸時 100% 縮放，圖片大於螢幕尺寸時適應螢幕尺寸縮放。";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"極客玻璃擬物引擎 (GPU 加速)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"啟用極客玻璃擬物渲染";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互動畫回饋 (關閉即為無延遲硬切)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心材質參數";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"模糊半徑 (Blur Sigma)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"關閉極客玻璃後該項失效";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"玻璃底色深度 (Tint Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃內部顏色的染色深度。建議值 20%-40% 以維持最大穿透力。";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光澤亮度 (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板對角線光澤的強度。在純黑背景下引擎會自動抑制。";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"矢量細分組件 (UI Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI 線框粗細 (Stroke)";
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"玻璃引擎 (GPU加速)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"啟用玻璃渲染";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互動畫";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心材質";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"模糊半徑";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"啟用玻璃渲染後生效";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"厚度 (濃度)";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃底色深度。";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光澤亮度";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板光澤強度。";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"邊緣";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"線框粗细";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"標準 (1.5px)";
   static constexpr const wchar_t *Settings_Option_StrokeFine = L"極細 (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"玻璃著色配置 (Material)";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"玻璃著色";
   static constexpr const wchar_t *Settings_Label_TintProfile = L"著色模式";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"自動適配 (Adaptive)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"個性自選 (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"玻璃自定義底色";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"分層材質濃度矩陣 (專家級)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"信息提示濃度 (OSD)";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"控制加載進度條、播放提示、縮放信息等浮層的透明度。";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"工具面板濃度 (Panels)";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"控制底部工具欄、側邊屬性面板的質感濃度。";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"模态視窗濃度 (Modals)";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"控制設置窗口、對話框等模态視窗的質感濃度。";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右鍵菜單濃度 (Menus)";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右鍵菜單、下拉列表等交互組件的質感濃度。";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"自動";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"自定義";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"自定義底色";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"材質濃度";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"信息提示 (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"控制加載進度條、播放提示、縮放信息等浮層的厚度。";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"工具面板";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"控制底部工具欄、側邊面板的厚度。";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"模态視窗";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"控制設定、關於和對話方塊的厚度。";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右鍵菜單";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右鍵菜單、下拉列表的厚度。";
+
+  static constexpr const wchar_t *Settings_Tab_Theme = L"主題";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"主題模式";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"自動";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"深色";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"淺色";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"自定義";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"環境遮罩";
+  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"在畫廊模式、設定視窗或對話方塊開啟時，為背景添加沉浸式陰影。";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"強調色";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"文字顏色";
 };
 
 // ----------------------------------------------------------------
@@ -2272,20 +2283,15 @@ struct JA {
 
   static constexpr const wchar_t *Help_Header_Tips = L"Tips & Glossary";
   static constexpr const wchar_t *Help_Tip_ContextScope =
-      L"Note: Shortcuts and context menu actions affect the current process "
-      L"only. Settings are permanent.";
+      L"注: ショートカットとメニューは現在のプロセスのみ。設定は永続。";
   static constexpr const wchar_t *Help_Tip_Rotation =
-      L"Rotation: 'Edge Adapted' means minor cropping to fit block boundaries "
-      L"(lossless data). 'Lossy' means full re-encoding.";
+      L"回転: '端を適応'はデータ損失なし(境界を微調整)。'非可逆'は再変換。";
   static constexpr const wchar_t *Help_Tip_VideoWall =
-      L"Video Wall (Ctrl+F11): Spans all monitors. If close button is hidden, "
-      L"double-click to exit.";
+      L"ビデオウォール (Ctrl+F11): 全モニター表示。終了はダブルクリック。";
   static constexpr const wchar_t *Help_Tip_DesignerMode =
-      L"Designer Mode: Pin Window, Resize/Lock, Zoom/Pan image to reference "
-      L"detail. Drag window to position.";
+      L"デザイナー: 固定、リサイズ、ズーム。ウィンドウをドラッグして調整。";
   static constexpr const wchar_t *Help_Tip_Raw =
-      L"RAW Button: QuickView shows embedded preview by default. Click to "
-      L"fully decode (may look different due to rendering parameters).";
+      L"RAW: デフォルトはプレビュー。クリックでフルデコード。";
   static constexpr const wchar_t *Help_Tip_JpegQ =
       L"JPEG Quality: Estimated Q value (reverse engineered). May differ "
       L"slightly from save setting due to algorithm variations.";
@@ -2303,28 +2309,28 @@ struct JA {
   static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相対的な色域を維持";
   static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"知覚的";
   static constexpr const wchar_t *Dialog_UpdateLogHeader = L"更新内容:";
-  static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
-  static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
-  static constexpr const wchar_t *HUD_Group_Encoding = L"OPTICS & ENCODING";
+  static constexpr const wchar_t *HUD_Group_Physical = L"物理属性";
+  static constexpr const wchar_t *HUD_Group_Scientific = L"科学的品質";
+  static constexpr const wchar_t *HUD_Group_Encoding = L"光学とエンコード";
   static constexpr const wchar_t *HUD_Tip_Sharp_Desc =
-      L"Edge definition (Laplacian Variance)";
+      L"エッジ定義 (ラプラシアン分散)";
   static constexpr const wchar_t *HUD_Tip_Sharp_High =
-      L"Crisp edges, high detail";
+      L"鮮明なエッジ、高精細";
   static constexpr const wchar_t *HUD_Tip_Sharp_Low =
-      L"Soft focus or motion blur";
+      L"ソフトフォーカスまたはブレ";
   static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 is very sharp";
   static constexpr const wchar_t *HUD_Tip_Ent_Desc =
-      L"Information density (Shannon Entropy)";
+      L"情報密度 (シャノン・エントロピー)";
   static constexpr const wchar_t *HUD_Tip_Ent_High =
-      L"Complex textures or high noise";
-  static constexpr const wchar_t *HUD_Tip_Ent_Low = L"Flat areas or low detail";
+      L"複雑なテクスチャまたはノイズ";
+  static constexpr const wchar_t *HUD_Tip_Ent_Low = L"平坦な領域または低詳細";
   static constexpr const wchar_t *HUD_Tip_Ent_Ref = L"7.0-8.0 is high detail";
   static constexpr const wchar_t *HUD_Tip_BPP_Desc =
-      L"Bits Per Pixel (Compression Efficiency)";
+      L"ビット/ピクセル (圧縮効率)";
   static constexpr const wchar_t *HUD_Tip_BPP_High =
-      L"Lower efficiency (more data preserved)";
+      L"低効率 (データをより多く保持)";
   static constexpr const wchar_t *HUD_Tip_BPP_Low =
-      L"Higher efficiency (higher compression)";
+      L"高効率 (高圧縮率)";
   static constexpr const wchar_t *HUD_Tip_BPP_Ref =
       L"24.0 (Raw RGB), ~2.0-3.0 (High JPEG), ~0.5-1.5 (WebP/AVIF)";
 
@@ -2336,34 +2342,46 @@ struct JA {
   static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"16-bit浮動小数点レンダリングパイプライン (scRGB) を有効にする。\n有効にすると、HDR対応ディスプレイでSDRの制限を超え、写真のハイライトを完璧に表現します。\n無効にするとSDR出力に強制的にマッピングされます。\n注意: 有効にするとVRAMの使用量が増加します。";
   static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR から SDR へのトーンマッピング戦略:\nHDR画像がSDRモニターでどのように表示されるかを決定します。\n知覚的：輝度カーブを滑らかに圧縮してハイライトのディテールを保持します（ソフトな見た目）。\n測色：厳密な輝度マッピング。モニターの限界を超えるハイライトはクリップされます。";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"自動：画像が画面サイズより小さい場合は100%に拡大縮小し、大きい場合は画面サイズに合わせて拡大縮小します。";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Geek Glass Engine (GPU Accelerated)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Geek Glass Effects";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Interaction Animation (Disable for zero-latency hard cuts)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Core Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Blur Sigma (Radius)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Disabled when Geek Glass is off";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Density (Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Controls the base color depth of the glass. 20-40% recommended for maximum clarity.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflectivity (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Controls the intensity of diagonal specular highlights. Automatically suppressed on dark backgrounds.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Assets (Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI Stroke Weight";
-  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Ultra Fine (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glass Tint Profile";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tint Mode";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Adaptive (Auto)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Personalized (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Glass Base Color";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Layered Material Density Matrix (Expert)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD Overlay Density";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Controls opacity of transient overlays (Loading bars, OSD, Zoom info).";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"UI Panels Density";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Controls material density of the Toolbar and side Property panels.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Modal Windows Density";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Controls material density of Settings, About and Dialog windows.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Context Menus Density";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Controls material density of right-click menus and dropdowns.";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"テーマ";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"モード";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"自動";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"ダーク";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"ライト";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"カスタム";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"アンビエント";
+  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"没入型シャドウを追加します。";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"アクセント色";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"テキスト色";
+
+  // Geek Glass
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"ガラスエンジン (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"ガラスレンダリング";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"アニメーション";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"マテリアル";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"ぼかし半径";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"レンダリング有効時に適用";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"厚み (濃度)";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"ガラスのベースカラーの深さを制御します。";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光沢";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"ガラスパネルの光沢強度を制御します。";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"エッジ";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"線幅";
+  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"標準 (1.5px)";
+  static constexpr const wchar_t *Settings_Option_StrokeFine = L"極細 (1.0px)";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"ガラス着色";
+  static constexpr const wchar_t *Settings_Label_TintProfile = L"着色モード";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"自動";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"カスタム";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"カスタム底色";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"材質濃度";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"情報提示 (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"OSDなどの浮層の厚みを制御します。";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"ツールパネル";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"ツールバーやサイドパネルの厚みを制御します。";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"設定ウィンドウ";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"設定、情報、ダイアログの厚みを制御します。";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右クリックメニュー";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"右クリックメニュー、ドロップダウンの厚みを制御します。";
 };
 
 // ----------------------------------------------------------------
@@ -2865,34 +2883,46 @@ struct RU {
   static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"Включить 16-битный конвейер рендеринга с плавающей запятой (scRGB).\nПри включении идеально отображает яркие участки фотографий на HDR-дисплеях, снимая ограничение SDR.\nОтключение принудительно отображает изображение в SDR.\nВнимание: Включение увеличивает использование видеопамяти.";
   static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"Стратегия тональной компрессии HDR в SDR:\nОпределяет, как HDR-изображения отображаются на SDR-мониторах.\nПерцептивная: Сохраняет детали в светах за счет плавного сжатия кривой яркости (более мягкий вид).\nКолориметрическая: Строгое отображение яркости; светлые участки, превышающие предел монитора, обрезаются.";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"Авто: масштаб 100%, если изображение меньше экрана, и вписывание в экран, если больше.";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Geek Glass Engine (GPU Accelerated)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Geek Glass Effects";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Interaction Animation (Disable for zero-latency hard cuts)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Core Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Blur Sigma (Radius)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Disabled when Geek Glass is off";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Density (Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Controls the base color depth of the glass. 20-40% recommended for maximum clarity.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflectivity (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Controls the intensity of diagonal specular highlights. Automatically suppressed on dark backgrounds.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Assets (Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI Stroke Weight";
-  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Ultra Fine (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glass Tint Profile";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tint Mode";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Adaptive (Auto)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Personalized (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Glass Base Color";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Layered Material Density Matrix (Expert)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD Overlay Density";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Controls opacity of transient overlays (Loading bars, OSD, Zoom info).";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"UI Panels Density";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Controls material density of the Toolbar and side Property panels.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Modal Windows Density";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Controls material density of Settings, About and Dialog windows.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Context Menus Density";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Controls material density of right-click menus and dropdowns.";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"Тема";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Режим";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Авто";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Тёмная";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Светлая";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Своя";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Затемнение";
+  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Добавляет тень на фон при открытых окнах.";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"Акцентный цвет";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"Цвет текста";
+
+  // Geek Glass
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Стеклянный движок (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Стеклянный рендеринг";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Анимация";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Материал";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Радиус размытия";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Требуется рендеринг";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"Плотность (толщина)";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Управляет глубиной базового цвета стекла.";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Блеск";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Управляет интенсивностью зеркальных бликов.";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Грани";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Толщина линий";
+  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Стандарт (1.5px)";
+  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Тонкая (1.0px)";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"Окрашивание";
+  static constexpr const wchar_t *Settings_Label_TintProfile = L"Режим окраски";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"Авто";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"Свой";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Свой цвет";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Плотность материала";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"Подсказки (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Управляет плотностью всплывающих подсказок.";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"Панели";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Управляет плотностью панелей инструментов.";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Окна настроек";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Управляет плотностью окон настроек и диалогов.";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Меню";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Управляет плотностью контекстных меню.";
 };
 
 // ----------------------------------------------------------------
@@ -3311,8 +3341,7 @@ struct DE {
 
   static constexpr const wchar_t *Help_Header_Tips = L"Tips & Glossary";
   static constexpr const wchar_t *Help_Tip_ContextScope =
-      L"Note: Shortcuts and context menu actions affect the current process "
-      L"only. Settings are permanent.";
+      L"Hinweis: Shortcuts gelten nur für aktuellen Prozess.";
   static constexpr const wchar_t *Help_Tip_Rotation =
       L"Rotation: 'Edge Adapted' means minor cropping to fit block boundaries "
       L"(lossless data). 'Lossy' means full re-encoding.";
@@ -3342,15 +3371,15 @@ struct DE {
   static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"Relativ farbmetrisch";
   static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"Perzeptiv";
   static constexpr const wchar_t *Dialog_UpdateLogHeader = L"Was ist neu:";
-  static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
-  static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
-  static constexpr const wchar_t *HUD_Group_Encoding = L"OPTICS & ENCODING";
+  static constexpr const wchar_t *HUD_Group_Physical = L"PHYSISCHE ATTRIBUTE";
+  static constexpr const wchar_t *HUD_Group_Scientific = L"WISSENSCHAFTLICHE QUALITÄT";
+  static constexpr const wchar_t *HUD_Group_Encoding = L"OPTIK & KODIERUNG";
   static constexpr const wchar_t *HUD_Tip_Sharp_Desc =
       L"Edge definition (Laplacian Variance)";
   static constexpr const wchar_t *HUD_Tip_Sharp_High =
       L"Crisp edges, high detail";
   static constexpr const wchar_t *HUD_Tip_Sharp_Low =
-      L"Soft focus or motion blur";
+      L"Weichzeichner oder Unschärfe";
   static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 is very sharp";
   static constexpr const wchar_t *HUD_Tip_Ent_Desc =
       L"Information density (Shannon Entropy)";
@@ -3375,34 +3404,46 @@ struct DE {
   static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"16-Bit-Gleitkomma-Rendering-Pipeline (scRGB) aktivieren.\nWenn aktiviert, werden die Lichter von Fotos auf HDR-fähigen Displays perfekt gerendert, indem das SDR-Limit überschritten wird.\nDeaktivieren erzwingt die Zuordnung zur SDR-Ausgabe.\nHinweis: Aktivieren erhöht die VRAM-Nutzung.";
   static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR zu SDR Tonzuordnungsstrategie:\nLegt fest, wie HDR-Bilder auf SDR-Monitoren angezeigt werden.\nPerzeptiv: Erhält Highlight-Details durch sanfte Komprimierung der Luminanzkurve (weicherer Look).\nFarbmetrisch: Strikte Luminanzzuordnung; Highlights, die das Monitorlimit überschreiten, werden abgeschnitten.";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"Auto: 100 % Skalierung, wenn das Bild kleiner als der Bildschirm ist, und an den Bildschirm anpassen, wenn es größer ist.";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Geek Glass Engine (GPU Accelerated)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Geek Glass Effects";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Interaction Animation (Disable for zero-latency hard cuts)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Core Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Blur Sigma (Radius)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Disabled when Geek Glass is off";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Density (Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Controls the base color depth of the glass. 20-40% recommended for maximum clarity.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflectivity (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Controls the intensity of diagonal specular highlights. Automatically suppressed on dark backgrounds.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Assets (Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI Stroke Weight";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"Thema";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Modus";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Auto";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Dunkel";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Hell";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Eigener";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Dimmung";
+  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Hintergrundschatten.";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"Akzent";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"Farbe";
+
+  // Geek Glass
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glas-Engine (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Glas-Rendering";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Animation";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Material";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Radius";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Erfordert Rendering";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"Dichte (Dicke)";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Glasfarbtiefe.";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Glanz";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Glanzintensität.";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Kanten";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Linienstärke";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Ultra Fine (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glass Tint Profile";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tint Mode";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Adaptive (Auto)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Personalized (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Glass Base Color";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Layered Material Density Matrix (Expert)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD Overlay Density";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Controls opacity of transient overlays (Loading bars, OSD, Zoom info).";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"UI Panels Density";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Controls material density of the Toolbar and side Property panels.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Modal Windows Density";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Controls material density of Settings, About and Dialog windows.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Context Menus Density";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Controls material density of right-click menus and dropdowns.";
+  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Fein (1.0px)";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glasiert";
+  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tönung";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"Auto";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"Eigene";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Eigene Farbe";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Materialdichte";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"Hinweise (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Dichte der OSD-Anzeigen.";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"Werkzeugleisten";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Dichte der Panel.";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Einstellungsfenster";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Dichte der Dialoge.";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Menüs";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Dichte der Kontextmenüs.";
 };
 
 // ----------------------------------------------------------------
@@ -3836,8 +3877,7 @@ struct ES {
 
   static constexpr const wchar_t *Help_Header_Tips = L"Tips & Glossary";
   static constexpr const wchar_t *Help_Tip_ContextScope =
-      L"Note: Shortcuts and context menu actions affect the current process "
-      L"only. Settings are permanent.";
+      L"Nota: Atajos solo afectan al proceso actual.";
   static constexpr const wchar_t *Help_Tip_Rotation =
       L"Rotation: 'Edge Adapted' means minor cropping to fit block boundaries "
       L"(lossless data). 'Lossy' means full re-encoding.";
@@ -3866,15 +3906,15 @@ struct ES {
   static constexpr const wchar_t *Settings_Label_CmsIntent = L"Intención de renderizado";
   static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"Relativo colorimétrico";
   static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"Perceptual";
-  static constexpr const wchar_t *HUD_Group_Physical = L"PHYSICAL ATTRIBUTES";
-  static constexpr const wchar_t *HUD_Group_Scientific = L"SCIENTIFIC QUALITY";
-  static constexpr const wchar_t *HUD_Group_Encoding = L"OPTICS & ENCODING";
+  static constexpr const wchar_t *HUD_Group_Physical = L"ATRIBUTOS FÍSICOS";
+  static constexpr const wchar_t *HUD_Group_Scientific = L"CALIDAD CIENTÍFICA";
+  static constexpr const wchar_t *HUD_Group_Encoding = L"ÓPTICA Y CODIFICACIÓN";
   static constexpr const wchar_t *HUD_Tip_Sharp_Desc =
       L"Edge definition (Laplacian Variance)";
   static constexpr const wchar_t *HUD_Tip_Sharp_High =
       L"Crisp edges, high detail";
   static constexpr const wchar_t *HUD_Tip_Sharp_Low =
-      L"Soft focus or motion blur";
+      L"Desenfoque o movimiento";
   static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 is very sharp";
   static constexpr const wchar_t *HUD_Tip_Ent_Desc =
       L"Information density (Shannon Entropy)";
@@ -3899,34 +3939,46 @@ struct ES {
   static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"Habilitar el pipeline de renderizado de punto flotante de 16 bits (scRGB).\nCuando se habilita, renderiza perfectamente las luces de las fotos en pantallas compatibles con HDR rompiendo el límite SDR.\nDeshabilitarlo fuerza el mapeo a salida SDR.\nNota: Habilitarlo aumenta el uso de VRAM.";
   static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"Estrategia de mapeo de tonos (Tone Mapping) de HDR a SDR:\nDetermina cómo se muestran las imágenes HDR en monitores SDR.\nPerceptual: Preserva los detalles de las luces comprimiendo suavemente la curva de luminancia (aspecto más suave).\nColorimétrico: Mapeo de luminancia estricto; las luces que exceden el límite del monitor se recortan.";
   static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"Automático: Escala al 100% cuando la imagen es más pequeña que la pantalla, se ajusta a la pantalla cuando es más grande.";
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Geek Glass Engine (GPU Accelerated)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Geek Glass Effects";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Interaction Animation (Disable for zero-latency hard cuts)";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Core Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Blur Sigma (Radius)";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Disabled when Geek Glass is off";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Density (Alpha)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Controls the base color depth of the glass. 20-40% recommended for maximum clarity.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflectivity (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Controls the intensity of diagonal specular highlights. Automatically suppressed on dark backgrounds.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Assets (Icons)";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"UI Stroke Weight";
-  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Ultra Fine (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glass Tint Profile";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tint Mode";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Adaptive (Auto)";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Personalized (Custom)";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Glass Base Color";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Layered Material Density Matrix (Expert)";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD Overlay Density";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Controls opacity of transient overlays (Loading bars, OSD, Zoom info).";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"UI Panels Density";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Controls material density of the Toolbar and side Property panels.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Modal Windows Density";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Controls material density of Settings, About and Dialog windows.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Context Menus Density";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Controls material density of right-click menus and dropdowns.";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"Tema";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Modo";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Auto";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Oscuro";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Claro";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Propio";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Atenuación";
+  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Sombra envolvente.";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"Acento";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"Color";
+
+  // Geek Glass
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Motor de cristal (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Renderizado de cristal";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Animación";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Material";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Radio";
+  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Requiere renderizado";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"Densidad (grosor)";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Profundidad del color.";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Brillo";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Intensidad del brillo.";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Bordes";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Grosor de línea";
+  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Estándar (1.5px)";
+  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Fino (1.0px)";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"Tintado";
+  static constexpr const wchar_t *Settings_Label_TintProfile = L"Modo tintado";
+  static constexpr const wchar_t *Settings_Option_TintAuto = L"Auto";
+  static constexpr const wchar_t *Settings_Option_TintCustom = L"Propio";
+  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Color propio";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Densidad de material";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"Indicadores (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Densidad de avisos OSD.";
+  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"Paneles";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Densidad de paneles.";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Ventanas";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Densidad de diálogos.";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Menús";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Densidad de menús contextuales.";
 };
 
 // ----------------------------------------------------------------
