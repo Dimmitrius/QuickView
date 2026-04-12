@@ -2641,7 +2641,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
                     }
                     break;
                 case OptionType::Slider:
-                    item.interactRect = D2D1::RectF(controlRect.right - 150.0f * s, controlRect.top, controlRect.right, controlRect.bottom);
+                    item.interactRect = D2D1::RectF(controlRect.right - 150.0f * s, item.rect.top, controlRect.right, item.rect.bottom);
                     DrawSlider(pRT, controlRect, (item.pFloatVal ? *item.pFloatVal : 0.0f), item.minVal, item.maxVal, isHovered, item.displayFormat);
                     break;
                 case OptionType::Segment:
@@ -3165,7 +3165,7 @@ SettingsAction SettingsOverlay::OnMouseMove(float x, float y) {
 
     // 1. Dragging Slider?
     if (m_pActiveSlider && m_pActiveSlider->pFloatVal) {
-        float w = 150.0f;
+        float w = 150.0f * m_uiScale;
         float sliderLeft = m_pActiveSlider->rect.right - w;
         float sliderRight = m_pActiveSlider->rect.right;
         

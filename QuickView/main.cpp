@@ -166,6 +166,7 @@ static void SyncDCompState(HWND hwnd, float winW, float winH, bool animate);
 static const wchar_t* g_szClassName = L"QuickViewClass";
 static const wchar_t* g_szWindowTitle = L"QuickView 2026";
 void HandleAnimFrameStep(HWND hwnd, bool forward); // [v10.5] fwd decl
+void PerformAnimSeek(HWND hwnd, float targetProgress);
 static std::unique_ptr<CRenderEngine> g_renderEngine;
 static std::unique_ptr<CImageLoader> g_imageLoader;
 static std::unique_ptr<ImageEngine> g_imageEngine;
@@ -176,6 +177,7 @@ static InputController g_inputController;  // Quantum Stream: 杈撳叆鐘舵€
 CRenderEngine* g_pRenderEngine = nullptr; // Global raw alias for linker compatibility
 
 bool g_isFullScreen = false;
+bool g_isDraggingAnimSeek = false;
 static WINDOWPLACEMENT g_savedWindowPlacement = { sizeof(WINDOWPLACEMENT) };
 
 namespace {
@@ -6284,14 +6286,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     if (delayMs < 1) delayMs = 1;
                     SetTimer(hwnd, IDT_ANIMATION, delayMs, NULL);
                     
-                    // Must re-render to DComp surface (not just RequestRepaint)
+                    // Update Surface but defer DComp Commit to OnPaint to avoid stuttering
                     RenderImageToDComp(hwnd, g_imageResource, true);
-                    if (g_compEngine) {
-                        RECT rc; GetClientRect(hwnd, &rc);
-                        SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom);
-                        g_compEngine->Commit();
-                    }
-                    RequestRepaint(PaintLayer::Dynamic); // For scrubber UI
+                    RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic); 
                 } else {
                     OutputDebugStringW(L"[Anim] UploadRawFrameToGPU FAILED\n");
                 }
@@ -6752,7 +6749,7 @@ SKIP_EDGE_NAV:;
           
           static DWORD s_hideRequestTime = 0;
           
-          if (inZone || g_toolbar.IsPinned()) {
+          if (inZone || g_toolbar.IsPinned() || g_isDraggingAnimSeek) {
               if (!g_toolbar.IsVisible()) {  // Only repaint if state actually changes
                   g_toolbar.SetVisible(true);
                   SetTimer(hwnd, 997, 16, nullptr);  // Start animation timer immediately
@@ -6785,6 +6782,14 @@ SKIP_EDGE_NAV:;
           // Toolbar Mouse Move
         if (g_toolbar.OnMouseMove((float)pt.x, (float)pt.y)) {
              RequestRepaint(PaintLayer::Static); // Toolbar is on Static layer
+        }
+
+        if (g_isDraggingAnimSeek) {
+            float prog = 0;
+            if (g_toolbar.GetAnimSeekTarget(prog)) {
+                PerformAnimSeek(hwnd, prog);
+                RequestRepaint(PaintLayer::Static);
+            }
         }
           
           // Set hand cursor when hovering toolbar buttons
@@ -7440,7 +7445,19 @@ SKIP_EDGE_NAV:;
 
         // Toolbar Interaction - Prevent Window Drag if clicking toolbar
         if (g_toolbar.IsVisible() && g_toolbar.HitTest((float)pt.x, (float)pt.y)) {
-            return 0; // Handled by LBUTTONUP
+            ToolbarButtonID tbId = ToolbarButtonID::None;
+            if (g_toolbar.OnClick((float)pt.x, (float)pt.y, tbId)) {
+                if (tbId == ToolbarButtonID::AnimSeek) {
+                    g_isDraggingAnimSeek = true;
+                    g_toolbar.SetDraggingProgress(true);
+                    SetCapture(hwnd);
+                    float prog = 0;
+                    if (g_toolbar.GetAnimSeekTarget(prog)) {
+                        PerformAnimSeek(hwnd, prog);
+                    }
+                }
+            }
+            return 0; // Handled by LBUTTONUP (or LBUTTONDOWN for sliders)
         }
 
         if (IsCompareModeActive()) {
@@ -7765,26 +7782,20 @@ SKIP_EDGE_NAV:;
                     }
                     break;
                 case ToolbarButtonID::AnimSeek: {
+                    if (g_isDraggingAnimSeek) {
+                        g_isDraggingAnimSeek = false;
+                        g_toolbar.SetDraggingProgress(false);
+                        ReleaseCapture();
+                        
+                        // Interaction Grace Period: Reset auto-hide timer with extra delay
+                        // This allows user to watch the result of the scrub for a while before hide.
+                        // Setting it to GetTickCount() + 2000 makes the 2s delay in Timer 997 effective from 2s in future.
+                        extern DWORD g_toolbarHideTime;
+                        g_toolbarHideTime = GetTickCount() + 2000; 
+                    }
                     float targetProgress = 0.0f;
                     if (g_imageResource.animator && g_toolbar.GetAnimSeekTarget(targetProgress)) {
-                        uint32_t total = g_imageResource.animator->GetTotalFrames();
-                        if (total > 0) {
-                            g_animPlaying = false; // Pause when seeking
-                            KillTimer(hwnd, IDT_ANIMATION);
-                            uint32_t targetFrame = (uint32_t)(std::round(targetProgress * (total - 1)));
-                            auto nextFrame = g_imageResource.animator->SeekToFrame(targetFrame);
-                            if (nextFrame && nextFrame->pixels) {
-                                ComPtr<ID2D1Bitmap> newBitmap;
-                                if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
-                                    g_imageResource.bitmap = newBitmap;
-                                    g_imageResource.frameMeta = nextFrame->frameMeta;
-                                    RenderImageToDComp(hwnd, g_imageResource, true);
-                                    if (g_compEngine) { RECT rc; GetClientRect(hwnd, &rc); SyncDCompState(hwnd, (float)rc.right, (float)rc.bottom); g_compEngine->Commit(); }
-                                    RequestRepaint(PaintLayer::Dynamic);
-                                }
-                            }
-                            g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
-                        }
+                        PerformAnimSeek(hwnd, targetProgress);
                     }
                     break;
                 }
@@ -11609,6 +11620,34 @@ void HandleAnimFrameStep(HWND hwnd, bool forward) {
                 g_compEngine->Commit();
             }
             RequestRepaint(PaintLayer::Dynamic);
+        }
+    }
+}
+
+void PerformAnimSeek(HWND hwnd, float targetProgress) {
+    if (!g_imageResource.animator) return;
+    uint32_t total = g_imageResource.animator->GetTotalFrames();
+    if (total <= 1) return;
+
+    // Pause if playing
+    if (g_animPlaying) {
+        g_animPlaying = false;
+        KillTimer(hwnd, IDT_ANIMATION);
+        g_osd.Show(hwnd, AppStrings::OSD_AnimPaused, true);
+    }
+
+    uint32_t targetFrame = (uint32_t)(std::round(targetProgress * (total - 1)));
+    auto nextFrame = g_imageResource.animator->SeekToFrame(targetFrame);
+    if (nextFrame && nextFrame->pixels) {
+        ComPtr<ID2D1Bitmap> newBitmap;
+        if (SUCCEEDED(g_renderEngine->UploadRawFrameToGPU(*nextFrame, &newBitmap))) {
+            g_imageResource.bitmap = newBitmap;
+            g_imageResource.frameMeta = nextFrame->frameMeta;
+
+            // Update Surface but defer DComp Commit to OnPaint to avoid stuttering
+            RenderImageToDComp(hwnd, g_imageResource, true);
+            RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
+            g_toolbar.SetAnimProgress(targetProgress); // Visual feedback
         }
     }
 }

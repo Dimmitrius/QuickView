@@ -322,7 +322,8 @@ void Toolbar::UpdateLayout(float winW, float winH) {
   bool speedInserted = false;
   
   if (m_animMode) {
-      m_animProgressRect = D2D1::RectF(m_bgRect.rect.left + 20.0f * m_uiScale, m_bgRect.rect.top - 6.0f * m_uiScale, m_bgRect.rect.right - 20.0f * m_uiScale, m_bgRect.rect.top + 2.0f * m_uiScale);
+      // Expand upwards to capture pointer tip, contract downwards to avoid buttons (+4.0f)
+      m_animProgressRect = D2D1::RectF(m_bgRect.rect.left + 20.0f * m_uiScale, m_bgRect.rect.top - 15.0f * m_uiScale, m_bgRect.rect.right - 20.0f * m_uiScale, m_bgRect.rect.top + 2.0f * m_uiScale);
   }
 
   for (auto &btn : m_buttons) {
@@ -806,8 +807,8 @@ bool Toolbar::OnMouseMove(float x, float y) {
   
   bool progHover = false;
   if (m_animMode && m_animProgressRect.right > m_animProgressRect.left) {
-      if (x >= m_animProgressRect.left && x <= m_animProgressRect.right && y >= m_animProgressRect.top && y <= m_animProgressRect.bottom) {
-          progHover = true;
+      if ((x >= m_animProgressRect.left && x <= m_animProgressRect.right && y >= m_animProgressRect.top && y <= m_animProgressRect.bottom) || m_isDraggingProgress) {
+          progHover = true; // Still show hover highlight while dragging
           m_animSeekHoverProgress = (x - m_animProgressRect.left) / (m_animProgressRect.right - m_animProgressRect.left);
           m_animSeekHoverProgress = (std::max)(0.0f, (std::min)(1.0f, m_animSeekHoverProgress));
       }
@@ -867,7 +868,20 @@ bool Toolbar::OnClick(float x, float y, ToolbarButtonID &outId) {
 }
 
 bool Toolbar::HitTest(float x, float y) {
-  return (IsVisible() && !m_windowTooNarrow && x >= m_bgRect.rect.left && x <= m_bgRect.rect.right && y >= m_bgRect.rect.top && y <= m_bgRect.rect.bottom);
+  if (!IsVisible() || m_windowTooNarrow) return false;
+  
+  // 1. Standard background capsule
+  if (x >= m_bgRect.rect.left && x <= m_bgRect.rect.right && y >= m_bgRect.rect.top && y <= m_bgRect.rect.bottom) return true;
+  
+  // 2. Animation progress bar (this area is floating outside the capsule)
+  if (m_animMode) {
+      if (x >= m_animProgressRect.left && x <= m_animProgressRect.right && 
+          y >= m_animProgressRect.top && y <= m_animProgressRect.bottom) {
+          return true;
+      }
+  }
+  
+  return false;
 }
 
 void Toolbar::SetVisible(bool visible) { m_targetVisible = visible; }

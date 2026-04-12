@@ -90,6 +90,7 @@ public:
     void SetAnimationMode(bool enabled, bool playing = true, bool dirtyRect = false, bool supportsDirtyRect = true);
     bool IsAnimationMode() const { return m_animMode; }
     void SetAnimProgress(float progress) { m_animProgress = progress; }
+    void SetDraggingProgress(bool dragging) { m_isDraggingProgress = dragging; }
     float GetAnimSpeedMultiplier() const { return m_animSpeedMult; }
     
     // [Phase 3] Get minimum required width for toolbar
@@ -150,6 +151,7 @@ private:
     // Progress bar interaction
     D2D1_RECT_F m_animProgressRect = {};
     bool m_animProgressHover = false;
+    bool m_isDraggingProgress = false;
     float m_animSeekHoverProgress = 0.0f;
     
     // Resources
