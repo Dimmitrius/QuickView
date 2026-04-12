@@ -1,70 +1,55 @@
 #pragma once
 // ============================================================
-// GeekIconLibrary.h - Unified 1px Ultra-Thin Vector Icon Library
+// GeekIconLibrary.h - Windows System Icon Font Mapping
 // ============================================================
-// All icons are self-drawn as 1px-1.5px vector wireframes using
-// ID2D1PathGeometry for crisp, DPI-independent rendering.
-//
-// Usage:  #include "GeekIconLibrary.h"
-//         GeekIcons::Open(rt, bounds, brush, strokeWidth);
-//
-// Design: Each function draws into a 16x16 logical bounding rect,
-//         scaled by the width of the provided D2D1_RECT_F.
+// Transitioned from self-drawn vectors to Segoe Fluent Icons /
+// Segoe MDL2 Assets for modern Win10/11 system consistency.
 // ============================================================
 
 #include <d2d1_1.h>
-#include <wrl/client.h>
 
-// ============================================================
-// Icon Drawing Function Signature
-// ============================================================
-// Each icon is drawn as a 1px-1.5px ultra-thin vector wireframe
-// within the specified bounding rect.
-using IconDrawFn = void(*)(ID2D1RenderTarget* rt, const D2D1_RECT_F& bounds,
-                           ID2D1Brush* brush, float strokeWidth);
+// Handle as constant strings for DWrite rendering
+using IconGlyph = const wchar_t*;
 
-// ============================================================
-// Icon Drawing Functions
-// ============================================================
 namespace GeekIcons {
 
     // --- File Operations ---
-    void Open(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Rename(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Edit(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Delete(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void OpenWith(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Copy(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Explorer(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Folder(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Link(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Print(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void FixExt(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
+    static constexpr IconGlyph Open        = L"\uE8E5"; // OpenWith
+    static constexpr IconGlyph Rename      = L"\uE8AC"; // Rename
+    static constexpr IconGlyph Edit        = L"\uE70F"; // Edit
+    static constexpr IconGlyph Delete      = L"\uE74D"; // Delete
+    static constexpr IconGlyph OpenWith    = L"\uE7AC"; // OpenWith (alternative)
+    static constexpr IconGlyph Copy        = L"\uE8C8"; // Copy
+    static constexpr IconGlyph Explorer    = L"\uEC50"; // File Explorer
+    static constexpr IconGlyph Folder      = L"\uE838"; // Folder
+    static constexpr IconGlyph Link        = L"\uE71B"; // Link (Copy Path)
+    static constexpr IconGlyph Print       = L"\uE749"; // Print
+    static constexpr IconGlyph FixExt      = L"\uEBE7"; // Repair / Fix
 
     // --- View & Display ---
-    void Eye(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Info(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Compare(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Wallpaper(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-
+    static constexpr IconGlyph Eye         = L"\uE7B3"; // View
+    static constexpr IconGlyph Info        = L"\uE946"; // Info
+    static constexpr IconGlyph Compare     = L"\uE114"; // Compare (Side-by-side)
+    static constexpr IconGlyph Wallpaper   = L"\uE91B"; // Desktop
+    
     // --- Transform ---
-    void Transform(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
+    static constexpr IconGlyph Transform   = L"\uE7AD"; // Rotate
 
     // --- Color & Proofing ---
-    void Color(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void SoftProof(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
+    static constexpr IconGlyph Color       = L"\uE790"; // Color
+    static constexpr IconGlyph SoftProof   = L"\uE7EE"; // Library / Proofing
 
     // --- Sort & Navigation ---
-    void Sort(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Navigation(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
+    static constexpr IconGlyph Sort        = L"\uE8CB"; // Sort
+    static constexpr IconGlyph Navigation  = L"\uEBC6"; // Orientation / Nav
 
     // --- Application ---
-    void Settings(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void About(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Exit(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
+    static constexpr IconGlyph Settings    = L"\uE713"; // Settings
+    static constexpr IconGlyph About       = L"\uE897"; // Contact / About
+    static constexpr IconGlyph Exit        = L"\uE711"; // Close / Exit
 
     // --- UI Glyphs ---
-    void Chevron(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
-    void Check(ID2D1RenderTarget* rt, const D2D1_RECT_F& r, ID2D1Brush* b, float sw);
+    static constexpr IconGlyph Chevron     = L"\uE76C"; // ChevronRight
+    static constexpr IconGlyph Check       = L"\uE73E"; // CheckMark
 
 } // namespace GeekIcons

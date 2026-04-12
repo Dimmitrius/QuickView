@@ -366,6 +366,41 @@ void GeekContextMenu::CreateResources() {
         DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL, 10.5f, L"", &m_actionFont);
 
+    // Icon Fonts
+    const wchar_t* iconFontName = L"Segoe Fluent Icons";
+    // Check if Segoe Fluent Icons exists by attempting to create it, 
+    // though usually we just rely on DWrite fallback if we specify multiple or handle it.
+    // For simplicity, we define a helper or just try creating it.
+    
+    m_dwFactory->CreateTextFormat(iconFontName, nullptr,
+        DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL, 16.0f, L"", &m_iconFont);
+    
+    if (!m_iconFont) {
+        m_dwFactory->CreateTextFormat(L"Segoe MDL2 Assets", nullptr,
+            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, 16.0f, L"", &m_iconFont);
+    }
+
+    m_dwFactory->CreateTextFormat(iconFontName, nullptr,
+        DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL, 22.0f, L"", &m_actionIconFont);
+
+    if (!m_actionIconFont) {
+        m_dwFactory->CreateTextFormat(L"Segoe MDL2 Assets", nullptr,
+            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, 22.0f, L"", &m_actionIconFont);
+    }
+
+    if (m_iconFont) {
+        m_iconFont->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        m_iconFont->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    }
+    if (m_actionIconFont) {
+        m_actionIconFont->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        m_actionIconFont->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    }
+
     if (m_itemFont)     m_itemFont->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     if (m_shortcutFont) m_shortcutFont->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     if (m_actionFont) {
@@ -373,11 +408,6 @@ void GeekContextMenu::CreateResources() {
         m_actionFont->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     }
 
-    D2D1_STROKE_STYLE_PROPERTIES ssp = {};
-    ssp.startCap = D2D1_CAP_STYLE_ROUND;
-    ssp.endCap = D2D1_CAP_STYLE_ROUND;
-    ssp.lineJoin = D2D1_LINE_JOIN_ROUND;
-    m_factory->CreateStrokeStyle(ssp, nullptr, 0, &m_iconStroke);
 
     bool L = m_isLight;
     // Danger/Critical accent (Red)
@@ -415,11 +445,11 @@ void GeekContextMenu::CreateResources() {
     // Capsule (Decoupled from global density to ensure UI visibility at low
     // concentrations) Corrected logic: Light mode uses White(Additive) for
     // elevation, Dark mode uses Black(Subtractive) for recession
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(1, 1, 1, 0.45f)
-                                               : D2D1::ColorF(0, 0, 0, 0.35f)),
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(1, 1, 1, 0.25f)
+                                               : D2D1::ColorF(0, 0, 0, 0.20f)),
                                 &m_capsuleBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(1, 1, 1, 0.50f)
-                                               : D2D1::ColorF(0, 0, 0, 0.40f)),
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(1, 1, 1, 0.35f)
+                                               : D2D1::ColorF(0, 0, 0, 0.30f)),
                                 &m_capsuleBorderBrush);
 
     // Diagonal gradient
@@ -449,7 +479,8 @@ void GeekContextMenu::CreateResources() {
 void GeekContextMenu::DiscardResources() {
     m_rt.Reset(); m_factory.Reset(); m_dwFactory.Reset();
     m_itemFont.Reset(); m_shortcutFont.Reset(); m_actionFont.Reset();
-    m_iconStroke.Reset(); m_diagBrush.Reset();
+    m_iconFont.Reset(); m_actionIconFont.Reset();
+    m_diagBrush.Reset();
     m_textBrush.Reset(); m_dimBrush.Reset(); m_disabledBrush.Reset();
     m_hoverBrush.Reset(); m_dangerBrush.Reset(); m_dangerTextBrush.Reset();
     m_accentBrush.Reset(); m_sepBrush.Reset();
@@ -556,10 +587,12 @@ void GeekContextMenu::RenderActionRow() {
         D2D1_RECT_F iconR = D2D1::RectF(cx - icoSz/2, iconY, cx + icoSz/2, iconY + icoSz);
 
         // Icon color: accent blue (or custom) for normal, red for delete
-        float strokeW = g_config.GetVectorStrokeWeight();
         ID2D1Brush* iconBrush = btn.isEnabled ? m_accentBrush.Get() : m_disabledBrush.Get();
         if (btn.isDanger && btn.isEnabled) iconBrush = m_dangerTextBrush.Get();
-        if (btn.iconFn) btn.iconFn(m_rt.Get(), iconR, iconBrush, strokeW);
+        
+        if (btn.iconGlyph && m_actionIconFont) {
+            m_rt->DrawText(btn.iconGlyph, 1, m_actionIconFont.Get(), iconR, iconBrush);
+        }
 
         // Label
         if (m_actionFont) {
@@ -602,19 +635,18 @@ void GeekContextMenu::RenderItem(const GeekMenuItem& item, int index) {
     if (item.isDanger && item.isEnabled) tb = m_dangerTextBrush.Get();
 
     // Checkmark
-    float strokeW = g_config.GetVectorStrokeWeight();
     
-    if (item.type == MenuItemType::CheckBox && item.isChecked) {
+    if (item.type == MenuItemType::CheckBox && item.isChecked && m_iconFont) {
         D2D1_RECT_F checkR = D2D1::RectF(r.left + ICON_LEFT - 2, r.top + (rh - ICON_SIZE) / 2,
                                            r.left + ICON_LEFT + ICON_SIZE - 2, r.top + (rh + ICON_SIZE) / 2);
-        if (m_accentBrush) Icons::Check(m_rt.Get(), checkR, m_accentBrush.Get(), strokeW);
+        m_rt->DrawText(Icons::Check, 1, m_iconFont.Get(), checkR, m_accentBrush.Get());
     }
 
     // Icon
-    if (item.iconFn && !(item.type == MenuItemType::CheckBox && item.isChecked)) {
+    if (item.iconGlyph && m_iconFont && !(item.type == MenuItemType::CheckBox && item.isChecked)) {
         D2D1_RECT_F iconR = D2D1::RectF(r.left + ICON_LEFT, r.top + (rh - ICON_SIZE) / 2,
                                           r.left + ICON_LEFT + ICON_SIZE, r.top + (rh + ICON_SIZE) / 2);
-        item.iconFn(m_rt.Get(), iconR, tb, strokeW);
+        m_rt->DrawText(item.iconGlyph, 1, m_iconFont.Get(), iconR, tb);
     }
 
     // Text
@@ -632,10 +664,10 @@ void GeekContextMenu::RenderItem(const GeekMenuItem& item, int index) {
     }
 
     // Submenu chevron
-    if (item.type == MenuItemType::Submenu) {
+    if (item.type == MenuItemType::Submenu && m_iconFont) {
         D2D1_RECT_F chevR = D2D1::RectF(r.right - TEXT_RIGHT - 2, r.top + (rh - 8) / 2,
                                           r.right - TEXT_RIGHT + 6, r.top + (rh + 8) / 2);
-        Icons::Chevron(m_rt.Get(), chevR, m_dimBrush.Get(), strokeW);
+        m_rt->DrawText(Icons::Chevron, 1, m_iconFont.Get(), chevR, m_dimBrush.Get());
     }
 }
 

@@ -5,7 +5,7 @@
 // Architecture:
 //   - WS_POPUP window with DWM ACCENT_ENABLE_ACRYLICBLURBEHIND
 //   - ID2D1HwndRenderTarget for all rendering
-//   - Self-drawn 1px-1.5px ultra-thin vector wireframe icons
+//   - Rendered using system icon fonts (Segoe Fluent/MDL2)
 //   - Elastic scale entry animation
 //   - Cascading submenu via child popup windows
 //   - Focus chain management via SetCapture + WM_ACTIVATE
@@ -30,8 +30,6 @@ namespace QuickView::UI::Menu {
 
 using Microsoft::WRL::ComPtr;
 
-// IconDrawFn typedef is defined in GeekIconLibrary.h
-
 // ============================================================
 // Menu Data Types
 // ============================================================
@@ -48,7 +46,7 @@ struct GeekMenuItem {
     UINT commandId = 0;
     std::wstring text;
     std::wstring shortcut;
-    IconDrawFn iconFn = nullptr;
+    IconGlyph iconGlyph = nullptr;
     bool isEnabled = true;
     bool isChecked = false;
     bool isDanger = false;       // Red hover (Delete button)
@@ -58,25 +56,25 @@ struct GeekMenuItem {
     D2D1_RECT_F hitRect = {};
 
     // --- Convenience Constructors ---
-    static GeekMenuItem Normal(UINT id, const wchar_t* text, IconDrawFn icon = nullptr,
+    static GeekMenuItem Normal(UINT id, const wchar_t* text, IconGlyph icon = nullptr,
                                const wchar_t* shortcut = nullptr, bool danger = false) {
         GeekMenuItem m;
         m.type = MenuItemType::Normal; m.commandId = id; m.text = text;
-        m.iconFn = icon; m.isDanger = danger;
+        m.iconGlyph = icon; m.isDanger = danger;
         if (shortcut) m.shortcut = shortcut;
         return m;
     }
     static GeekMenuItem Sep() { GeekMenuItem m; m.type = MenuItemType::Separator; return m; }
-    static GeekMenuItem Sub(const wchar_t* text, IconDrawFn icon, std::vector<GeekMenuItem> children) {
+    static GeekMenuItem Sub(const wchar_t* text, IconGlyph icon, std::vector<GeekMenuItem> children) {
         GeekMenuItem m;
-        m.type = MenuItemType::Submenu; m.text = text; m.iconFn = icon;
+        m.type = MenuItemType::Submenu; m.text = text; m.iconGlyph = icon;
         m.submenu = std::move(children);
         return m;
     }
-    static GeekMenuItem Check(UINT id, const wchar_t* text, bool checked, IconDrawFn icon = nullptr) {
+    static GeekMenuItem Check(UINT id, const wchar_t* text, bool checked, IconGlyph icon = nullptr) {
         GeekMenuItem m;
         m.type = MenuItemType::CheckBox; m.commandId = id; m.text = text;
-        m.isChecked = checked; m.iconFn = icon;
+        m.isChecked = checked; m.iconGlyph = icon;
         return m;
     }
     GeekMenuItem& Enabled(bool e) { isEnabled = e; return *this; }
@@ -86,7 +84,7 @@ struct GeekMenuItem {
 struct ActionButton {
     UINT commandId = 0;
     std::wstring label;
-    IconDrawFn iconFn = nullptr;
+    IconGlyph iconGlyph = nullptr;
     bool isEnabled = true;
     bool isDanger = false;
     D2D1_RECT_F hitRect = {};
@@ -178,7 +176,8 @@ private:
     ComPtr<IDWriteTextFormat> m_itemFont;
     ComPtr<IDWriteTextFormat> m_shortcutFont;
     ComPtr<IDWriteTextFormat> m_actionFont;
-    ComPtr<ID2D1StrokeStyle> m_iconStroke;
+    ComPtr<IDWriteTextFormat> m_iconFont;
+    ComPtr<IDWriteTextFormat> m_actionIconFont;
 
     // Brushes
     ComPtr<ID2D1SolidColorBrush> m_textBrush;
