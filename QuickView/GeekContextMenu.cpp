@@ -7,7 +7,7 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
-extern AppConfig g_config;
+    extern AppConfig g_config;
 
 namespace QuickView::UI::Menu {
 
@@ -412,12 +412,14 @@ void GeekContextMenu::CreateResources() {
 
     m_rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, L ? 0.50f : 0.12f), &m_bevelLightBrush);
     m_rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, L ? 0.06f : 0.25f), &m_bevelDarkBrush);
-    // Capsule
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0, 0, 0, 0.12f)
-                                               : D2D1::ColorF(1, 1, 1, 0.15f)),
+    // Capsule (Decoupled from global density to ensure UI visibility at low
+    // concentrations) Corrected logic: Light mode uses White(Additive) for
+    // elevation, Dark mode uses Black(Subtractive) for recession
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(1, 1, 1, 0.45f)
+                                               : D2D1::ColorF(0, 0, 0, 0.35f)),
                                 &m_capsuleBrush);
-    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(0, 0, 0, 0.15f)
-                                               : D2D1::ColorF(1, 1, 1, 0.18f)),
+    m_rt->CreateSolidColorBrush(D2D1::ColorF(L ? D2D1::ColorF(1, 1, 1, 0.50f)
+                                               : D2D1::ColorF(0, 0, 0, 0.40f)),
                                 &m_capsuleBorderBrush);
 
     // Diagonal gradient
@@ -906,9 +908,9 @@ void GeekContextMenu::RenderAndUI() {
         }
     }
 
-    // 4. Render Menu Content (Syncing detail brushes with master opacity for consistency)
-    if (m_capsuleBrush) m_capsuleBrush->SetOpacity(config.opacity);
-    if (m_capsuleBorderBrush) m_capsuleBorderBrush->SetOpacity(config.opacity);
+    // 4. Render Menu Content (Syncing detail brushes with master opacity for
+    // consistency) [UI Fix] Capsules are decoupled from density to ensure
+    // visibility at low settings
     if (m_bevelLightBrush) m_bevelLightBrush->SetOpacity(config.opacity);
     if (m_bevelDarkBrush) m_bevelDarkBrush->SetOpacity(config.opacity);
     if (m_sepBrush) m_sepBrush->SetOpacity(config.opacity);
