@@ -92,9 +92,11 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
     // 3. Specular Jewel Model: 5-stop Focused Refraction
     // We use a focused [40% - 60%] band to ensure fixed width.
     // Ratios are fixed [0, 0.15, 1.0, 0.15, 0] so only total opacity changes.
+    float peakAlpha = 0.40f;
+
     D2D1_GRADIENT_STOP stops[3];
-    stops[0] = {0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f)};
-    stops[1] = {0.25f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.18f)};
+    stops[0] = {0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f)};
+    stops[1] = {0.25f, D2D1::ColorF(1.0f, 1.0f, 1.0f, peakAlpha)};
     stops[2] = {1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f)};
     ComPtr<ID2D1GradientStopCollection> pStops;
     pRT->CreateGradientStopCollection(stops, 3, &pStops);
@@ -228,24 +230,27 @@ void GeekGlassEngine::DrawGeekGlassToppings(ID2D1RenderTarget* pRT, const GeekGl
     CreateOrUpdateBrushes(pRT, config);
 
     D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(config.panelBounds, config.cornerRadius, config.cornerRadius);
+    ComPtr<ID2D1DeviceContext> pContext;
+    pRT->QueryInterface(IID_PPV_ARGS(&pContext));
+    D2D1_PRIMITIVE_BLEND oldBlend = D2D1_PRIMITIVE_BLEND_SOURCE_OVER;
+    if (pContext) oldBlend = pContext->GetPrimitiveBlend();
 
     // 1. Specular (Primary Surface Gradient)
-    if (m_diagonalBrush) pRT->FillRoundedRectangle(roundedRect, m_diagonalBrush.Get());
+    if (m_diagonalBrush) {
+        if (pContext) pContext->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_ADD);
+        pRT->FillRoundedRectangle(roundedRect, m_diagonalBrush.Get());
+        // Reset immediately for safety or keep for next element if it's also additive
+    }
 
     // 2. [Geek Upgrade] Gradient Border with Additive Blending
     if (m_borderBrush) {
-        ComPtr<ID2D1DeviceContext> pContext;
-        pRT->QueryInterface(IID_PPV_ARGS(&pContext));
-        if (pContext) {
-            D2D1_PRIMITIVE_BLEND oldBlend = pContext->GetPrimitiveBlend();
-            pContext->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_ADD);
-            pContext->DrawRoundedRectangle(roundedRect, m_borderBrush.Get(), config.strokeWeight);
-            pContext->SetPrimitiveBlend(oldBlend);
-        } else {
-            // Fallback for standard RT
-            pRT->DrawRoundedRectangle(roundedRect, m_borderBrush.Get(), config.strokeWeight);
-        }
+        // Already in ADD if possible, but let's ensure it's explicitly set
+        if (pContext) pContext->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_ADD);
+        pRT->DrawRoundedRectangle(roundedRect, m_borderBrush.Get(), config.strokeWeight);
     }
+
+    // Final Restore
+    if (pContext) pContext->SetPrimitiveBlend(oldBlend);
 }
 
 GeekGlassConfig GetGlobalThemeConfig() {
