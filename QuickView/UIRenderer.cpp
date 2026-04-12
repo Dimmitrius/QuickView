@@ -475,7 +475,7 @@ void UIRenderer::EnsureTextFormats() {
         m_dwriteFactory->CreateTextFormat(
             L"Consolas", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            12.0f, L"en-us", &m_debugFormat
+            12.0f * s, L"en-us", &m_debugFormat
         );
         if (m_debugFormat) {
             m_debugFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -754,7 +754,7 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
     const float s = m_uiScale;
     const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     
-    // Background: semi-transparent black
+    // Background brushes
     ComPtr<ID2D1SolidColorBrush> bgBrush, textBrush;
     dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f * m_osdOpacity), hdrWhiteScale), &bgBrush);
     D2D1_COLOR_F textColor = ScaleUiColor(m_osdColor, hdrWhiteScale);
@@ -778,6 +778,7 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
             float tw = tm.width + padH * 2, th = tm.height + padV * 2;
             D2D1_RECT_F r = D2D1::RectF(centerX - tw/2, centerY - th/2, centerX + tw/2, centerY + th/2);
             
+            bool glassDrawn = false;
             if (m_bgCommandList) {
                 std::string key = "OSD_" + std::to_string(index);
                 auto& geekGlass = GetGlassEngine(key);
@@ -786,14 +787,15 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
                 config.panelBounds = r;
                 config.cornerRadius = 6.0f * s;
                 config.enableGeekGlass = g_config.EnableGeekGlass;
-        config.tintProfile = g_config.GlassTintProfile;
-        config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
-        config.tintAlpha = g_config.GlassTintAlpha;
-        config.specularOpacity = g_config.GlassSpecularOpacity;
+                config.tintProfile = g_config.GlassTintProfile;
+                config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB, g_config.GlassTintAlpha);
+                config.tintAlpha = g_config.GlassTintAlpha;
+                config.specularOpacity = g_config.GlassSpecularOpacity;
                 config.blurStandardDeviation = g_config.GlassBlurSigma * s;
                 config.opacity = m_osdOpacity;
+                
                 if (g_config.EnableGeekGlass) {
-                    // Material Booster Layer (Middle Layer for Depth)
+                    // Material Booster Layer
                     ComPtr<ID2D1SolidColorBrush> boosterBrush;
                     float baseAlpha = 0.45f * (g_config.GlassOsdOpacity / 100.0f);
                     D2D1_COLOR_F boosterColor = ScaleUiColor(D2D1::ColorF(0.04f, 0.04f, 0.04f, baseAlpha), hdrWhiteScale);
@@ -803,25 +805,28 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
                     config.pBackgroundCommandList = m_bgCommandList.Get();
                     config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
                     geekGlass.DrawGeekGlassPanel(dc, config);
-                } else {
-                    dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6.0f * s, 6.0f * s), bgBrush.Get());
+                    glassDrawn = true;
                 }
+            }
+
+            if (!glassDrawn) {
+                dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6.0f * s, 6.0f * s), bgBrush.Get());
+            }
             dc->DrawTextLayout(D2D1::Point2F(r.left + padH, r.top + padV), layout.Get(), textBrush.Get());
         };
 
-        float centerY = m_height - 100.0f * s;
-        drawSingleOSD(m_osdTextLeft, splitX * 0.5f, centerY, 0);
-        drawSingleOSD(m_osdTextRight, splitX + (m_width - splitX) * 0.5f, centerY, 1);
+        float centerYVal = m_height - 100.0f * s;
+        drawSingleOSD(m_osdTextLeft, splitX * 0.5f, centerYVal, 0);
+        drawSingleOSD(m_osdTextRight, splitX + (m_width - splitX) * 0.5f, centerYVal, 1);
         return;
     }
 
     if (m_osdText.empty()) return;
 
-    // Match original style: bottom position, padding 30/15
+    // Standard OSD Drawing
     float paddingH = 20.0f * s;
     float paddingV = 10.0f * s;
     
-    // Create text layout to measure
     ComPtr<IDWriteTextLayout> textLayout;
     if (m_osdFormat && m_dwriteFactory) {
         m_dwriteFactory->CreateTextLayout(
@@ -837,27 +842,26 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
         toastW = metrics.width + paddingH * 2;
         toastH = metrics.height + paddingV * 2;
     }
-    
-    // Calculate Window Width for alignment
+
+    // Calculate Window Width/Height for alignment
     RECT rc; GetClientRect(hwnd, &rc);
     float winW = (float)(rc.right - rc.left);
 
-    // Position Determination
     float x = 0, y = 0;
-    
     if (m_osdPos == OSDPosition::Bottom) {
         x = (winW - toastW) / 2.0f;
-        y = (float)m_height - toastH - 80.0f * s; // Above toolbar
+        y = (float)m_height - toastH - 80.0f * s;
     } else if (m_osdPos == OSDPosition::TopRight) {
         x = winW - toastW - 20.0f * s;
-        y = 60.0f * s; // Below window controls
+        y = 60.0f * s;
     } else {
-        // Top
         x = (winW - toastW) / 2.0f;
         y = 40.0f * s;
     }
 
     D2D1_RECT_F bgRect = D2D1::RectF(x, y, x + toastW, y + toastH);
+    bool glassDrawnMain = false;
+    
     if (m_bgCommandList) {
         auto& geekGlass = GetGlassEngine("OSD_0");
         geekGlass.InitializeResources(dc);
@@ -871,8 +875,8 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
         config.specularOpacity = g_config.GlassSpecularOpacity;
         config.blurStandardDeviation = g_config.GlassBlurSigma * s;
         config.opacity = m_osdOpacity;
+
         if (g_config.EnableGeekGlass) {
-            // Material Booster Layer (Middle Layer for Depth)
             ComPtr<ID2D1SolidColorBrush> boosterBrush;
             float baseAlpha = 0.45f * (g_config.GlassOsdOpacity / 100.0f);
             D2D1_COLOR_F boosterColor = ScaleUiColor(D2D1::ColorF(0.04f, 0.04f, 0.04f, baseAlpha), hdrWhiteScale);
@@ -882,15 +886,19 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
             config.pBackgroundCommandList = m_bgCommandList.Get();
             config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
             geekGlass.DrawGeekGlassPanel(dc, config);
-        } else {
-            dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
+            glassDrawnMain = true;
         }
+    }
+
+    if (!glassDrawnMain) {
+        dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), bgBrush.Get());
+    }
     
     if (textLayout && textBrush) {
-        D2D1_POINT_2F textOrigin = D2D1::Point2F(x + paddingH, y + paddingV);
-        dc->DrawTextLayout(textOrigin, textLayout.Get(), textBrush.Get());
+        dc->DrawTextLayout(D2D1::Point2F(x + paddingH, y + paddingV), textLayout.Get(), textBrush.Get());
     }
 }
+
 
 void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
     const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
@@ -3441,6 +3449,20 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         config.pBackgroundCommandList = m_bgCommandList.Get();
         config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
         geekGlass.DrawGeekGlassPanel(dc, config);
+        
+        // --- [Geek Upgrade] Restore Material Filler & Toppings for HUD Consistency ---
+        float masterOpacity = g_config.GlassPanelsOpacity / 100.0f;
+        ComPtr<ID2D1SolidColorBrush> materialBrush;
+        bool isLight = IsLightThemeActive();
+        D2D1_COLOR_F fillerColor = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f);
+        
+        dc->CreateSolidColorBrush(ScaleUiColor(fillerColor, hdrWhiteScale), &materialBrush);
+        if (materialBrush) {
+            materialBrush->SetOpacity(masterOpacity);
+            dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), materialBrush.Get());
+        }
+        
+        geekGlass.DrawGeekGlassToppings(dc, config);
     } else {
         dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), brushBg.Get());
     }
@@ -3506,7 +3528,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 	                if (lRow && rRow && GetHudRowText(lRow) == GetHudRowText(rRow)) continue;
 	            }
 
-            D2D1_RECT_F rowRect = D2D1::RectF(panelX + 4, y, panelX + panelW - 4, y + rowH);
+            D2D1_RECT_F rowRect = D2D1::RectF(panelX + 4*s, y, panelX + panelW - 4*s, y + rowH);
             m_compareRowRects.push_back(rowRect);
 
             if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rowRect)) {
