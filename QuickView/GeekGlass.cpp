@@ -33,6 +33,7 @@ void GeekGlassEngine::ReleaseResources() {
     m_scaleUpEffect.Reset();
     m_colorMatrixEffect.Reset();
     m_diagonalBrush.Reset();
+    m_borderBrush.Reset();
     m_bevelBrush.Reset();
     m_baseTintBrush.Reset();
 }
@@ -59,6 +60,8 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
         if (config.panelBounds.left != m_currentBounds.left || config.panelBounds.top != m_currentBounds.top) {
              m_diagonalBrush->SetStartPoint(D2D1::Point2F(config.panelBounds.left, config.panelBounds.top));
              m_diagonalBrush->SetEndPoint(D2D1::Point2F(config.panelBounds.right, config.panelBounds.bottom));
+             m_borderBrush->SetStartPoint(D2D1::Point2F(config.panelBounds.left, config.panelBounds.top));
+             m_borderBrush->SetEndPoint(D2D1::Point2F(config.panelBounds.right, config.panelBounds.bottom));
         }
         m_currentBounds = config.panelBounds;
         return; 
@@ -89,11 +92,12 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
     // 3. Specular Jewel Model: 5-stop Focused Refraction
     // We use a focused [40% - 60%] band to ensure fixed width.
     // Ratios are fixed [0, 0.15, 1.0, 0.15, 0] so only total opacity changes.
-    D2D1_GRADIENT_STOP stops[2];
-    stops[0] = {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f)};
-    stops[1] = {1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f)};
+    D2D1_GRADIENT_STOP stops[3];
+    stops[0] = {0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.05f)};
+    stops[1] = {0.25f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.18f)};
+    stops[2] = {1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f)};
     ComPtr<ID2D1GradientStopCollection> pStops;
-    pRT->CreateGradientStopCollection(stops, 2, &pStops);
+    pRT->CreateGradientStopCollection(stops, 3, &pStops);
     float margin = (config.panelBounds.right - config.panelBounds.left) * 0.2f;
 
     pRT->CreateLinearGradientBrush(
@@ -105,11 +109,11 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
         pStops.Get(), &m_diagonalBrush);
     // [Structure Retention Weights]
     float masterOpacity = config.opacity;
-    float tintAlpha = masterOpacity * config.tintAlpha; 
-    float bevelAlpha = 0.15f + (masterOpacity * 0.25f); 
+    float tintAlpha = masterOpacity * config.tintAlpha;
+    float bevelAlpha = 0.15f + (masterOpacity * 0.25f);
     
     // Direct Linear Control for Specular
-    float specularAlpha = config.specularOpacity * (0.4f + masterOpacity * 0.6f); 
+    float specularAlpha = config.specularOpacity * (0.4f + masterOpacity * 0.6f);
 
     if (m_baseTintBrush) m_baseTintBrush->SetOpacity(tintAlpha);
     if (m_bevelBrush) {
@@ -117,6 +121,25 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
         m_bevelBrush->SetColor(D2D1::ColorF(isLight ? 0.0f : 1.0f, isLight ? 0.0f : 1.0f, isLight ? 0.0f : 1.0f, bevelAlpha));
     }
     if (m_diagonalBrush) m_diagonalBrush->SetOpacity(specularAlpha);
+
+    // 4. [Geek Scheme] Gradient Border Brush (135-degree logic)
+    D2D1_GRADIENT_STOP borderStops[3];
+    bool isLight = (config.theme == ThemeMode::Light);
+    float glowR = isLight ? 0.0f : 1.0f;
+    float glowG = isLight ? 0.0f : 1.0f;
+    float glowB = isLight ? 0.0f : 1.0f;
+
+    borderStops[0] = { 0.00f, D2D1::ColorF(glowR, glowG, glowB, 0.40f) }; // Top-Left: Light-catcher
+    borderStops[1] = { 0.50f, D2D1::ColorF(glowR, glowG, glowB, 0.15f) }; // Middle: Transition
+    borderStops[2] = { 1.00f, D2D1::ColorF(glowR, glowG, glowB, 0.05f) }; // Bottom-Right: Backlight fade
+    
+    pStops.Reset();
+    pRT->CreateGradientStopCollection(borderStops, 3, &pStops);
+    pRT->CreateLinearGradientBrush(
+        D2D1::LinearGradientBrushProperties(
+            D2D1::Point2F(config.panelBounds.left, config.panelBounds.top),
+            D2D1::Point2F(config.panelBounds.right, config.panelBounds.bottom)),
+        pStops.Get(), &m_borderBrush);
 }
 
 void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlassConfig& config) {
@@ -206,26 +229,23 @@ void GeekGlassEngine::DrawGeekGlassToppings(ID2D1RenderTarget* pRT, const GeekGl
 
     D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(config.panelBounds, config.cornerRadius, config.cornerRadius);
 
-    // 1. Specular
+    // 1. Specular (Primary Surface Gradient)
     if (m_diagonalBrush) pRT->FillRoundedRectangle(roundedRect, m_diagonalBrush.Get());
 
-    // 2. Bevel
-    if (m_bevelBrush) pRT->DrawRoundedRectangle(roundedRect, m_bevelBrush.Get(), config.strokeWeight);
-
-    // 3. Inner Light-Trap (Top-Left 0.5px)
-    float trapAlpha = (0.22f + (config.opacity * 0.15f));
-    ComPtr<ID2D1SolidColorBrush> lightTrap;
-    pRT->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, trapAlpha), &lightTrap);
-    
-    float inset = 0.5f;
-    D2D1_ROUNDED_RECT trapRR = D2D1::RoundedRect(
-        D2D1::RectF(config.panelBounds.left + inset, config.panelBounds.top + inset, config.panelBounds.right - inset, config.panelBounds.bottom - inset),
-        config.cornerRadius - inset, config.cornerRadius - inset);
-    
-    D2D1_RECT_F clipR = D2D1::RectF(config.panelBounds.left, config.panelBounds.top, config.panelBounds.left + config.cornerRadius + 60.0f, config.panelBounds.top + config.cornerRadius + 60.0f);
-    pRT->PushAxisAlignedClip(clipR, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    pRT->DrawRoundedRectangle(trapRR, lightTrap.Get(), 0.6f);
-    pRT->PopAxisAlignedClip();
+    // 2. [Geek Upgrade] Gradient Border with Additive Blending
+    if (m_borderBrush) {
+        ComPtr<ID2D1DeviceContext> pContext;
+        pRT->QueryInterface(IID_PPV_ARGS(&pContext));
+        if (pContext) {
+            D2D1_PRIMITIVE_BLEND oldBlend = pContext->GetPrimitiveBlend();
+            pContext->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_ADD);
+            pContext->DrawRoundedRectangle(roundedRect, m_borderBrush.Get(), config.strokeWeight);
+            pContext->SetPrimitiveBlend(oldBlend);
+        } else {
+            // Fallback for standard RT
+            pRT->DrawRoundedRectangle(roundedRect, m_borderBrush.Get(), config.strokeWeight);
+        }
+    }
 }
 
 GeekGlassConfig GetGlobalThemeConfig() {

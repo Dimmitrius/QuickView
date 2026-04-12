@@ -83,6 +83,7 @@ namespace QuickView::UI::GeekGlass {
         ComPtr<ID2D1Effect> m_colorMatrixEffect;
 
         ComPtr<ID2D1LinearGradientBrush> m_diagonalBrush;
+        ComPtr<ID2D1LinearGradientBrush> m_borderBrush;
         ComPtr<ID2D1SolidColorBrush> m_bevelBrush;
         ComPtr<ID2D1SolidColorBrush> m_baseTintBrush;
         ComPtr<ID2D1Bitmap> m_noiseBitmap;
