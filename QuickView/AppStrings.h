@@ -434,6 +434,8 @@ namespace AppStrings {
     extern const wchar_t* Settings_Tooltip_TintDensity;
     extern const wchar_t* Settings_Label_SpecularOpacity;
     extern const wchar_t* Settings_Tooltip_SpecularOpacity;
+    extern const wchar_t* Settings_Label_ShadowIntensity;
+    extern const wchar_t* Settings_Tooltip_ShadowIntensity;
     extern const wchar_t* Settings_Header_VectorAssets;
     extern const wchar_t* Settings_Label_VectorStrokeWeight;
     extern const wchar_t* Settings_Option_StrokeStandard;

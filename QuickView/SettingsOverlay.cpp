@@ -1272,6 +1272,18 @@ void SettingsOverlay::BuildMenu() {
     }
     tabTheme.items.push_back(itemSpecular);
 
+    SettingsItem itemShadow = { AppStrings::Settings_Label_ShadowIntensity, OptionType::Slider, nullptr, &g_config.GlassShadowOpacity };
+    itemShadow.minVal = 0.0f;
+    itemShadow.maxVal = 1.0f;
+    itemShadow.displayFormat = L"%.0f %%";
+    itemShadow.tooltipText = AppStrings::Settings_Tooltip_ShadowIntensity;
+    itemShadow.onChange = autoSwitchToCustom;
+    if (glassDisabled) {
+        itemShadow.isDisabled = true;
+        itemShadow.pFloatVal = &fZero;
+    }
+    tabTheme.items.push_back(itemShadow);
+
     // Vector Stroke Config
     tabTheme.items.push_back({ AppStrings::Settings_Header_VectorAssets, OptionType::Header });
     SettingsItem itemStroke = { AppStrings::Settings_Label_VectorStrokeWeight, OptionType::Segment, nullptr, nullptr, &g_config.GlassVectorStrokeWeightIndex, nullptr, 0, 0, { AppStrings::Settings_Option_StrokeStandard, AppStrings::Settings_Option_StrokeFine } };

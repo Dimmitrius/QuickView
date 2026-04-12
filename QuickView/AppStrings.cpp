@@ -380,6 +380,8 @@ const wchar_t *HUD_Tip_BPP_Ref = nullptr;
  const wchar_t* Settings_Tooltip_TintDensity = nullptr;
  const wchar_t* Settings_Label_SpecularOpacity = nullptr;
  const wchar_t* Settings_Tooltip_SpecularOpacity = nullptr;
+ const wchar_t* Settings_Label_ShadowIntensity = nullptr;
+ const wchar_t* Settings_Tooltip_ShadowIntensity = nullptr;
  const wchar_t* Settings_Header_VectorAssets = nullptr;
  const wchar_t* Settings_Label_VectorStrokeWeight = nullptr;
  const wchar_t* Settings_Option_StrokeStandard = nullptr;
@@ -913,6 +915,8 @@ struct EN {
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Color depth.";
   static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Gloss";
   static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Highlight intensity.";
+  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"Shadow";
+  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"Shadow intensity.";
  
   static constexpr const wchar_t *Settings_Tab_Theme = L"Theme";
   static constexpr const wchar_t *Settings_Label_ThemeMode = L"Mode";
@@ -1392,6 +1396,8 @@ struct CN {
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃底色深度。";
   static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光泽亮度";
   static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板光泽强度。";
+  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"阴影强度";
+  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"调节 GPU 加速物理落影的深浅。";
   static constexpr const wchar_t *Settings_Header_VectorAssets = L"边缘";
   static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"线框粗细";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"标准 (1.5px)";
@@ -1853,6 +1859,8 @@ struct TW {
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃底色深度。";
   static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光澤亮度";
   static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板光澤強度。";
+  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"陰影強度";
+  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"調節 GPU 加速物理落影的深淺。";
   static constexpr const wchar_t *Settings_Header_VectorAssets = L"邊緣";
   static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"線框粗细";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"標準 (1.5px)";
@@ -3426,6 +3434,8 @@ struct DE {
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Glasfarbtiefe.";
   static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Glanz";
   static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Glanzintensität.";
+  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"Schatten";
+  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"Schattenintensität.";
   static constexpr const wchar_t *Settings_Header_VectorAssets = L"Kanten";
   static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Linienstärke";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
@@ -4264,6 +4274,8 @@ template <typename T> void ApplyT() {
   Settings_Tooltip_TintDensity = T::Settings_Tooltip_TintDensity;
   Settings_Label_SpecularOpacity = T::Settings_Label_SpecularOpacity;
   Settings_Tooltip_SpecularOpacity = T::Settings_Tooltip_SpecularOpacity;
+  Settings_Label_ShadowIntensity = T::Settings_Label_ShadowIntensity;
+  Settings_Tooltip_ShadowIntensity = T::Settings_Tooltip_ShadowIntensity;
   Settings_Header_VectorAssets = T::Settings_Header_VectorAssets;
   Settings_Label_VectorStrokeWeight = T::Settings_Label_VectorStrokeWeight;
   Settings_Option_StrokeStandard = T::Settings_Option_StrokeStandard;

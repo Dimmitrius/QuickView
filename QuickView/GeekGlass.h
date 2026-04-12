@@ -41,6 +41,7 @@ namespace QuickView::UI::GeekGlass {
         // Material parameters (driven by ThemePreset or user sliders)
         float tintAlpha = 0.65f;            // Base tint layer opacity (floor: 5%)
         float specularOpacity = 0.15f;      // Diagonal highlight intensity (0.0 - 0.5)
+        float shadowOpacity = 0.45f;        // GPU shadow intensity (0.0 - 1.0)
 
         // Smart lighting: background luminance for specular suppression
         // Set by caller (e.g. from EstimateCanvasLuminance). -1.0 = not available.

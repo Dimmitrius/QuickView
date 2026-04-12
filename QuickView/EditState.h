@@ -84,12 +84,13 @@ struct ThemePreset {
     float tintAlpha;            // Tint layer opacity (replaces hardcoded 0.65f/0.45f)
     float blurSigma;            // Blur radius in pixels
     float specularOpacity;      // Diagonal highlight intensity (0.0 - 1.0)
+    float shadowOpacity;        // Drop shadow intensity (0.0 - 1.0)
     float masterOpacity;        // Overall panel opacity percentage (0 - 100)
 };
 
 // Built-in presets (immutable reference values)
-inline constexpr ThemePreset PRESET_DARK  = { {0.06f, 0.06f, 0.08f, 1.0f}, 0.65f, 25.0f, 0.15f, 85.0f };
-inline constexpr ThemePreset PRESET_LIGHT = { {0.95f, 0.95f, 0.95f, 1.0f}, 0.45f, 15.0f, 0.05f, 45.0f };
+inline constexpr ThemePreset PRESET_DARK  = { {0.06f, 0.06f, 0.08f, 1.0f}, 0.65f, 25.0f, 0.15f, 0.45f, 85.0f };
+inline constexpr ThemePreset PRESET_LIGHT = { {0.95f, 0.95f, 0.95f, 1.0f}, 0.45f, 15.0f, 0.05f, 0.25f, 45.0f };
 
 /// <summary>
 /// Application configuration (for future settings menu)
@@ -122,6 +123,7 @@ struct AppConfig {
     float GlassBlurSigma = 25.0f;          // Blur radius (5.0f to 40.0f)
     float GlassTintAlpha = 0.65f;          // Tint layer opacity (0.05 - 1.0, floor at 5% for safety)
     float GlassSpecularOpacity = 0.15f;    // Diagonal highlight intensity (0.0 - 0.5)
+    float GlassShadowOpacity = 0.45f;      // Drop shadow intensity (0.0 - 1.0)
     float GlassOsdOpacity = 15.0f;         // OSD Level (0-100 %)
     float GlassPanelsOpacity = 45.0f;      // Toolbar & Panels Level (0-100 %)
     float GlassModalsOpacity = 85.0f;      // Modals & Settings Level (0-100 %)
@@ -244,6 +246,7 @@ struct AppConfig {
         GlassBlurSigma = preset.blurSigma;
         GlassTintAlpha = preset.tintAlpha;
         GlassSpecularOpacity = preset.specularOpacity;
+        GlassShadowOpacity = preset.shadowOpacity;
         GlassModalsOpacity = preset.masterOpacity;
         
         // Force reset the tint profile to Auto when applying a preset
@@ -259,6 +262,7 @@ struct AppConfig {
     void EnforceGlassSafetyLimits() {
         GlassTintAlpha = (std::max)(0.01f, (std::min)(1.0f, GlassTintAlpha));
         GlassSpecularOpacity = (std::max)(0.0f, (std::min)(0.50f, GlassSpecularOpacity));
+        GlassShadowOpacity = (std::max)(0.0f, (std::min)(1.0f, GlassShadowOpacity));
         GlassBlurSigma = (std::max)(1.0f, (std::min)(40.0f, GlassBlurSigma));
     }
 

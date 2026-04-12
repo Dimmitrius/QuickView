@@ -205,7 +205,7 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlass
         m_shadowEffect->SetInput(0, m_shadowMask.Get());
         
         // Scale shadow opacity with master control
-        float shadowMasterAlpha = 0.45f * config.opacity;
+        float shadowMasterAlpha = config.shadowOpacity * config.opacity;
         if (config.theme == ThemeMode::Light) shadowMasterAlpha *= 0.6f; // Softer in light mode
         m_shadowEffect->SetValue(D2D1_SHADOW_PROP_COLOR, D2D1::ColorF(0, 0, 0, shadowMasterAlpha));
 
@@ -334,6 +334,7 @@ GeekGlassConfig GetGlobalThemeConfig() {
     config.blurStandardDeviation = g_config.GlassBlurSigma;
     config.tintAlpha = g_config.GlassTintAlpha;
     config.specularOpacity = g_config.GlassSpecularOpacity;
+    config.shadowOpacity = g_config.GlassShadowOpacity;
     config.opacity = g_config.GlassModalsOpacity / 100.0f;
     config.tintProfile = g_config.GlassTintProfile;
     config.customTintColor = D2D1::ColorF(g_config.GlassCustomTintR, g_config.GlassCustomTintG, g_config.GlassCustomTintB);
