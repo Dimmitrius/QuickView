@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SettingsOverlay.h"
+#include "ThemeSystem.h"
 #include "HelpOverlay.h"
 #include "AppStrings.h"
 #include "ImageEngine.h"
@@ -1359,6 +1360,29 @@ void SettingsOverlay::BuildMenu() {
     itemMenus.tooltipText = AppStrings::Settings_Tooltip_MenusDensity;
     itemMenus.onChange = autoSwitchToCustom;
     tabTheme.items.push_back(itemMenus);
+
+    // Theme Management
+    tabTheme.items.push_back({ AppStrings::Settings_Header_ThemeManagement, OptionType::Header });
+
+    SettingsItem itemExport = { AppStrings::Settings_Action_ExportTheme, OptionType::ActionButton };
+    itemExport.buttonText = AppStrings::Settings_Action_ExportTheme;
+    itemExport.onChange = [this]() {
+        if (QuickView::UI::ThemeSystem::ExportTheme(m_hwnd, g_config)) {
+             SetItemStatus(AppStrings::Settings_Action_ExportTheme, AppStrings::Settings_Action_Done, D2D1::ColorF(D2D1::ColorF::Lime));
+        }
+    };
+    tabTheme.items.push_back(itemExport);
+
+    SettingsItem itemImport = { AppStrings::Settings_Action_ImportTheme, OptionType::ActionButton };
+    itemImport.buttonText = AppStrings::Settings_Action_ImportTheme;
+    itemImport.onChange = [this]() {
+        if (QuickView::UI::ThemeSystem::ImportTheme(m_hwnd, g_config)) {
+             SetItemStatus(AppStrings::Settings_Action_ImportTheme, AppStrings::Settings_Action_Done, D2D1::ColorF(D2D1::ColorF::Lime));
+             g_runtime.SyncFrom(g_config);
+             this->RebuildMenu(); 
+        }
+    };
+    tabTheme.items.push_back(itemImport);
 
     m_tabs.push_back(tabTheme);
     

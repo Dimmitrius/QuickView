@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "AppStrings.h"
 #include <windows.h> // For GetUserDefaultUILanguage
 
@@ -411,6 +411,9 @@ const wchar_t *HUD_Tip_BPP_Ref = nullptr;
  const wchar_t* Settings_Tooltip_AmbientDimmer = nullptr;
  const wchar_t* Settings_Label_AccentColor = nullptr;
  const wchar_t* Settings_Label_TextColor = nullptr;
+ const wchar_t* Settings_Header_ThemeManagement = nullptr;
+ const wchar_t* Settings_Action_ExportTheme = nullptr;
+ const wchar_t* Settings_Action_ImportTheme = nullptr;
 
 // ----------------------------------------------------------------
 // English Table (Source of Truth)
@@ -927,7 +930,10 @@ struct EN {
   static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Dimmer";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Background shadow.";
   static constexpr const wchar_t *Settings_Label_AccentColor = L"Accent";
-  static constexpr const wchar_t *Settings_Label_TextColor = L"Color";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"Text Color";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"Theme Management";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"Export (.qvtheme)";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"Import (.qvtheme)";
 };
 
 // ----------------------------------------------------------------
@@ -1306,7 +1312,6 @@ struct CN {
   static constexpr const wchar_t *OSD_HD = L"全高清";
   static constexpr const wchar_t *OSD_ZoomPrefix = L"缩放: ";
 
-  // static constexpr const wchar_t* Help_Action_Zoom = L"缩放";
   static constexpr const wchar_t *Help_Desc_Copy = L"复制图像";
   static constexpr const wchar_t *Help_Desc_Edit = L"编辑";
 
@@ -1386,6 +1391,9 @@ struct CN {
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"在画廊模式、设置窗口或对话框开启时，在后端添加沉浸式阴影遮罩。";
   static constexpr const wchar_t *Settings_Label_AccentColor = L"强调色";
   static constexpr const wchar_t *Settings_Label_TextColor = L"文本颜色";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"主题管理";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"导出主题 (.qvtheme)";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"导入主题 (.qvtheme)";
   static constexpr const wchar_t *Settings_Header_GeekGlass = L"玻璃引擎 (GPU加速)";
   static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"启用玻璃渲染";
   static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互动画";
@@ -1417,10 +1425,6 @@ struct CN {
   static constexpr const wchar_t *Settings_Label_MenusDensity = L"右键菜单";
   static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右键菜单、下拉列表的厚度。";
 };
-
-// ----------------------------------------------------------------
-// Traditional Chinese Table
-// ----------------------------------------------------------------
 struct TW {
   static constexpr const wchar_t *OSD_NoImage = L"沒有載入圖片";
   static constexpr const wchar_t *OSD_Lossless = L"無損";
@@ -1655,7 +1659,7 @@ struct TW {
       L"縮放 100% 吸附阻尼";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"視窗縮放以滑鼠為中線";
-  static constexpr const wchar_t *Settings_Label_InvertButtons = L"反轉側鍵";
+  static constexpr const wchar_t *Settings_Label_InvertButtons = L"反转侧键";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn = L"放大插值演算法";
   static constexpr const wchar_t *Settings_Label_ZoomModeOut =
       L"縮小插值演算法";
@@ -1704,8 +1708,8 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
   static constexpr const wchar_t *Settings_Option_CmsGray = L"灰度模式 (影調檢查)";
   static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
-  static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意圖";
-  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相對色度";
+  static constexpr const wchar_t *Settings_Label_CmsIntent = L"渲染意图";
+  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"相对色度";
   static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"感知意图";
 
   static constexpr const wchar_t *Settings_Action_CheckUpdates = L"檢查更新";
@@ -1718,151 +1722,151 @@ struct TW {
   static constexpr const wchar_t *Settings_Label_Version = L"版本";
   static constexpr const wchar_t *Settings_Label_Build = L"建置";
 
-  static constexpr const wchar_t *Dialog_UpdateTitle = L"發現新版本！";
-  static constexpr const wchar_t *Dialog_UpdateContent = L"v%s 已準備就緒";
-  static constexpr const wchar_t *Dialog_UpdateLogHeader = L"更新日誌";
+  static constexpr const wchar_t *Dialog_UpdateTitle = L"发现新版本！";
+  static constexpr const wchar_t *Dialog_UpdateContent = L"v%s 已准备就绪";
+  static constexpr const wchar_t *Dialog_UpdateLogHeader = L"更新日志";
   static constexpr const wchar_t *Dialog_ButtonUpdate = L"立即更新";
-  static constexpr const wchar_t *Dialog_ButtonLater = L"稍後";
-  static constexpr const wchar_t *Dialog_ButtonStar = L"在 GitHub 點星";
+  static constexpr const wchar_t *Dialog_ButtonLater = L"稍后";
+  static constexpr const wchar_t *Dialog_ButtonStar = L"在 GitHub 点星";
   static constexpr const wchar_t *Dialog_Update_LoveTitle =
-      L"QuickView 源自熱愛";
+      L"QuickView 源自热爱";
   static constexpr const wchar_t *Dialog_Update_LoveMessage =
-      L"我利用業餘時間維護 QuickView，只因我相信 Windows "
-      L"值得擁有一個更快、更純粹的看圖工具。 "
-      L"我沒有推廣預算，也沒有團隊。如果您喜歡這次更新，在 GitHub "
-      L"上點一顆星或分享給朋友，就是對我最大的支持。";
+      L"我利用业余时间维护 QuickView，只因我相信 Windows "
+      L"值得拥有一个更快、更纯粹的看图工具。 "
+      L"我没有推广预算，也没有团队。如果您喜欢这次更新，在 GitHub "
+      L"上点一颗星或分享给朋友，就是对我最大的支持。";
   static constexpr const wchar_t *Settings_Option_Black = L"黑色";
   static constexpr const wchar_t *Settings_Option_White = L"白色";
-  static constexpr const wchar_t *Settings_Option_Grid = L"網格";
-  static constexpr const wchar_t *Settings_Option_Custom = L"自訂";
-  static constexpr const wchar_t *Settings_Option_Off = L"關閉";
-  static constexpr const wchar_t *Settings_Option_On = L"開啟";
-  static constexpr const wchar_t *Settings_Option_Lite = L"簡略";
-  static constexpr const wchar_t *Settings_Option_Full = L"詳細";
-  static constexpr const wchar_t *Settings_Option_LargeOnly = L"僅大圖";
+  static constexpr const wchar_t *Settings_Option_Grid = L"网格";
+  static constexpr const wchar_t *Settings_Option_Custom = L"自订";
+  static constexpr const wchar_t *Settings_Option_Off = L"关闭";
+  static constexpr const wchar_t *Settings_Option_On = L"开启";
+  static constexpr const wchar_t *Settings_Option_Lite = L"简略";
+  static constexpr const wchar_t *Settings_Option_Full = L"详细";
+  static constexpr const wchar_t *Settings_Option_LargeOnly = L"仅大图";
   static constexpr const wchar_t *Settings_Option_All = L"全部";
   static constexpr const wchar_t *Settings_Option_Window = L"視窗";
   static constexpr const wchar_t *Settings_Option_Pan = L"平移";
-  static constexpr const wchar_t *Settings_Option_None = L"無";
-  static constexpr const wchar_t *Settings_Option_Exit = L"結束";
-  static constexpr const wchar_t *Settings_Option_Arrow = L"箭頭";
-  static constexpr const wchar_t *Settings_Option_Cursor = L"游標";
-  static constexpr const wchar_t *Settings_Option_Manual = L"手動";
+  static constexpr const wchar_t *Settings_Option_None = L"无";
+  static constexpr const wchar_t *Settings_Option_Exit = L"结束";
+  static constexpr const wchar_t *Settings_Option_Arrow = L"箭头";
+  static constexpr const wchar_t *Settings_Option_Cursor = L"游标";
+  static constexpr const wchar_t *Settings_Option_Manual = L"手动";
   static constexpr const wchar_t *Settings_Option_SortAuto = L"自動 (檔案總管)";
-  static constexpr const wchar_t *Settings_Option_SortName = L"檔案名稱";
-  static constexpr const wchar_t *Settings_Option_SortModified = L"修改時間";
-  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"拍攝時間 (EXIF)";
+  static constexpr const wchar_t *Settings_Option_SortName = L"档案名称";
+  static constexpr const wchar_t *Settings_Option_SortModified = L"修改时间";
+  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"拍摄时间 (EXIF)";
   static constexpr const wchar_t *Settings_Option_SortSize = L"大小";
-  static constexpr const wchar_t *Settings_Option_SortType = L"類型";
-  static constexpr const wchar_t *Settings_Option_NavLoop = L"資料夾內循環";
-  static constexpr const wchar_t *Settings_Option_NavStop = L"到達末尾停止";
+  static constexpr const wchar_t *Settings_Option_SortType = L"类型";
+  static constexpr const wchar_t *Settings_Option_NavLoop = L"資料夾内循环";
+  static constexpr const wchar_t *Settings_Option_NavStop = L"到达末尾停止";
   static constexpr const wchar_t *Settings_Option_NavThrough = L"穿透子資料夾";
 
   static constexpr const wchar_t *Settings_Option_Linear =
-      L"線性 (Linear)：基礎平滑";
+      L"线性 (Linear)：基础平滑";
   static constexpr const wchar_t *Settings_Option_Nearest =
-      L"最近鄰 (Nearest)：極端銳利";
+      L"最近邻 (Nearest)：极端锐利";
   static constexpr const wchar_t *Settings_Option_HighQualityCubic =
-      L"高品質雙三次 (HQ Cubic)：極端平滑";
+      L"高质量双三次 (HQ Cubic)：极端平滑";
   static constexpr const wchar_t *Settings_Option_ZoomAuto = L"自動";
   static constexpr const wchar_t *Settings_Option_Auto = L"自動";
-  static constexpr const wchar_t *Settings_Option_Eco = L"節能";
+  static constexpr const wchar_t *Settings_Option_Eco = L"节能";
   static constexpr const wchar_t *Settings_Option_Balanced = L"平衡";
-  static constexpr const wchar_t *Settings_Option_Ultra = L"極速";
+  static constexpr const wchar_t *Settings_Option_Ultra = L"极速";
 
-  static constexpr const wchar_t *Help_Header_Shortcuts = L"鍵盤快速鍵";
+  static constexpr const wchar_t *Help_Header_Shortcuts = L"键盘快速键";
   static constexpr const wchar_t *Help_Header_Mouse = L"滑鼠操作";
-  static constexpr const wchar_t *Help_Item_NextPrev = L"切換圖片";
-  static constexpr const wchar_t *Help_Item_Zoom = L"縮放";
-  static constexpr const wchar_t *Help_Item_Pan = L"平移圖片";
-  static constexpr const wchar_t *Help_Item_Rotate = L"旋轉";
-  static constexpr const wchar_t *Help_Item_Fit = L"適應螢幕";
-  static constexpr const wchar_t *Help_Item_Delete = L"刪除圖片";
-  static constexpr const wchar_t *Help_Item_Fullscreen = L"全螢幕";
-  static constexpr const wchar_t *Help_Item_Close = L"關閉";
-  static constexpr const wchar_t *Help_Mouse_Left = L"左鍵";
-  static constexpr const wchar_t *Help_Mouse_Middle = L"中鍵";
-  static constexpr const wchar_t *Help_Mouse_Wheel = L"滾輪";
-  static constexpr const wchar_t *Help_Mouse_Right = L"右鍵";
+  static constexpr const wchar_t *Help_Item_NextPrev = L"切换图片";
+  static constexpr const wchar_t *Help_Item_Zoom = L"缩放";
+  static constexpr const wchar_t *Help_Item_Pan = L"平移图片";
+  static constexpr const wchar_t *Help_Item_Rotate = L"旋转";
+  static constexpr const wchar_t *Help_Item_Fit = L"适应螢幕";
+  static constexpr const wchar_t *Help_Item_Delete = L"删除图片";
+  static constexpr const wchar_t *Help_Item_Fullscreen = L"全屏";
+  static constexpr const wchar_t *Help_Item_Close = L"关闭";
+  static constexpr const wchar_t *Help_Mouse_Left = L"左键";
+  static constexpr const wchar_t *Help_Mouse_Middle = L"中键";
+  static constexpr const wchar_t *Help_Mouse_Wheel = L"滚轮";
+  static constexpr const wchar_t *Help_Mouse_Right = L"右键";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"平移視窗/退出全屏/退出最大化";
-  static constexpr const wchar_t *Help_Action_PanImage = L"平移圖片";
-  static constexpr const wchar_t *Help_Action_ContextMenu = L"右鍵選單";
-  static constexpr const wchar_t *Help_Action_NextPrev = L"切換圖片";
-  static constexpr const wchar_t *Help_Action_Zoom = L"縮放";
+  static constexpr const wchar_t *Help_Action_PanImage = L"平移图片";
+  static constexpr const wchar_t *Help_Action_ContextMenu = L"右键选单";
+  static constexpr const wchar_t *Help_Action_NextPrev = L"切换图片";
+  static constexpr const wchar_t *Help_Action_Zoom = L"缩放";
   static constexpr const wchar_t *Help_Action_SmartZoom =
-      L"智能缩放 (100% / 適應窗口)";
-  static constexpr const wchar_t *Help_Desc_Copy = L"復制圖像";
-  static constexpr const wchar_t *Help_Desc_Edit = L"編輯";
+      L"智能缩放 (100% / 适应窗口)";
+  static constexpr const wchar_t *Help_Desc_Copy = L"复制图像";
+  static constexpr const wchar_t *Help_Desc_Edit = L"编辑";
 
-  static constexpr const wchar_t *Help_Header_Tips = L"提示與術語";
+  static constexpr const wchar_t *Help_Header_Tips = L"提示与术语";
   static constexpr const wchar_t *Help_Tip_ContextScope =
-      L"注意：快捷鍵或右鍵操作僅影響當前進程，設置中的配置為程序永久配置。";
+      L"注意：快捷键或右键操作仅影响当前进程，設定中的配置为程序永久配置。";
   static constexpr const wchar_t *Help_Tip_Rotation =
       L"旋转说明：/边缘适配/有损 "
-      L"是由於某些圖片格式特性造成的無法完整無損操作。邊緣適配通常只損失邊緣N個"
-      L"像素，接近無損。";
+      L"是由於某些图片格式特性造成的无法完整无损操作。边缘适配通常只损失边缘N个"
+      L"像素，接近无损。";
   static constexpr const wchar_t *Help_Tip_VideoWall =
-      L"電視牆模式 "
-      L"(Ctrl+F11)：將所有顯示器視為一塊屏幕。若關閉按鈕位於顯示區外 "
-      L"(如L型排布)，雙擊即可退出全屏。";
+      L"电视墙模式 "
+      L"(Ctrl+F11)：将所有显示器视为一块螢幕。若关闭按钮位于显示区外 "
+      L"(如L型排布)，双击即可退出全屏。";
   static constexpr const wchar_t *Help_Tip_DesignerMode =
-      L"設計師參考圖模式：設定窗口置頂，調整尺寸並鎖定，使用縮放/"
-      L"平移定位局部細節，拖動窗口至合適位置參考。";
+      L"设计师参考图模式：设定窗口置顶，调整尺寸并锁定，使用缩放/"
+      L"平移定位局部细节，拖动窗口至合适位置参考。";
   static constexpr const wchar_t *Help_Tip_Raw =
-      L"RAW 按鈕：QuickView 默認顯示 RAW "
-      L"預覽圖。點擊此按鈕將使用默認參數完整渲染 RAW 文件 "
-      L"(結果可能與預覽不同)。";
+      L"RAW 按钮：QuickView 默认显示 RAW "
+      L"预览图。点击此按钮将使用默认参数完整渲染 RAW 文件 "
+      L"(结果可能与预览不同)。";
   static constexpr const wchar_t *Help_Tip_JpegQ =
-      L"JPEG 壓縮率：信息面板顯示的 Q "
-      L"值是逆向推算值。因算法差異，可能與保存時的數值略有出入 (例如 PS 100% "
-      L"可能顯示為 98)，屬正常情況。";
+      L"JPEG 压缩率：信息面板显示的 Q "
+      L"值是逆向推算值。因算法差异，可能与保存时的数值略有出入 (例如 PS 100% "
+      L"可能显示为 98)，属正常情况。";
 
-  static constexpr const wchar_t *Help_Item_Compare = L"對比模式";
+  static constexpr const wchar_t *Help_Item_Compare = L"对比模式";
   static constexpr const wchar_t *Help_Item_FirstLast =
-      L"第一張 / 最後一張圖片";
-  static constexpr const wchar_t *HUD_Group_Physical = L"物理屬性";
-  static constexpr const wchar_t *HUD_Group_Scientific = L"科學指標";
-  static constexpr const wchar_t *HUD_Group_Encoding = L"光學與編碼";
+      L"第一张 / 最后一张图片";
+  static constexpr const wchar_t *HUD_Group_Physical = L"物理属性";
+  static constexpr const wchar_t *HUD_Group_Scientific = L"科学指标";
+  static constexpr const wchar_t *HUD_Group_Encoding = L"光学与编码";
   static constexpr const wchar_t *HUD_Tip_Sharp_Desc =
-      L"邊緣清晰度 (拉普拉斯方差)";
-  static constexpr const wchar_t *HUD_Tip_Sharp_High = L"邊緣銳利，細節豐富";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Low = L"軟焦點或運動模糊";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 為非常銳利";
-  static constexpr const wchar_t *HUD_Tip_Ent_Desc = L"信息密度 (香農熵)";
-  static constexpr const wchar_t *HUD_Tip_Ent_High = L"複雜紋理或高噪點";
-  static constexpr const wchar_t *HUD_Tip_Ent_Low = L"平坦區域或低細節";
-  static constexpr const wchar_t *HUD_Tip_Ent_Ref = L"7.0-8.0 為高細節";
-  static constexpr const wchar_t *HUD_Tip_BPP_Desc = L"每像素比特數 (壓縮效率)";
+      L"边缘清晰度 (拉普拉斯方差)";
+  static constexpr const wchar_t *HUD_Tip_Sharp_High = L"边缘锐利，细节丰富";
+  static constexpr const wchar_t *HUD_Tip_Sharp_Low = L"软焦点或运动模糊";
+  static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 为非常锐利";
+  static constexpr const wchar_t *HUD_Tip_Ent_Desc = L"信息密度 (香农熵)";
+  static constexpr const wchar_t *HUD_Tip_Ent_High = L"复杂纹理或高噪点";
+  static constexpr const wchar_t *HUD_Tip_Ent_Low = L"平坦区域或低细节";
+  static constexpr const wchar_t *HUD_Tip_Ent_Ref = L"7.0-8.0 为高细节";
+  static constexpr const wchar_t *HUD_Tip_BPP_Desc = L"每像素比特数 (压缩效率)";
   static constexpr const wchar_t *HUD_Tip_BPP_High =
-      L"低壓縮率 (保留更多原始數據)";
+      L"低压缩率 (保留更多原始数据)";
   static constexpr const wchar_t *HUD_Tip_BPP_Low =
-      L"高壓縮率 (空間利用率更高)";
+      L"高压缩率 (空间利用率更高)";
   static constexpr const wchar_t *HUD_Tip_BPP_Ref =
-      L"24.0 (原始RGB), ~2.0-3.0 (高品質JPEG), ~0.5-1.5 (WebP/AVIF)";
+      L"24.0 (原始RGB), ~2.0-3.0 (高质量JPEG), ~0.5-1.5 (WebP/AVIF)";
 
   static constexpr const wchar_t *HUD_Label_High = L"高: ";
   static constexpr const wchar_t *HUD_Label_Low = L"低: ";
-  static constexpr const wchar_t *HUD_Label_Ref = L"參考: ";
-  static constexpr const wchar_t *Settings_Tooltip_CMS = L"啟用色彩管理 (Color Management System)。\n開啟後，將透過 GPU 進行高精度色彩空間轉換以還原真實色彩。\n關閉可降低效能消耗，但在廣色域螢幕上可能導致顏色過飽和。";
-  static constexpr const wchar_t *Settings_Tooltip_CmsIntent = L"色彩空間轉換策略 (Rendering Intent)。\n感知模式 (Perceptual)：壓縮超出色域的顏色，保留細節和漸變，適合照片。\n相對比色 (Relative Colorimetric)：保留在色域內的顏色，超出部分裁剪，適合 UI 和圖示。";
-  static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"啟用 16-bit 浮點渲染管线 (scRGB)。\n開啟後，在支援 HDR 的顯示器上能突破 SDR 亮度限制，完美呈現照片高光。\n關閉將強制降級對映至 SDR 輸出。\n注意：開啟會增加顯示卡記憶體佔用。";
-  static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR 至 SDR 降级策略 (Tone Mapping)：\n當 HDR 圖片在 SDR 顯示器上顯示時的對映方式。\n感知模式：保留高光細節，平滑壓縮亮度曲線，觀感柔和。\n色度模式：保持嚴格亮度對映，超出顯示器極限的亮度將被直接裁剪。";
-  static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"自動：圖片小於螢幕尺寸時 100% 縮放，圖片大於螢幕尺寸時適應螢幕尺寸縮放。";
+  static constexpr const wchar_t *HUD_Label_Ref = L"参考: ";
+  static constexpr const wchar_t *Settings_Tooltip_CMS = L"启用色彩管理 (Color Management System)。\n开启后，将透过 GPU 进行高精度色彩空间转换以还原真实色彩。\n关闭可降低效能消耗，但在广色域萤幕上可能导致颜色过饱和。";
+  static constexpr const wchar_t *Settings_Tooltip_CmsIntent = L"色彩空间转换策略 (Rendering Intent)。\n感知模式 (Perceptual)：压缩超出色域的颜色，保留细节和渐变，适合照片。\n相对比色 (Relative Colorimetric)：保留在色域内的颜色，超出部分裁剪，适合 UI 和图示。";
+  static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"启用 16-bit 浮点渲染管线 (scRGB)。\n开启后，在支援 HDR 的显示器上能突破 SDR 亮度限制，完美呈现照片高光。\n关闭将强制降级对映至 SDR 输出。\n注意：开启会增加显示卡记忆体佔用。";
+  static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR 至 SDR 降级策略 (Tone Mapping)：\n当 HDR 图片在 SDR 显示器上显示时的对映方式。\n感知模式：保留高光细节，平滑压缩亮度曲线，观感柔和。\n色度模式：保持严格亮度对映，超出显示器极限的亮度将被直接裁剪。";
+  static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"自動：图片小於萤幕尺寸时 100% 缩放，图片大於萤幕尺寸时适应萤幕尺寸缩放。";
   static constexpr const wchar_t *Settings_Header_GeekGlass = L"玻璃引擎 (GPU加速)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"啟用玻璃渲染";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互動畫";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心材質";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"启用玻璃渲染";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"交互动画";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心材质";
   static constexpr const wchar_t *Settings_Label_BlurSigma = L"模糊半徑";
   static constexpr const wchar_t *Settings_Status_GlassDisabled = L"啟用玻璃渲染後生效";
   static constexpr const wchar_t *Settings_Label_TintDensity = L"厚度 (濃度)";
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"控制玻璃底色深度。";
   static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光澤亮度";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板光澤強度。";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"控制玻璃面板光泽强度。";
   static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"陰影強度";
-  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"調節 GPU 加速物理落影的深淺。";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"邊緣";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"線框粗细";
+  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"调节 GPU 加速物理落影的深浅。";
+  static constexpr const wchar_t *Settings_Header_VectorAssets = L"边缘";
+  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"線框粗細";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"標準 (1.5px)";
   static constexpr const wchar_t *Settings_Option_StrokeFine = L"極細 (1.0px)";
   static constexpr const wchar_t *Settings_Header_GlassTint = L"玻璃著色";
@@ -1871,25 +1875,18 @@ struct TW {
   static constexpr const wchar_t *Settings_Option_TintCustom = L"自定義";
   static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"自定義底色";
   static constexpr const wchar_t *Settings_Header_DensityMatrix = L"材質濃度";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"信息提示 (OSD)";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"控制加載進度條、播放提示、縮放信息等浮層的厚度。";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"資訊提示 (OSD)";
+  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"控制加载进度条、播放提示、缩放信息等浮层的厚度。";
   static constexpr const wchar_t *Settings_Label_PanelsDensity = L"工具面板";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"控制底部工具欄、側邊面板的厚度。";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"模态視窗";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"控制設定、關於和對話方塊的厚度。";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右鍵菜單";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右鍵菜單、下拉列表的厚度。";
-
-  static constexpr const wchar_t *Settings_Tab_Theme = L"主題";
-  static constexpr const wchar_t *Settings_Label_ThemeMode = L"主題模式";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"自動";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"深色";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"淺色";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"自定義";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"環境遮罩";
-  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"在畫廊模式、設定視窗或對話方塊開啟時，為背景添加沉浸式陰影。";
-  static constexpr const wchar_t *Settings_Label_AccentColor = L"強調色";
+  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"控制底部工具栏、侧边面板的厚度。";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"模態窗口";
+  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"控制設定、關於和对话框的厚度。";
+  static constexpr const wchar_t *Settings_Label_MenusDensity = L"右鍵選單";
+  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"控制右鍵選單、下拉列表的厚度。";
   static constexpr const wchar_t *Settings_Label_TextColor = L"文字顏色";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"主題管理";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"匯出主題 (.qvtheme)";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"導入主題 (.qvtheme)";
 };
 
 // ----------------------------------------------------------------
@@ -2174,7 +2171,7 @@ struct JA {
   static constexpr const wchar_t *Settings_Option_HdrPerceptual = L"知覚的";
   static constexpr const wchar_t *Settings_Option_HdrColorimetric = L"測色";
   static constexpr const wchar_t *Settings_Label_CmsFallback = L"プロファイルなし画像のフォールバック";
-  static constexpr const wchar_t *Settings_Label_CustomProof = L"ソフトプルーフプロファイル (.icc)";
+  static constexpr const wchar_t *Settings_Label_CustomProof = L"ソフトプルーフプレビュー (.icc)";
   static constexpr const wchar_t *Context_SoftProofing = L"ソフトプルーフプレビュー";
   static constexpr const wchar_t *Context_SoftProofProfile = L"プルーフプロファイル";
   static constexpr const wchar_t *Context_SoftProofCustom = L"カスタム...";
@@ -2360,6 +2357,9 @@ struct JA {
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"没入型シャドウを追加します。";
   static constexpr const wchar_t *Settings_Label_AccentColor = L"アクセント色";
   static constexpr const wchar_t *Settings_Label_TextColor = L"テキスト色";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"テーマ管理";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"テーマをエクスポート (.qvtheme)";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"テーマをインポート (.qvtheme)";
 
   // Geek Glass
   static constexpr const wchar_t *Settings_Header_GeekGlass = L"ガラスエンジン (GPU)";
@@ -2730,211 +2730,10 @@ struct RU {
       L"Сбросить все настройки";
   static constexpr const wchar_t *Settings_Action_Restore = L"Восстановить";
   static constexpr const wchar_t *Settings_Action_Done = L"Готово";
-
-    static constexpr const wchar_t *Settings_Option_CmsUnmanaged = L"Неуправляемый (быстро)";
-  static constexpr const wchar_t *Settings_Option_CmssRGB = L"sRGB (стандарт)";
-  static constexpr const wchar_t *Settings_Option_CmsP3 = L"Display P3 (широкий охват)";
-  static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
-  static constexpr const wchar_t *Settings_Option_CmsGray = L"Оттенки серого (контроль тона)";
-  static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
-  static constexpr const wchar_t *Settings_Label_CmsIntent = L"Цель рендеринга";
-  static constexpr const wchar_t *Settings_Option_CmsIntentRelative =
-      L"Относительный колориметрический";
-  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual =
-      L"Перцептивный";
-
-  static constexpr const wchar_t *Settings_Action_CheckUpdates =
-      L"Проверить наличие новой версии";
-  static constexpr const wchar_t *Settings_Action_ViewUpdate =
-      L"Посмотреть обновление";
-  static constexpr const wchar_t *Settings_Status_Checking = L"Проверка...";
-  static constexpr const wchar_t *Settings_Status_UpToDate =
-      L"Актуальная версия";
-  static constexpr const wchar_t *Settings_Link_GitHub = L"Репозиторий GitHub";
-  static constexpr const wchar_t *Settings_Link_ReportIssue =
-      L"Сообщить о проблеме";
-  static constexpr const wchar_t *Settings_Link_Hotkeys = L"Горячие клавиши";
-  static constexpr const wchar_t *Settings_Label_Version = L"Версия";
-  static constexpr const wchar_t *Settings_Label_Build = L"Сборка";
-
-  static constexpr const wchar_t *Dialog_UpdateTitle =
-      L"Доступна новая версия!";
-  static constexpr const wchar_t *Dialog_UpdateContent = L"Доступна версия %s.";
-  static constexpr const wchar_t *Dialog_UpdateLogHeader = L"История изменений";
-  static constexpr const wchar_t *Dialog_ButtonUpdate = L"Обновить";
-  static constexpr const wchar_t *Dialog_ButtonLater = L"Позже";
-  static constexpr const wchar_t *Dialog_ButtonStar = L"Звезда на GitHub";
-  static constexpr const wchar_t *Dialog_Update_LoveTitle =
-      L"QuickView создан с любовью";
-  static constexpr const wchar_t *Dialog_Update_LoveMessage =
-      L"Я разрабатываю QuickView в свободное время, потому что считаю, что "
-      L"в Windows должен быть более быстрый и чистый просмотрщик. Если вам "
-      L"нравится эта программа, пожалуйста, поставьте звезду на "
-      L"GitHub или расскажите о QuickView другу.";
-  static constexpr const wchar_t *Settings_Option_Black = L"Чёрный";
-  static constexpr const wchar_t *Settings_Option_White = L"Белый";
-  static constexpr const wchar_t *Settings_Option_Grid = L"Сетка";
-  static constexpr const wchar_t *Settings_Option_Custom = L"Свой";
-  static constexpr const wchar_t *Settings_Option_Off = L"Выкл";
-  static constexpr const wchar_t *Settings_Option_On = L"Вкл";
-  static constexpr const wchar_t *Settings_Option_Lite = L"Кратко";
-  static constexpr const wchar_t *Settings_Option_Full = L"Полностью";
-  static constexpr const wchar_t *Settings_Option_LargeOnly = L"Только большие";
-  static constexpr const wchar_t *Settings_Option_All = L"Все";
-  static constexpr const wchar_t *Settings_Option_Window = L"Окно";
-  static constexpr const wchar_t *Settings_Option_Pan = L"Панорамирование";
-  static constexpr const wchar_t *Settings_Option_None = L"Нет";
-  static constexpr const wchar_t *Settings_Option_Exit = L"Выход";
-  static constexpr const wchar_t *Settings_Option_Arrow = L"Стрелка";
-  static constexpr const wchar_t *Settings_Option_Cursor = L"Курсор";
-  static constexpr const wchar_t *Settings_Option_Manual = L"Вручную";
-  static constexpr const wchar_t *Settings_Option_SortAuto = L"Авто (Проводник)";
-  static constexpr const wchar_t *Settings_Option_SortName = L"Имя";
-  static constexpr const wchar_t *Settings_Option_SortModified = L"Дата изменения";
-  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Дата съемки (EXIF)";
-  static constexpr const wchar_t *Settings_Option_SortSize = L"Размер";
-  static constexpr const wchar_t *Settings_Option_SortType = L"Тип";
-  static constexpr const wchar_t *Settings_Option_NavLoop = L"Цикл в папке";
-  static constexpr const wchar_t *Settings_Option_NavStop = L"Остановка в конце";
-  static constexpr const wchar_t *Settings_Option_NavThrough = L"Через вложенные папки";
-
-  static constexpr const wchar_t *Settings_Option_Linear =
-      L"Линейный (простое сглаживание)";
-  static constexpr const wchar_t *Settings_Option_Nearest =
-      L"По соседним (макс. резкость)";
-  static constexpr const wchar_t *Settings_Option_HighQualityCubic =
-      L"HQ кубический (макс. сглаживание)";
-  static constexpr const wchar_t *Settings_Option_ZoomAuto = L"Авто";
-  static constexpr const wchar_t *Settings_Option_Auto = L"Авто";
-  static constexpr const wchar_t *Settings_Option_Eco = L"Эко";
-  static constexpr const wchar_t *Settings_Option_Balanced = L"Баланс";
-  static constexpr const wchar_t *Settings_Option_Ultra = L"Ультра";
-
-  static constexpr const wchar_t *Help_Header_Shortcuts = L"Горячие клавиши";
-  static constexpr const wchar_t *Help_Header_Mouse = L"Мышь";
-  static constexpr const wchar_t *Help_Item_NextPrev =
-      L"След./пред. изображение";
-  static constexpr const wchar_t *Help_Item_Zoom = L"Масштабирование";
-  static constexpr const wchar_t *Help_Item_Pan = L"Панорамирование";
-  static constexpr const wchar_t *Help_Item_Rotate = L"Поворот";
-  static constexpr const wchar_t *Help_Item_Fit = L"По размеру экрана";
-  static constexpr const wchar_t *Help_Item_Delete = L"Удалить изображение";
-  static constexpr const wchar_t *Help_Item_Fullscreen = L"Полный экран";
-  static constexpr const wchar_t *Help_Item_Close = L"Закрыть";
-  static constexpr const wchar_t *Help_Item_Compare = L"Режим сравнения";
-  static constexpr const wchar_t *Help_Item_FirstLast = L"Первое/последнее изображение";
-
-  static constexpr const wchar_t *Help_Mouse_Left = L"Левая кнопка";
-  static constexpr const wchar_t *Help_Mouse_Middle = L"Средняя кнопка";
-  static constexpr const wchar_t *Help_Mouse_Wheel = L"Колёсико";
-  static constexpr const wchar_t *Help_Mouse_Right = L"Правая кнопка";
-  static constexpr const wchar_t *Help_Action_MoveWindow =
-      L"Перемещение окна / Выход из полноэкранного режима / Выход из "
-      L"максимизированного";
-  static constexpr const wchar_t *Help_Action_PanImage = L"Панорамирование";
-  static constexpr const wchar_t *Help_Action_ContextMenu = L"Контекстное меню";
-  static constexpr const wchar_t *Help_Action_NextPrev = L"След./Пред.";
-  static constexpr const wchar_t *Help_Action_Zoom = L"Масштаб";
-  static constexpr const wchar_t *Help_Action_SmartZoom =
-      L"Умный масштаб (100% / По размеру)";
-  static constexpr const wchar_t *Help_Desc_Copy = L"Скопировать изображение";
-  static constexpr const wchar_t *Help_Desc_Edit = L"Изменить";
-
-  static constexpr const wchar_t *Help_Header_Tips = L"Советы и термины";
-  static constexpr const wchar_t *Help_Tip_ContextScope =
-      L"* Горячие клавиши и контекстное меню действуют только на текущий "
-      L"процесс. Настройки не изменяются.";
-  static constexpr const wchar_t *Help_Tip_Rotation =
-      L"Поворот: при оптимизации краёв происходит их небольшая обрезка, чтобы они вписались в границы блока "
-      L"(без потерь). В режиме с потерями выполняется полное перекодирование изображения.";
-  static constexpr const wchar_t *Help_Tip_VideoWall =
-      L"Видеостена (Ctrl+F11): Распределение картинки по всем мониторам. Если кнопка закрытия скрыта, "
-      L"для выхода дважды щёлкните мышью.";
-  static constexpr const wchar_t *Help_Tip_DesignerMode =
-      L"Дизайнерский режим: Закрепление окна, изменение размера/блокировка, Масштабирование/панорамирование "
-      L"изображения для получения детальной информации. Перетащите окно в нужное положение.";
-  static constexpr const wchar_t *Help_Tip_Raw =
-      L"Кнопка RAW: По умолчанию QuickView показывает встроенную картинку предпросмотра. Нажмите "
-      L"для полного декодирования (может выглядеть по-другому из-за параметров рендеринга).";
-  static constexpr const wchar_t *Help_Tip_JpegQ =
-      L"Качество JPEG: Расчётное значение качества (реверс-инжиниринг). Может слегка "
-      L"отличаться от настройки сохранения из-за различий в алгоритме.";
-
-  static constexpr const wchar_t *HUD_Group_Physical = L"ФИЗИЧЕСКИЕ АТРИБУТЫ";
-  static constexpr const wchar_t *HUD_Group_Scientific = L"НАУЧНОЕ КАЧЕСТВО";
-  static constexpr const wchar_t *HUD_Group_Encoding = L"ОПТИКА И КОДИРОВАНИЕ";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Desc =
-      L"Определение границ (Лапласова дисперсия)";
-  static constexpr const wchar_t *HUD_Tip_Sharp_High =
-      L"Чёткие края, высокая детализация";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Low =
-      L"Мягкий фокус или размытие в движении";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 - очень резко";
-  static constexpr const wchar_t *HUD_Tip_Ent_Desc =
-      L"Плотность информации (энтропия Шеннона)";
-  static constexpr const wchar_t *HUD_Tip_Ent_High =
-      L"Сложные текстуры или высокий уровень шума";
-  static constexpr const wchar_t *HUD_Tip_Ent_Low = L"Плоские участки или низкая детализация";
-  static constexpr const wchar_t *HUD_Tip_Ent_Ref = L"7.0-8.0 - высокая детализация";
-  static constexpr const wchar_t *HUD_Tip_BPP_Desc =
-      L"Бит на пиксел (эффективность сжатия)";
-  static constexpr const wchar_t *HUD_Tip_BPP_High =
-      L"Низкая эффективность (сохраняется больше данных)";
-  static constexpr const wchar_t *HUD_Tip_BPP_Low =
-      L"Высокая эффективность (более плотное сжатие)";
-  static constexpr const wchar_t *HUD_Tip_BPP_Ref =
-      L"24.0 (Raw RGB), ~2.0-3.0 (High JPEG), ~0.5-1.5 (WebP/AVIF)";
-
-  static constexpr const wchar_t *HUD_Label_High = L"Высокая: ";
-  static constexpr const wchar_t *HUD_Label_Low = L"Низкая: ";
-  static constexpr const wchar_t *HUD_Label_Ref = L"Эталон: ";
-  static constexpr const wchar_t *Settings_Tooltip_CMS = L"Включить систему управления цветом (CMS).\nПри включении применяется высокоточное преобразование цветового пространства через GPU для восстановления истинных цветов.\nОтключение снижает нагрузку на GPU, но может привести к перенасыщению цветов на дисплеях с широким цветовым охватом.";
-  static constexpr const wchar_t *Settings_Tooltip_CmsIntent = L"Метод преобразования цветового пространства (Rendering Intent).\nПерцептивная: Сжимает цвета вне охвата для сохранения деталей и градиентов (идеально для фото).\nОтносительная колориметрическая: Сохраняет цвета в пределах охвата и обрезает выходящие за его пределы (идеально для UI и иконок).";
-  static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"Включить 16-битный конвейер рендеринга с плавающей запятой (scRGB).\nПри включении идеально отображает яркие участки фотографий на HDR-дисплеях, снимая ограничение SDR.\nОтключение принудительно отображает изображение в SDR.\nВнимание: Включение увеличивает использование видеопамяти.";
-  static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"Стратегия тональной компрессии HDR в SDR:\nОпределяет, как HDR-изображения отображаются на SDR-мониторах.\nПерцептивная: Сохраняет детали в светах за счет плавного сжатия кривой яркости (более мягкий вид).\nКолориметрическая: Строгое отображение яркости; светлые участки, превышающие предел монитора, обрезаются.";
-  static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"Авто: масштаб 100%, если изображение меньше экрана, и вписывание в экран, если больше.";
-  static constexpr const wchar_t *Settings_Tab_Theme = L"Тема";
-  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Режим";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Авто";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Тёмная";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Светлая";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Своя";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Затемнение";
-  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Добавляет тень на фон при открытых окнах.";
-  static constexpr const wchar_t *Settings_Label_AccentColor = L"Акцентный цвет";
   static constexpr const wchar_t *Settings_Label_TextColor = L"Цвет текста";
-
-  // Geek Glass
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Стеклянный движок (GPU)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Стеклянный рендеринг";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Анимация";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Материал";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Радиус размытия";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Требуется рендеринг";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Плотность (толщина)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Управляет глубиной базового цвета стекла.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Блеск";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Управляет интенсивностью зеркальных бликов.";
-  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"Тень";
-  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"Интенсивность тени.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Грани";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Толщина линий";
-  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Стандарт (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Тонкая (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Окрашивание";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Режим окраски";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Авто";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Свой";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Свой цвет";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Плотность материала";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"Подсказки (OSD)";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Управляет плотностью всплывающих подсказок.";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"Панели";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Управляет плотностью панелей инструментов.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Окна настроек";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Управляет плотностью окон настроек и диалогов.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Меню";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Управляет плотностью контекстных меню.";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"Управление темами";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"Экспорт (.qvtheme)";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"Импорт (.qvtheme)";
 };
 
 // ----------------------------------------------------------------
@@ -3261,203 +3060,10 @@ struct DE {
       L"Alle Einstellungen zurücksetzen";
   static constexpr const wchar_t *Settings_Action_Restore = L"Wiederherstellen";
   static constexpr const wchar_t *Settings_Action_Done = L"Fertig";
-  static constexpr const wchar_t *Settings_Action_CheckUpdates =
-      L"Nach Updates suchen";
-  static constexpr const wchar_t *Settings_Action_ViewUpdate =
-      L"Update anzeigen";
-  static constexpr const wchar_t *Settings_Status_Checking = L"Prüfe...";
-  static constexpr const wchar_t *Settings_Status_UpToDate = L"Aktuell";
-  static constexpr const wchar_t *Settings_Link_GitHub = L"GitHub-Repository";
-  static constexpr const wchar_t *Settings_Link_ReportIssue = L"Problem melden";
-  static constexpr const wchar_t *Settings_Link_Hotkeys = L"Tastenkürzel";
-  static constexpr const wchar_t *Settings_Label_Version = L"Version";
-  static constexpr const wchar_t *Settings_Label_Build = L"Build";
-
-  static constexpr const wchar_t *Dialog_UpdateTitle =
-      L"Neue Version verfügbar!";
-  static constexpr const wchar_t *Dialog_UpdateContent = L"v%s is ready.";
-  static constexpr const wchar_t *Dialog_ButtonUpdate = L"Jetzt aktualisieren";
-  static constexpr const wchar_t *Dialog_ButtonLater = L"Später";
-  static constexpr const wchar_t *Dialog_ButtonStar = L"Stern auf GitHub";
-  static constexpr const wchar_t *Dialog_Update_LoveTitle =
-      L"QuickView wird mit Liebe entwickelt";
-  static constexpr const wchar_t *Dialog_Update_LoveMessage =
-      L"Ich pflege QuickView in meiner Freizeit, weil ich glaube, dass Windows "
-      L"einen schnelleren und saubereren Viewer verdient. Wenn Ihnen dieses "
-      L"Update gefällt, ist der größte Beitrag, uns auf GitHub einen Stern zu "
-      L"geben.";
-  static constexpr const wchar_t *Settings_Option_Black = L"Schwarz";
-  static constexpr const wchar_t *Settings_Option_White = L"Weiß";
-  static constexpr const wchar_t *Settings_Option_Grid = L"Raster";
-  static constexpr const wchar_t *Settings_Option_Custom = L"Benutzerdefiniert";
-  static constexpr const wchar_t *Settings_Option_Off = L"Aus";
-  static constexpr const wchar_t *Settings_Option_On = L"Ein";
-  static constexpr const wchar_t *Settings_Option_Lite = L"Kompakt";
-  static constexpr const wchar_t *Settings_Option_Full = L"Vollständig";
-  static constexpr const wchar_t *Settings_Option_LargeOnly = L"Nur Große";
-  static constexpr const wchar_t *Settings_Option_All = L"Alle";
-  static constexpr const wchar_t *Settings_Option_Window = L"Fenster";
-  static constexpr const wchar_t *Settings_Option_Pan = L"Schwenken";
-  static constexpr const wchar_t *Settings_Option_None = L"Keine";
-  static constexpr const wchar_t *Settings_Option_Exit = L"Beenden";
-  static constexpr const wchar_t *Settings_Option_Arrow = L"Pfeil";
-  static constexpr const wchar_t *Settings_Option_Cursor = L"Cursor";
-  static constexpr const wchar_t *Settings_Option_Manual = L"Manuell";
-  static constexpr const wchar_t *Settings_Option_SortAuto = L"Auto (Explorer)";
-  static constexpr const wchar_t *Settings_Option_SortName = L"Name";
-  static constexpr const wchar_t *Settings_Option_SortModified = L"Änderungsdatum";
-  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Aufnahmedatum (EXIF)";
-  static constexpr const wchar_t *Settings_Option_SortSize = L"Größe";
-  static constexpr const wchar_t *Settings_Option_SortType = L"Typ";
-  static constexpr const wchar_t *Settings_Option_NavLoop = L"Schleife im Ordner";
-  static constexpr const wchar_t *Settings_Option_NavStop = L"Am Ende stoppen";
-  static constexpr const wchar_t *Settings_Option_NavThrough = L"Durch Unterordner";
-
-  static constexpr const wchar_t *Settings_Option_Linear =
-      L"Linear: Grundglättung";
-  static constexpr const wchar_t *Settings_Option_Nearest =
-      L"Nächster: Extreme Schärfe";
-  static constexpr const wchar_t *Settings_Option_HighQualityCubic =
-      L"HQ Kubisch: Extreme Glättung";
-  static constexpr const wchar_t *Settings_Option_ZoomAuto = L"Auto";
-  static constexpr const wchar_t *Settings_Option_Auto = L"Auto";
-  static constexpr const wchar_t *Settings_Option_Eco = L"Öko";
-  static constexpr const wchar_t *Settings_Option_Balanced = L"Ausgewogen";
-  static constexpr const wchar_t *Settings_Option_Ultra = L"Ultra";
-
-  static constexpr const wchar_t *Help_Header_Shortcuts = L"Tastenkürzel";
-  static constexpr const wchar_t *Help_Header_Mouse = L"Mausaktionen";
-  static constexpr const wchar_t *Help_Item_NextPrev =
-      L"Nächstes/Vorheriges Bild";
-  static constexpr const wchar_t *Help_Item_Zoom = L"Zoomen";
-  static constexpr const wchar_t *Help_Item_Pan = L"Bild schwenken";
-  static constexpr const wchar_t *Help_Item_Rotate = L"Drehen";
-  static constexpr const wchar_t *Help_Item_Fit = L"An Bildschirm anpassen";
-  static constexpr const wchar_t *Help_Item_Delete = L"Bild löschen";
-  static constexpr const wchar_t *Help_Item_Fullscreen = L"Vollbild";
-  static constexpr const wchar_t *Help_Item_Close = L"Schließen";
-  static constexpr const wchar_t *Help_Mouse_Left = L"Linke Taste";
-  static constexpr const wchar_t *Help_Mouse_Middle = L"Mittlere Taste";
-  static constexpr const wchar_t *Help_Mouse_Wheel = L"Mausrad";
-  static constexpr const wchar_t *Help_Mouse_Right = L"Rechte Taste";
-  static constexpr const wchar_t *Help_Action_MoveWindow =
-      L"Fenster bewegen / Vollbild beenden / Maximierung aufheben";
-  static constexpr const wchar_t *Help_Action_PanImage = L"Bild schwenken";
-  static constexpr const wchar_t *Help_Action_ContextMenu = L"Kontextmenü";
-  static constexpr const wchar_t *Help_Action_NextPrev = L"Weiter/Zurück";
-  static constexpr const wchar_t *Help_Action_Zoom = L"Zoom";
-  static constexpr const wchar_t *Help_Action_SmartZoom =
-      L"Smart-Zoom (100% / Anpassen)";
-  static constexpr const wchar_t *Help_Desc_Copy = L"Copy Image";
-  static constexpr const wchar_t *Help_Desc_Edit = L"Edit";
-
-  static constexpr const wchar_t *Help_Header_Tips = L"Tips & Glossary";
-  static constexpr const wchar_t *Help_Tip_ContextScope =
-      L"Hinweis: Shortcuts gelten nur für aktuellen Prozess.";
-  static constexpr const wchar_t *Help_Tip_Rotation =
-      L"Rotation: 'Edge Adapted' means minor cropping to fit block boundaries "
-      L"(lossless data). 'Lossy' means full re-encoding.";
-  static constexpr const wchar_t *Help_Tip_VideoWall =
-      L"Video Wall (Ctrl+F11): Spans all monitors. If close button is hidden, "
-      L"double-click to exit.";
-  static constexpr const wchar_t *Help_Tip_DesignerMode =
-      L"Designer Mode: Pin Window, Resize/Lock, Zoom/Pan image to reference "
-      L"detail. Drag window to position.";
-  static constexpr const wchar_t *Help_Tip_Raw =
-      L"RAW Button: QuickView shows embedded preview by default. Click to "
-      L"fully decode (may look different due to rendering parameters).";
-  static constexpr const wchar_t *Help_Tip_JpegQ =
-      L"JPEG Quality: Estimated Q value (reverse engineered). May differ "
-      L"slightly from save setting due to algorithm variations.";
-
-  static constexpr const wchar_t *Help_Item_Compare = L"Compare Mode";
-  static constexpr const wchar_t *Help_Item_FirstLast = L"Erstes / Letztes Bild";
-  static constexpr const wchar_t *Context_ColorSpace = L"Farbraum";
-  static constexpr const wchar_t *Settings_Option_CmsUnmanaged = L"Unverwaltet (schnell)";
-  static constexpr const wchar_t *Settings_Option_CmssRGB = L"sRGB (Standard)";
-  static constexpr const wchar_t *Settings_Option_CmsP3 = L"Display P3 (Breites Farbspektrum)";
-  static constexpr const wchar_t *Settings_Option_CmsAdobeRGB = L"Adobe RGB (1998)";
-  static constexpr const wchar_t *Settings_Option_CmsGray = L"Graustufen (Tonwertkontrolle)";
-  static constexpr const wchar_t *Settings_Option_CmsProPhoto = L"ProPhoto RGB";
-  static constexpr const wchar_t *Settings_Label_CmsIntent = L"Rendering-Intent";
-  static constexpr const wchar_t *Settings_Option_CmsIntentRelative = L"Relativ farbmetrisch";
-  static constexpr const wchar_t *Settings_Option_CmsIntentPerceptual = L"Perzeptiv";
-  static constexpr const wchar_t *Dialog_UpdateLogHeader = L"Was ist neu:";
-  static constexpr const wchar_t *HUD_Group_Physical = L"PHYSISCHE ATTRIBUTE";
-  static constexpr const wchar_t *HUD_Group_Scientific = L"WISSENSCHAFTLICHE QUALITÄT";
-  static constexpr const wchar_t *HUD_Group_Encoding = L"OPTIK & KODIERUNG";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Desc =
-      L"Edge definition (Laplacian Variance)";
-  static constexpr const wchar_t *HUD_Tip_Sharp_High =
-      L"Crisp edges, high detail";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Low =
-      L"Weichzeichner oder Unschärfe";
-  static constexpr const wchar_t *HUD_Tip_Sharp_Ref = L"> 500 is very sharp";
-  static constexpr const wchar_t *HUD_Tip_Ent_Desc =
-      L"Information density (Shannon Entropy)";
-  static constexpr const wchar_t *HUD_Tip_Ent_High =
-      L"Complex textures or high noise";
-  static constexpr const wchar_t *HUD_Tip_Ent_Low = L"Flat areas or low detail";
-  static constexpr const wchar_t *HUD_Tip_Ent_Ref = L"7.0-8.0 is high detail";
-  static constexpr const wchar_t *HUD_Tip_BPP_Desc =
-      L"Bits Per Pixel (Compression Efficiency)";
-  static constexpr const wchar_t *HUD_Tip_BPP_High =
-      L"Lower efficiency (more data preserved)";
-  static constexpr const wchar_t *HUD_Tip_BPP_Low =
-      L"Higher efficiency (higher compression)";
-  static constexpr const wchar_t *HUD_Tip_BPP_Ref =
-      L"24.0 (Raw RGB), ~2.0-3.0 (High JPEG), ~0.5-1.5 (WebP/AVIF)";
-
-  static constexpr const wchar_t *HUD_Label_High = L"High: ";
-  static constexpr const wchar_t *HUD_Label_Low = L"Low: ";
-  static constexpr const wchar_t *HUD_Label_Ref = L"Ref: ";
-  static constexpr const wchar_t *Settings_Tooltip_CMS = L"Farbmanagementsystem (CMS) aktivieren.\nWenn aktiviert, wird eine hochpräzise Farbraumkonvertierung über die GPU angewendet, um echte Farben wiederherzustellen.\nDeaktivieren verringert die GPU-Auslastung, kann aber auf Displays mit großem Farbraum zu übersättigten Farben führen.";
-  static constexpr const wchar_t *Settings_Tooltip_CmsIntent = L"Rendering-Intent für die Farbraumkonvertierung.\nPerzeptiv: Komprimiert Farben außerhalb des Farbraums, um Details und Farbverläufe zu erhalten (ideal für Fotos).\nRelativ farbmetrisch: Behält Farben im Farbraum bei und schneidet die anderen ab (ideal für UI und Symbole).";
-  static constexpr const wchar_t *Settings_Tooltip_AdvancedColor = L"16-Bit-Gleitkomma-Rendering-Pipeline (scRGB) aktivieren.\nWenn aktiviert, werden die Lichter von Fotos auf HDR-fähigen Displays perfekt gerendert, indem das SDR-Limit überschritten wird.\nDeaktivieren erzwingt die Zuordnung zur SDR-Ausgabe.\nHinweis: Aktivieren erhöht die VRAM-Nutzung.";
-  static constexpr const wchar_t *Settings_Tooltip_HdrToneMapping = L"HDR zu SDR Tonzuordnungsstrategie:\nLegt fest, wie HDR-Bilder auf SDR-Monitoren angezeigt werden.\nPerzeptiv: Erhält Highlight-Details durch sanfte Komprimierung der Luminanzkurve (weicherer Look).\nFarbmetrisch: Strikte Luminanzzuordnung; Highlights, die das Monitorlimit überschreiten, werden abgeschnitten.";
-  static constexpr const wchar_t *Settings_Tooltip_ZoomAuto = L"Auto: 100 % Skalierung, wenn das Bild kleiner als der Bildschirm ist, und an den Bildschirm anpassen, wenn es größer ist.";
-  static constexpr const wchar_t *Settings_Tab_Theme = L"Thema";
-  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Modus";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Auto";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Dunkel";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Hell";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Eigener";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Dimmung";
-  static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Hintergrundschatten.";
-  static constexpr const wchar_t *Settings_Label_AccentColor = L"Akzent";
   static constexpr const wchar_t *Settings_Label_TextColor = L"Farbe";
-
-  // Geek Glass
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glas-Engine (GPU)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Glas-Rendering";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Animation";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Radius";
-  static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Erfordert Rendering";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Dichte (Dicke)";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Glasfarbtiefe.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Glanz";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Glanzintensität.";
-  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"Schatten";
-  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"Schattenintensität.";
-  static constexpr const wchar_t *Settings_Header_VectorAssets = L"Kanten";
-  static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Linienstärke";
-  static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
-  static constexpr const wchar_t *Settings_Option_StrokeFine = L"Fein (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"Glasiert";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"Tönung";
-  static constexpr const wchar_t *Settings_Option_TintAuto = L"Auto";
-  static constexpr const wchar_t *Settings_Option_TintCustom = L"Eigene";
-  static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"Eigene Farbe";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"Materialdichte";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"Hinweise (OSD)";
-  static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"Dichte der OSD-Anzeigen.";
-  static constexpr const wchar_t *Settings_Label_PanelsDensity = L"Werkzeugleisten";
-  static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"Dichte der Panel.";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"Einstellungsfenster";
-  static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"Dichte der Dialoge.";
-  static constexpr const wchar_t *Settings_Label_MenusDensity = L"Menüs";
-  static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Dichte der Kontextmenüs.";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"Themenverwaltung";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"Exportieren (.qvtheme)";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"Importieren (.qvtheme)";
 };
 
 // ----------------------------------------------------------------
@@ -3798,89 +3404,6 @@ struct ES {
       L"Restablecer toda la configuración";
   static constexpr const wchar_t *Settings_Action_Restore = L"Restaurar";
   static constexpr const wchar_t *Settings_Action_Done = L"Hecho";
-  static constexpr const wchar_t *Settings_Action_CheckUpdates =
-      L"Buscar actualizaciones";
-  static constexpr const wchar_t *Settings_Action_ViewUpdate =
-      L"Ver actualización";
-  static constexpr const wchar_t *Settings_Status_Checking = L"Comprobando...";
-  static constexpr const wchar_t *Settings_Status_UpToDate = L"Actualizado";
-  static constexpr const wchar_t *Settings_Link_GitHub = L"Repositorio GitHub";
-  static constexpr const wchar_t *Settings_Link_ReportIssue =
-      L"Reportar problema";
-  static constexpr const wchar_t *Settings_Link_Hotkeys = L"Atajos de teclado";
-  static constexpr const wchar_t *Settings_Label_Version = L"Versión";
-  static constexpr const wchar_t *Settings_Label_Build = L"Compilación";
-
-  static constexpr const wchar_t *Dialog_UpdateTitle =
-      L"¡Nueva versión disponible!";
-  static constexpr const wchar_t *Dialog_UpdateContent = L"v%s está listo.";
-  static constexpr const wchar_t *Dialog_UpdateLogHeader =
-      L"Registro de cambios";
-  static constexpr const wchar_t *Dialog_ButtonUpdate = L"Actualizar ahora";
-  static constexpr const wchar_t *Dialog_ButtonLater = L"Más tarde";
-  static constexpr const wchar_t *Dialog_ButtonStar = L"Estrella en GitHub";
-  static constexpr const wchar_t *Dialog_Update_LoveTitle =
-      L"QuickView está hecho con amor";
-  static constexpr const wchar_t *Dialog_Update_LoveMessage =
-      L"Yo mantengo QuickView en mi tiempo libre porque creo que Windows "
-      L"merece un visor más rápido y limpio. Si disfrutas de esta "
-      L"actualización, la mayor contribución es darnos una estrella en GitHub.";
-  static constexpr const wchar_t *Settings_Option_Black = L"Negro";
-  static constexpr const wchar_t *Settings_Option_White = L"Blanco";
-  static constexpr const wchar_t *Settings_Option_Grid = L"Cuadrícula";
-  static constexpr const wchar_t *Settings_Option_Custom = L"Personalizado";
-  static constexpr const wchar_t *Settings_Option_Off = L"Desactivado";
-  static constexpr const wchar_t *Settings_Option_On = L"Activado";
-  static constexpr const wchar_t *Settings_Option_Lite = L"Compacto";
-  static constexpr const wchar_t *Settings_Option_Full = L"Completo";
-  static constexpr const wchar_t *Settings_Option_LargeOnly = L"Solo grandes";
-  static constexpr const wchar_t *Settings_Option_All = L"Todos";
-  static constexpr const wchar_t *Settings_Option_Window = L"Ventana";
-  static constexpr const wchar_t *Settings_Option_Pan = L"Panorámica";
-  static constexpr const wchar_t *Settings_Option_None = L"Ninguno";
-  static constexpr const wchar_t *Settings_Option_Exit = L"Salir";
-  static constexpr const wchar_t *Settings_Option_Arrow = L"Flecha";
-  static constexpr const wchar_t *Settings_Option_Cursor = L"Cursor";
-  static constexpr const wchar_t *Settings_Option_Manual = L"Manual";
-  static constexpr const wchar_t *Settings_Option_SortAuto = L"Auto (Explorador)";
-  static constexpr const wchar_t *Settings_Option_SortName = L"Nombre";
-  static constexpr const wchar_t *Settings_Option_SortModified = L"Fecha de modificación";
-  static constexpr const wchar_t *Settings_Option_SortDateTaken = L"Fecha de captura (EXIF)";
-  static constexpr const wchar_t *Settings_Option_SortSize = L"Tamaño";
-  static constexpr const wchar_t *Settings_Option_SortType = L"Tipo";
-  static constexpr const wchar_t *Settings_Option_NavLoop = L"Bucle en carpeta";
-  static constexpr const wchar_t *Settings_Option_NavStop = L"Detener al final";
-  static constexpr const wchar_t *Settings_Option_NavThrough = L"A través de subcarpetas";
-
-  static constexpr const wchar_t *Settings_Option_Linear =
-      L"Lineal: Suavizado básico";
-  static constexpr const wchar_t *Settings_Option_Nearest =
-      L"Cercano: Extrema nitidez";
-  static constexpr const wchar_t *Settings_Option_HighQualityCubic =
-      L"Cúbico HQ: Extremo suavizado";
-  static constexpr const wchar_t *Settings_Option_ZoomAuto = L"Auto";
-  static constexpr const wchar_t *Settings_Option_Auto = L"Automático";
-  static constexpr const wchar_t *Settings_Option_Eco = L"Eco";
-  static constexpr const wchar_t *Settings_Option_Balanced = L"Equilibrado";
-  static constexpr const wchar_t *Settings_Option_Ultra = L"Ultra";
-
-  static constexpr const wchar_t *Help_Header_Shortcuts = L"Atajos de teclado";
-  static constexpr const wchar_t *Help_Header_Mouse = L"Acciones del ratón";
-  static constexpr const wchar_t *Help_Item_NextPrev = L"Siguiente / Anterior";
-  static constexpr const wchar_t *Help_Item_Zoom = L"Zoom";
-  static constexpr const wchar_t *Help_Item_Pan = L"Mover imagen";
-  static constexpr const wchar_t *Help_Item_Rotate = L"Girar";
-  static constexpr const wchar_t *Help_Item_Fit = L"Ajustar a pantalla";
-  static constexpr const wchar_t *Help_Item_Delete = L"Eliminar imagen";
-  static constexpr const wchar_t *Help_Item_Fullscreen = L"Pantalla completa";
-  static constexpr const wchar_t *Help_Item_Close = L"Cerrar";
-  static constexpr const wchar_t *Help_Mouse_Left = L"Botón izquierdo";
-  static constexpr const wchar_t *Help_Mouse_Middle = L"Botón central";
-  static constexpr const wchar_t *Help_Mouse_Wheel = L"Rueda";
-  static constexpr const wchar_t *Help_Mouse_Right = L"Botón derecho";
-  static constexpr const wchar_t *Help_Action_MoveWindow =
-      L"Mover ventana / Salir de pantalla completa / Salir de maximizado";
-  static constexpr const wchar_t *Help_Action_PanImage = L"Mover imagen";
   static constexpr const wchar_t *Help_Action_ContextMenu = L"Menú contextual";
   static constexpr const wchar_t *Help_Action_NextPrev = L"Sig./Ant.";
   static constexpr const wchar_t *Help_Action_Zoom = L"Zoom";
@@ -4406,6 +3929,10 @@ template <typename T> void ApplyT() {
   HUD_Label_High = T::HUD_Label_High;
   HUD_Label_Low = T::HUD_Label_Low;
   HUD_Label_Ref = T::HUD_Label_Ref;
+
+  Settings_Header_ThemeManagement = T::Settings_Header_ThemeManagement;
+  Settings_Action_ExportTheme = T::Settings_Action_ExportTheme;
+  Settings_Action_ImportTheme = T::Settings_Action_ImportTheme;
 }
 
 void Init() { SetLanguage(Language::Auto); }
