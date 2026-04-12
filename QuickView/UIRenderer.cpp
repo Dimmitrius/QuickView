@@ -3417,16 +3417,18 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     D2D1_RECT_F panelRect = D2D1::RectF(panelX, panelY, panelX + panelW, panelY + panelH);
     m_lastHUDRect = panelRect; // Store for hit test
 
-    // Deep geeky background
+    // Adaptive background palette for the whole HUD
+    const AdaptiveUiPalette basePalette = BuildAdaptivePalette(EstimateRectLuminance(panelRect), nullptr);
+
     ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText, brushLabel, brushGood, brushBad, brushWarn, brushWinner;
     CreateScaledBrush(dc, D2D1::ColorF(0.005f, 0.005f, 0.008f, g_config.GlassPanelsOpacity / 100.0f), hdrWhiteScale, &brushBg); // [HUD Adjust] Apply User Alpha
     CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.6f), hdrWhiteScale, &brushBorder);
-    CreateScaledBrush(dc, D2D1::ColorF(0.9f, 0.9f, 0.95f), hdrWhiteScale, &brushText);
-    CreateScaledBrush(dc, D2D1::ColorF(0.5f, 0.55f, 0.6f), hdrWhiteScale, &brushLabel);
+    CreateScaledBrush(dc, basePalette.foreground, hdrWhiteScale, &brushText);
+    CreateScaledBrush(dc, basePalette.textDim, hdrWhiteScale, &brushLabel);
     CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.9f, 0.4f), hdrWhiteScale, &brushGood);
     CreateScaledBrush(dc, D2D1::ColorF(1.0f, 0.3f, 0.2f), hdrWhiteScale, &brushBad);
-    CreateScaledBrush(dc, D2D1::ColorF(1.0f, 0.85f, 0.0f), hdrWhiteScale, &brushWarn); // Yellow for warnings
-    CreateScaledBrush(dc, D2D1::ColorF(1.0f, 0.2f, 0.1f), hdrWhiteScale, &brushWinner); // Red winner arrow
+    CreateScaledBrush(dc, D2D1::ColorF(1.0f, 0.85f, 0.0f), hdrWhiteScale, &brushWarn);
+    CreateScaledBrush(dc, D2D1::ColorF(1.0f, 0.2f, 0.1f), hdrWhiteScale, &brushWinner);
 
     // Top-roll: No top corners rounded
     D2D1_RECT_F clipRect = D2D1::RectF(panelX, panelY - 10 * s, panelX + panelW, panelY + panelH);
@@ -3477,11 +3479,11 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         return brushGood.Get();
     };
 
-    m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-    if (!leftTag.empty()) dc->DrawText(leftTag.c_str(), (UINT32)leftTag.length(), m_debugFormat.Get(), D2D1::RectF(panelX + padding, y, panelX + 300*s, y + headerH), getBrush(leftColor));
-    m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-    if (!rightTag.empty()) dc->DrawText(rightTag.c_str(), (UINT32)rightTag.length(), m_debugFormat.Get(), D2D1::RectF(panelX + panelW - 300*s, y, panelX + panelW - padding, y + headerH), getBrush(rightColor));
-    m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    m_panelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    if (!leftTag.empty()) dc->DrawText(leftTag.c_str(), (UINT32)leftTag.length(), m_panelFormat.Get(), D2D1::RectF(panelX + padding, y, panelX + 300*s, y + headerH), getBrush(leftColor));
+    m_panelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+    if (!rightTag.empty()) dc->DrawText(rightTag.c_str(), (UINT32)rightTag.length(), m_panelFormat.Get(), D2D1::RectF(panelX + panelW - 300*s, y, panelX + panelW - padding, y + headerH), getBrush(rightColor));
+    m_panelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 
     y += headerH;
 
@@ -3509,7 +3511,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         // Draw Group Header
         if (hudMode != 0) { // Don't draw group header in Lite mode to save space
             D2D1_RECT_F groupRect = D2D1::RectF(panelX + padding, y + 4*s, panelX + panelW - padding, y + rowH);
-            dc->DrawText(group.name.c_str(), (UINT32)group.name.length(), m_debugFormat.Get(), groupRect, brushLabel.Get());
+            dc->DrawText(group.name.c_str(), (UINT32)group.name.length(), m_panelFormat.Get(), groupRect, brushLabel.Get());
             dc->DrawLine(D2D1::Point2F(panelX + padding, y + rowH - 2*s), D2D1::Point2F(panelX + panelW - padding, y + rowH - 2*s), brushLabel.Get(), 0.5f * s);
             y += rowH;
         }
@@ -3557,8 +3559,11 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
             D2D1_RECT_F iconRect = D2D1::RectF(labelX, y, labelX + iconSize, y + rowH);
             D2D1_RECT_F nameRect = D2D1::RectF(labelX + iconSize - 4.0f*s, y, labelX + labelW, y + rowH);
             
-            dc->DrawText(icon.c_str(), (UINT32)icon.length(), m_debugFormat.Get(), iconRect, brushLabel.Get());
-            dc->DrawText(label.c_str(), (UINT32)label.length(), m_debugFormat.Get(), nameRect, brushLabel.Get());
+            ComPtr<ID2D1SolidColorBrush> iconBrush;
+            CreateScaledBrush(dc, basePalette.textDim, hdrWhiteScale, &iconBrush); // Ensure icon is also secondary
+
+            dc->DrawText(icon.c_str(), (UINT32)icon.length(), m_iconFormat.Get(), iconRect, iconBrush.Get());
+            dc->DrawText(label.c_str(), (UINT32)label.length(), m_panelFormat.Get(), nameRect, brushLabel.Get());
             
             m_debugFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 
@@ -3640,24 +3645,24 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
                 }
                 
                 // Draw logic with separate arrow color
-	                m_debugFormat->SetTextAlignment(isLeft ? DWRITE_TEXT_ALIGNMENT_TRAILING : DWRITE_TEXT_ALIGNMENT_LEADING);
+	                m_panelFormat->SetTextAlignment(isLeft ? DWRITE_TEXT_ALIGNMENT_TRAILING : DWRITE_TEXT_ALIGNMENT_LEADING);
 	                
 	                if (!winnerMark.empty()) {
-	                    float valWidth = MeasureTextWidth(val, m_debugFormat.Get());
+	                    float valWidth = MeasureTextWidth(val, m_panelFormat.Get());
 	                    
 	                    if (isLeft) {
 	                        D2D1_RECT_F valRect = rect; valRect.right -= arrowWidth;
-                        D2D1_RECT_F arrowRect = rect; arrowRect.left = rect.right - arrowWidth;
-                        dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), valRect, brush);
-                        dc->DrawText(winnerMark.c_str(), (UINT32)winnerMark.length(), m_debugFormat.Get(), arrowRect, winBrush);
-                    } else {
-                        dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), rect, brush);
-                        D2D1_RECT_F arrowRect = rect; arrowRect.left += valWidth;
-                        dc->DrawText(winnerMark.c_str(), (UINT32)winnerMark.length(), m_debugFormat.Get(), arrowRect, winBrush);
-                    }
-                } else {
-                    dc->DrawText(val.c_str(), (UINT32)val.length(), m_debugFormat.Get(), rect, brush);
-                }
+	                        D2D1_RECT_F arrowRect = rect; arrowRect.left = rect.right - arrowWidth;
+	                        dc->DrawText(val.c_str(), (UINT32)val.length(), m_panelFormat.Get(), valRect, brush);
+	                        dc->DrawText(winnerMark.c_str(), (UINT32)winnerMark.length(), m_panelFormat.Get(), arrowRect, winBrush);
+	                    } else {
+	                        dc->DrawText(val.c_str(), (UINT32)val.length(), m_panelFormat.Get(), rect, brush);
+	                        D2D1_RECT_F arrowRect = rect; arrowRect.left += valWidth;
+	                        dc->DrawText(winnerMark.c_str(), (UINT32)winnerMark.length(), m_panelFormat.Get(), arrowRect, winBrush);
+	                    }
+	                } else {
+	                    dc->DrawText(val.c_str(), (UINT32)val.length(), m_panelFormat.Get(), rect, brush);
+	                }
             };
 
             DrawValue(lRow, leftX, valW, true);
