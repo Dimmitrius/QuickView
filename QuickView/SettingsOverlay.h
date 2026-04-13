@@ -92,7 +92,7 @@ public:
     static constexpr float HUD_WIDTH = 720.0f;
     static constexpr float HUD_HEIGHT = 560.0f;
     static constexpr float LABEL_COLUMN_WIDTH = 280.0f;
-    static constexpr float SIDEBAR_WIDTH = 185.0f;
+    static constexpr float SIDEBAR_WIDTH = 175.0f;
     static constexpr float ITEM_HEIGHT = 36.0f;
     static constexpr float CONTROL_INSET_Y = 4.0f;
     static constexpr float PADDING = 16.0f;
