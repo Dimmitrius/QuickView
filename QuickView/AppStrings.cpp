@@ -652,7 +652,7 @@ struct EN {
       L"Open in New Window";
   static constexpr const wchar_t *Context_Exit = L"Exit\tMButton/Esc";
 
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"Visuals";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"Interface";
   static constexpr const wchar_t *Settings_Tab_Controls = L"Controls";
   static constexpr const wchar_t *Settings_Tab_Image = L"Image";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"Advanced";
@@ -724,10 +724,10 @@ struct EN {
 
   static constexpr const wchar_t *Settings_Tab_Theme = L"Theme";
   static constexpr const wchar_t *Settings_Label_ThemeMode = L"Preset";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Windows System";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Geek Dark";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Geek Light";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Custom Design";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"System";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Dark";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Light";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Design";
   static constexpr const wchar_t *Settings_Label_AmbientDimmer =
       L"Modal Dimmer";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer =
@@ -1059,7 +1059,7 @@ struct CN {
   static constexpr const wchar_t *Settings_Text_License =
       L"基于 GNU GPL v3.0 协议";
 
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"外观";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"界面";
   static constexpr const wchar_t *Settings_Tab_Controls = L"操作";
   static constexpr const wchar_t *Settings_Tab_Image = L"图像";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"高级";
@@ -1687,7 +1687,7 @@ struct TW {
   static constexpr const wchar_t *Context_GalleryOpenNewWindow =
       L"在新視窗中打開";
   static constexpr const wchar_t *Context_Exit = L"結束\tMButton/Esc";
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"外觀";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"界面";
   static constexpr const wchar_t *Settings_Tab_Controls = L"操作";
   static constexpr const wchar_t *Settings_Tab_Image = L"圖像";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"進階";
@@ -2193,7 +2193,7 @@ struct JA {
   static constexpr const wchar_t *Context_GalleryOpenNewWindow =
       L"新しいウィンドウで開く";
   static constexpr const wchar_t *Context_Exit = L"終了\tMButton/Esc";
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"外観";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"インターフェース";
   static constexpr const wchar_t *Settings_Tab_Controls = L"操作";
   static constexpr const wchar_t *Settings_Tab_Image = L"画像";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"詳細";
@@ -2462,45 +2462,45 @@ struct JA {
   static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"線幅";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"標準 (1.5px)";
   static constexpr const wchar_t *Settings_Option_StrokeFine = L"極細 (1.0px)";
-  static constexpr const wchar_t *Settings_Header_GlassTint = L"ガラス着色";
-  static constexpr const wchar_t *Settings_Label_TintProfile = L"着色モード";
+  static constexpr const wchar_t *Settings_Header_GlassTint = L"着色モード";
+  static constexpr const wchar_t *Settings_Label_TintProfile = L"プロファイル";
   static constexpr const wchar_t *Settings_Option_TintAuto = L"自動";
   static constexpr const wchar_t *Settings_Option_TintCustom = L"カスタム";
   static constexpr const wchar_t *Settings_Label_GlassCustomColor = L"カスタム底色";
-  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"材質濃度";
-  static constexpr const wchar_t *Settings_Label_OsdDensity = L"情報提示 (OSD)";
+  static constexpr const wchar_t *Settings_Header_DensityMatrix = L"インターフェース密度";
+  static constexpr const wchar_t *Settings_Label_OsdDensity = L"OSD & HUD";
   static constexpr const wchar_t *Settings_Tooltip_OsdDensity = L"OSDなどの浮層の厚みを制御します。";
   static constexpr const wchar_t *Settings_Label_PanelsDensity = L"ツールパネル";
   static constexpr const wchar_t *Settings_Tooltip_PanelsDensity = L"ツールバーやサイドパネルの厚みを制御します。";
-  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"設定ウィンドウ";
+  static constexpr const wchar_t *Settings_Label_ModalsDensity = L"モーダルウィンドウ";
   static constexpr const wchar_t *Settings_Tooltip_ModalsDensity = L"設定、情報、ダイアログの厚みを制御します。";
   static constexpr const wchar_t *Settings_Label_MenusDensity = L"右クリックメニュー";
   static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"右クリックメニュー、ドロップダウンの厚みを制御します。";
   static constexpr const wchar_t *Settings_Header_GeekGlass = L"ガラスエンジン (GPU)";
   static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"ガラスレンダリング";
   static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"アニメーション";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"マテリアル";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"核心マテリアル";
   static constexpr const wchar_t *Settings_Label_BlurSigma = L"ぼかし半径";
   static constexpr const wchar_t *Settings_Status_GlassDisabled = L"レンダリング有効時に適用";
   static constexpr const wchar_t *Settings_Label_TintDensity = L"厚み (濃度)";
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"ガラスのベースカラーের深さを制御します。";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光沢";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"光沢の反射";
   static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"ガラスパネルの光沢強度を制御します。";
-  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"シャドウ強度";
+  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"影の強さ";
   static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"影の強度を調整します。";
   static constexpr const wchar_t *Settings_Tab_Theme = L"テーマ";
   static constexpr const wchar_t *Settings_Label_ThemeMode = L"モード";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"自動";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"システム";
   static constexpr const wchar_t *Settings_Option_ThemeDark = L"ダーク";
   static constexpr const wchar_t *Settings_Option_ThemeLight = L"ライト";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"カスタム";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"アンビエント";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"デザイン";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"モーダルディマー";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"没入型シャドウを追加します。";
   static constexpr const wchar_t *Settings_Label_AccentColor = L"アクセント色";
   static constexpr const wchar_t *Settings_Label_TextColor = L"テキスト色";
-  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"Import / Export (.qvtheme)";
-  static constexpr const wchar_t *Settings_Action_ExportTheme = L"Export";
-  static constexpr const wchar_t *Settings_Action_ImportTheme = L"Import";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"テーマエンジン";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"エクスポート";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"インポート";
 };
 
 // ----------------------------------------------------------------
@@ -2730,7 +2730,7 @@ struct RU {
   static constexpr const wchar_t *Context_GalleryOpenNewWindow =
       L"Открыть в новом окне";
   static constexpr const wchar_t *Context_Exit = L"Выход\tMButton/Esc";
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"Вид";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"Интерфейс";
   static constexpr const wchar_t *Settings_Tab_Controls = L"Управление";
   static constexpr const wchar_t *Settings_Tab_Image = L"Картинка";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"Ещё";
@@ -2751,18 +2751,18 @@ struct RU {
       L"Прозрачность";
 
   // Geek Glass Settings (Fallback to English)
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glass Engine (GPU)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Glass";
-  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"UI Animations";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Component Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Glass Blur Sigma";
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Движок стекла (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Эффекты стекла";
+  static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"Анимации";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Материал";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Радиус размытия";
   static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Glass Disabled (System)";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Layer";
-  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Overall color intensity of the glass frost effect.";
-  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflex (Specular)";
-  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Brightness of the diagonal lighting reflections.";
-  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"Shadow Depth";
-  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"Strength of the ambient occlusion shadows.";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"Плотность";
+  static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Общая интенсивность цвета эффекта стекла.";
+  static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Блики";
+  static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Яркость диагональных световых бликов.";
+  static constexpr const wchar_t *Settings_Label_ShadowIntensity = L"Тени";
+  static constexpr const wchar_t *Settings_Tooltip_ShadowIntensity = L"Сила теней окружающего затенения.";
   static constexpr const wchar_t *Settings_Header_VectorAssets = L"Vector Rendering";
   static constexpr const wchar_t *Settings_Label_VectorStrokeWeight = L"Icon Stroke weight";
   static constexpr const wchar_t *Settings_Option_StrokeStandard = L"Standard (1.5px)";
@@ -2784,17 +2784,17 @@ struct RU {
 
   static constexpr const wchar_t *Settings_Tab_Theme = L"Theme";
   static constexpr const wchar_t *Settings_Label_ThemeMode = L"Preset";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Windows System";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Geek Dark";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Geek Light";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Custom Design";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Modal Dimmer";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Система";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Темная";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Светлая";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Дизайн";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Затемнение (Dimmer)";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Dim the background when a modal or settings window is open.";
-  static constexpr const wchar_t *Settings_Label_AccentColor = L"Accent Color";
-  static constexpr const wchar_t *Settings_Label_TextColor = L"Text Color";
-  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"Theme Engine";
-  static constexpr const wchar_t *Settings_Action_ExportTheme = L"Export";
-  static constexpr const wchar_t *Settings_Action_ImportTheme = L"Import";
+  static constexpr const wchar_t *Settings_Label_AccentColor = L"Акцентный цвет";
+  static constexpr const wchar_t *Settings_Label_TextColor = L"Цвет текста";
+  static constexpr const wchar_t *Settings_Header_ThemeManagement = L"Темы";
+  static constexpr const wchar_t *Settings_Action_ExportTheme = L"Экспорт";
+  static constexpr const wchar_t *Settings_Action_ImportTheme = L"Импорт";
   static constexpr const wchar_t *Settings_Label_CanvasColor = L"Цвет холста";
   static constexpr const wchar_t *Settings_Label_Overlay = L"Наложение";
   static constexpr const wchar_t *Settings_Label_ShowGrid = L"Показывать сетку";
@@ -3287,7 +3287,7 @@ struct DE {
   static constexpr const wchar_t *Context_GalleryOpenNewWindow =
       L"In neuem Fenster öffnen";
   static constexpr const wchar_t *Context_Exit = L"Beenden\tMButton/Esc";
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"Aussehen";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"Interface";
   static constexpr const wchar_t *Settings_Tab_Controls = L"Steuerung";
   static constexpr const wchar_t *Settings_Tab_Image = L"Bild";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"Erweitert";
@@ -3306,13 +3306,13 @@ struct DE {
   static constexpr const wchar_t *Settings_Header_Transparency = L"Transparenz";
 
   // Geek Glass Settings (Fallback to English)
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glass Engine (GPU)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Glass";
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glas-Engine (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Glas-Effekte";
   static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"UI Animations";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Component Material";
-  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Glass Blur Sigma";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Material";
+  static constexpr const wchar_t *Settings_Label_BlurSigma = L"Unschärfe";
   static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Glass Disabled (System)";
-  static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Layer";
+  static constexpr const wchar_t *Settings_Label_TintDensity = L"Dichte";
   static constexpr const wchar_t *Settings_Tooltip_TintDensity = L"Overall color intensity of the glass frost effect.";
   static constexpr const wchar_t *Settings_Label_SpecularOpacity = L"Reflex (Specular)";
   static constexpr const wchar_t *Settings_Tooltip_SpecularOpacity = L"Brightness of the diagonal lighting reflections.";
@@ -3339,11 +3339,11 @@ struct DE {
 
   static constexpr const wchar_t *Settings_Tab_Theme = L"Theme";
   static constexpr const wchar_t *Settings_Label_ThemeMode = L"Preset";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Windows System";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Geek Dark";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Geek Light";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Custom Design";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Modal Dimmer";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"System";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Dunkel";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Hell";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Design";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Hintergrund abdunkeln";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Dim the background when a modal or settings window is open.";
   static constexpr const wchar_t *Settings_Label_AccentColor = L"Accent Color";
   static constexpr const wchar_t *Settings_Label_TextColor = L"Text Color";
@@ -3831,7 +3831,7 @@ struct ES {
   static constexpr const wchar_t *Context_GalleryOpenNewWindow =
       L"Abrir en una ventana nueva";
   static constexpr const wchar_t *Context_Exit = L"Salir\tMButton/Esc";
-  static constexpr const wchar_t *Settings_Tab_Visuals = L"Apariencia";
+  static constexpr const wchar_t *Settings_Tab_Visuals = L"Interfaz";
   static constexpr const wchar_t *Settings_Tab_Controls = L"Controles";
   static constexpr const wchar_t *Settings_Tab_Image = L"Imagen";
   static constexpr const wchar_t *Settings_Tab_Advanced = L"Avanzado";
@@ -3851,10 +3851,10 @@ struct ES {
       L"Transparencia";
 
   // Geek Glass Settings (Fallback to English)
-  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Glass Engine (GPU)";
-  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Enable Glass";
+  static constexpr const wchar_t *Settings_Header_GeekGlass = L"Motor de cristal (GPU)";
+  static constexpr const wchar_t *Settings_Label_EnableGeekGlass = L"Efecto de cristal";
   static constexpr const wchar_t *Settings_Label_GlassUIAnimations = L"UI Animations";
-  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Component Material";
+  static constexpr const wchar_t *Settings_Header_CoreMaterial = L"Material";
   static constexpr const wchar_t *Settings_Label_BlurSigma = L"Glass Blur Sigma";
   static constexpr const wchar_t *Settings_Status_GlassDisabled = L"Glass Disabled (System)";
   static constexpr const wchar_t *Settings_Label_TintDensity = L"Tint Layer";
@@ -3882,13 +3882,13 @@ struct ES {
   static constexpr const wchar_t *Settings_Label_MenusDensity = L"Menus";
   static constexpr const wchar_t *Settings_Tooltip_MenusDensity = L"Transparency for right-click context menus.";
 
-  static constexpr const wchar_t *Settings_Tab_Theme = L"Theme";
-  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Preset";
-  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Windows System";
-  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Geek Dark";
-  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Geek Light";
-  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Custom Design";
-  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Modal Dimmer";
+  static constexpr const wchar_t *Settings_Tab_Theme = L"Tema";
+  static constexpr const wchar_t *Settings_Label_ThemeMode = L"Ajuste";
+  static constexpr const wchar_t *Settings_Option_ThemeAuto = L"Sistema";
+  static constexpr const wchar_t *Settings_Option_ThemeDark = L"Oscuro";
+  static constexpr const wchar_t *Settings_Option_ThemeLight = L"Claro";
+  static constexpr const wchar_t *Settings_Option_ThemeCustom = L"Diseño";
+  static constexpr const wchar_t *Settings_Label_AmbientDimmer = L"Atenuador modal";
   static constexpr const wchar_t *Settings_Tooltip_AmbientDimmer = L"Dim the background when a modal or settings window is open.";
   static constexpr const wchar_t *Settings_Label_AccentColor = L"Accent Color";
   static constexpr const wchar_t *Settings_Label_TextColor = L"Text Color";

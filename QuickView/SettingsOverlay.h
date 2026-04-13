@@ -92,7 +92,7 @@ public:
     static constexpr float HUD_WIDTH = 720.0f;
     static constexpr float HUD_HEIGHT = 560.0f;
     static constexpr float LABEL_COLUMN_WIDTH = 280.0f;
-    static constexpr float SIDEBAR_WIDTH = 160.0f;
+    static constexpr float SIDEBAR_WIDTH = 185.0f;
     static constexpr float ITEM_HEIGHT = 36.0f;
     static constexpr float CONTROL_INSET_Y = 4.0f;
     static constexpr float PADDING = 16.0f;
@@ -134,9 +134,13 @@ private:
     void CreateResources(ID2D1DeviceContext* pRT);
     
     void DrawToggle(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, bool isOn, bool isHovered);
-    void DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format = L"");
+    void DrawSlider(ID2D1DeviceContext *pRT, const D2D1_RECT_F &rect, float val,
+                    float minV, float maxV, bool isHovered,
+                    const std::wstring &format = L"", bool isDisabled = false);
     std::vector<float> CalculateSegmentWidths(const std::vector<std::wstring>& options, float totalW);
-    void DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options);
+    void DrawSegment(ID2D1DeviceContext *pRT, const D2D1_RECT_F &rect,
+                     int selectedIdx, const std::vector<std::wstring> &options,
+                     bool isDisabled = false);
     void DrawComboBox(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options, bool isOpen);
     void DrawComboDropdown(ID2D1DeviceContext* pRT); 
     void RenderUpdateToast(ID2D1DeviceContext* pRT, float hudX, float hudY, float hudW, float hudH);

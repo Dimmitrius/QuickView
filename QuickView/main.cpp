@@ -4370,6 +4370,16 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"GeekGlass", L"GlassCustomTintR", std::to_wstring(g_config.GlassCustomTintR).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassCustomTintG", std::to_wstring(g_config.GlassCustomTintG).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassCustomTintB", std::to_wstring(g_config.GlassCustomTintB).c_str(), iniPath.c_str());
+
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassBlurSigmaBackup", std::to_wstring(g_config.GlassBlurSigmaBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassTintAlphaBackup", std::to_wstring(g_config.GlassTintAlphaBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassSpecularOpacityBackup", std::to_wstring(g_config.GlassSpecularOpacityBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassShadowOpacityBackup", std::to_wstring(g_config.GlassShadowOpacityBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassOsdOpacityBackup", std::to_wstring(g_config.GlassOsdOpacityBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassPanelsOpacityBackup", std::to_wstring(g_config.GlassPanelsOpacityBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassModalsOpacityBackup", std::to_wstring(g_config.GlassModalsOpacityBackup).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassMenusOpacityBackup", std::to_wstring(g_config.GlassMenusOpacityBackup).c_str(), iniPath.c_str());
+
     WritePrivateProfileStringW(L"GeekGlass", L"EnableAmbientDimmer", g_config.EnableAmbientDimmer ? L"1" : L"0", iniPath.c_str());
 
     // View
@@ -4539,6 +4549,25 @@ void LoadConfig() {
     g_config.EnableAmbientDimmer = GetPrivateProfileIntW(L"GeekGlass", L"EnableAmbientDimmer", 1, iniPath.c_str()) != 0;
     g_config.EnforceGlassSafetyLimits();
     g_config.GlassVectorStrokeWeightIndex = GetPrivateProfileIntW(L"GeekGlass", L"GlassVectorStrokeWeightIndex", 0, iniPath.c_str());
+
+    wchar_t bufGGBB[32], bufGGTAB[32], bufGGSB[32], bufGGSHB[32], bufGGOB[32], bufGGPB[32], bufGGMB[32], bufGGMenuB[32];
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassBlurSigmaBackup", L"3.0", bufGGBB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassTintAlphaBackup", L"0.65", bufGGTAB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassSpecularOpacityBackup", L"0.15", bufGGSB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassShadowOpacityBackup", L"0.45", bufGGSHB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassOsdOpacityBackup", L"15.0", bufGGOB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassPanelsOpacityBackup", L"45.0", bufGGPB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassModalsOpacityBackup", L"55.0", bufGGMB, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassMenusOpacityBackup", L"15.0", bufGGMenuB, 32, iniPath.c_str());
+    
+    g_config.GlassBlurSigmaBackup = (float)_wtof(bufGGBB);
+    g_config.GlassTintAlphaBackup = (float)_wtof(bufGGTAB);
+    g_config.GlassSpecularOpacityBackup = (float)_wtof(bufGGSB);
+    g_config.GlassShadowOpacityBackup = (float)_wtof(bufGGSHB);
+    g_config.GlassOsdOpacityBackup = (float)_wtof(bufGGOB);
+    g_config.GlassPanelsOpacityBackup = (float)_wtof(bufGGPB);
+    g_config.GlassModalsOpacityBackup = (float)_wtof(bufGGMB);
+    g_config.GlassMenusOpacityBackup = (float)_wtof(bufGGMenuB);
 
     g_config.GlassTintProfile = GetPrivateProfileIntW(L"GeekGlass", L"GlassTintProfile", 0, iniPath.c_str());
     wchar_t bufGCTR[32], bufGCTG[32], bufGCTB[32];

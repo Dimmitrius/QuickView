@@ -136,6 +136,16 @@ struct AppConfig {
     float GlassMenusOpacity = 15.0f;       // Context Menus Level (0-100 %)
     int GlassVectorStrokeWeightIndex = 0;  // 0: Standard (1.5px), 1: Fine (1.0px)
 
+    // --- Backup for Glass Toggling ---
+    float GlassBlurSigmaBackup = 3.0f;
+    float GlassTintAlphaBackup = 0.65f;
+    float GlassSpecularOpacityBackup = 0.15f;
+    float GlassShadowOpacityBackup = 0.45f;
+    float GlassOsdOpacityBackup = 15.0f;
+    float GlassPanelsOpacityBackup = 45.0f;
+    float GlassModalsOpacityBackup = 55.0f;
+    float GlassMenusOpacityBackup = 15.0f;
+
     // --- Geek Glass Tint Customization ---
     int GlassTintProfile = 0;              // 0=Auto, 1=Custom
     float GlassCustomTintR = 0.5f;

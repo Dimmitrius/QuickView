@@ -1207,6 +1207,38 @@ void SettingsOverlay::BuildMenu() {
     tabTheme.items.push_back({ AppStrings::Settings_Header_GeekGlass, OptionType::Header });
     SettingsItem itemEnableGlass = { AppStrings::Settings_Label_EnableGeekGlass, OptionType::Toggle, &g_config.EnableGeekGlass };
     itemEnableGlass.onChange = [this]() { 
+        if (!g_config.EnableGeekGlass) {
+            // [Requirement] Save current config as backup before disabling glass
+            g_config.GlassBlurSigmaBackup = g_config.GlassBlurSigma;
+            g_config.GlassTintAlphaBackup = g_config.GlassTintAlpha;
+            g_config.GlassSpecularOpacityBackup = g_config.GlassSpecularOpacity;
+            g_config.GlassShadowOpacityBackup = g_config.GlassShadowOpacity;
+            g_config.GlassOsdOpacityBackup = g_config.GlassOsdOpacity;
+            g_config.GlassPanelsOpacityBackup = g_config.GlassPanelsOpacity;
+            g_config.GlassModalsOpacityBackup = g_config.GlassModalsOpacity;
+            g_config.GlassMenusOpacityBackup = g_config.GlassMenusOpacity;
+
+            // Load Traditional Mode Defaults: 70%, 85%, 60%
+            g_config.GlassOsdOpacity = 70.0f;
+            g_config.GlassPanelsOpacity = 85.0f;
+            g_config.GlassModalsOpacity = 60.0f; // Updated from 85% to 60% as requested
+            g_config.GlassMenusOpacity = 85.0f;
+            g_config.GlassTintAlpha = 1.0f; // High alpha for solid film effect
+            g_config.GlassBlurSigma = 2.0f; // Clamp at minimum
+            g_config.GlassSpecularOpacity = 0.0f;
+            g_config.GlassShadowOpacity = 0.0f;
+        } else {
+            // Restore saved config when enabling glass
+            g_config.GlassBlurSigma = g_config.GlassBlurSigmaBackup;
+            g_config.GlassTintAlpha = g_config.GlassTintAlphaBackup;
+            g_config.GlassSpecularOpacity = g_config.GlassSpecularOpacityBackup;
+            g_config.GlassShadowOpacity = g_config.GlassShadowOpacityBackup;
+            g_config.GlassOsdOpacity = g_config.GlassOsdOpacityBackup;
+            g_config.GlassPanelsOpacity = g_config.GlassPanelsOpacityBackup;
+            g_config.GlassModalsOpacity = g_config.GlassModalsOpacityBackup;
+            g_config.GlassMenusOpacity = g_config.GlassMenusOpacityBackup;
+        }
+
         SaveConfig(); 
         this->BuildMenu(); // Rebuild to update isDisabled states of dependent sliders
     };
@@ -1256,7 +1288,6 @@ void SettingsOverlay::BuildMenu() {
     if (glassDisabled) {
         itemBlur.isDisabled = true;
         itemBlur.pFloatVal = &fZero;
-        itemBlur.disabledText = AppStrings::Settings_Status_GlassDisabled;
     }
     tabTheme.items.push_back(itemBlur);
  
@@ -1267,10 +1298,7 @@ void SettingsOverlay::BuildMenu() {
     itemTintAlpha.displayFormat = L"%.0f %%";
     itemTintAlpha.tooltipText = AppStrings::Settings_Tooltip_TintDensity;
     itemTintAlpha.onChange = autoSwitchToCustom;
-    if (glassDisabled) {
-        itemTintAlpha.isDisabled = true;
-        itemTintAlpha.pFloatVal = &fOne;
-    }
+    // [Fix] Keep TintAlpha enabled in Traditional Mode to allow background density control
     tabTheme.items.push_back(itemTintAlpha);
 
     SettingsItem itemSpecular = { AppStrings::Settings_Label_SpecularOpacity, OptionType::Slider, nullptr, &g_config.GlassSpecularOpacity };
@@ -2151,10 +2179,15 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
 
         // --- Sidebar Post-Processing ---
         
-        // [Visual Hierarchy] Add the darker 'Foundation' layer to the sidebar
+        // [Tech Gray Aesthetic] Sidebar uses a deeper, cool-toned foundation
         ComPtr<ID2D1SolidColorBrush> sidebarTint;
-        float sidebarDarken = IsLightThemeActive() ? 0.05f : 0.12f;
-        pRT->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, sidebarDarken), &sidebarTint);
+        D2D1_COLOR_F techGray;
+        if (IsLightThemeActive()) {
+            techGray = D2D1::ColorF(0.88f, 0.90f, 0.94f, 0.15f); // Light cool gray
+        } else {
+            techGray = D2D1::ColorF(0.07f, 0.07f, 0.10f, 0.45f); // Deep tech gray with blue hint
+        }
+        pRT->CreateSolidColorBrush(ScaleUiColor(techGray, m_hdrWhiteScale), &sidebarTint);
         pRT->FillRectangle(sidebarRect, sidebarTint.Get());
 
         // Vertical Separator Line
@@ -2641,14 +2674,26 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
                     }
                     break;
                 case OptionType::Slider:
-                    item.interactRect = D2D1::RectF(controlRect.right - 150.0f * s, item.rect.top, controlRect.right, item.rect.bottom);
-                    DrawSlider(pRT, controlRect, (item.pFloatVal ? *item.pFloatVal : 0.0f), item.minVal, item.maxVal, isHovered, item.displayFormat);
+                    item.interactRect = D2D1::RectF(controlRect.right - (150.0f + 12.0f) * s, item.rect.top, controlRect.right, item.rect.bottom);
+                    if (item.isDisabled) {
+                        // Grayed out slider
+                        DrawSlider(pRT, controlRect, (item.pFloatVal ? *item.pFloatVal : 0.0f), item.minVal, item.maxVal, false, item.displayFormat, true);
+                        if (!item.disabledText.empty()) {
+                            D2D1_RECT_F textRect = D2D1::RectF(controlRect.left, contentY, controlRect.right - 180.0f * s, contentY + rowHeight);
+                            pRT->DrawText(item.disabledText.c_str(), (UINT32)item.disabledText.length(), m_textFormatItem.Get(), textRect, m_brushTextDim.Get());
+                        }
+                    } else {
+                        DrawSlider(pRT, controlRect, (item.pFloatVal ? *item.pFloatVal : 0.0f), item.minVal, item.maxVal, isHovered, item.displayFormat);
+                    }
                     break;
                 case OptionType::Segment:
                     item.interactRect = controlRect;
-                    // Need index selection. Assume pIntVal or temporary pIntVal... 
-                    // Segment usually binds to Int.
-                    DrawSegment(pRT, controlRect, (item.pIntVal ? *item.pIntVal : 0), item.options);
+                    if (item.isDisabled) {
+                        // Grayed out segment
+                        DrawSegment(pRT, controlRect, (item.pIntVal ? *item.pIntVal : 0), item.options, true);
+                    } else {
+                        DrawSegment(pRT, controlRect, (item.pIntVal ? *item.pIntVal : 0), item.options);
+                    }
                     break;
                 case OptionType::ActionButton: {
                      // Button aligned to right side of control area (like other controls)
@@ -2952,12 +2997,13 @@ void SettingsOverlay::DrawToggle(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rec
     pRT->FillEllipse(knob, m_brushText.Get());
 }
 
-void SettingsOverlay::DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format) {
+void SettingsOverlay::DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, float val, float minV, float maxV, bool isHovered, const std::wstring& format, bool isDisabled) {
     const float s = m_uiScale;
-    // Width 150, Height 4 (Scaled)
+    // Width 150, Height 4 (Scaled), with 12px right padding to prevent knob clipping
+    const float padding = 12.0f * s;
     float w = 150.0f * s; 
     float h = 4.0f * s;
-    float x = rect.right - w; // Right aligned
+    float x = rect.right - w - padding; // Right aligned with safety padding
     float y = rect.top + (rect.bottom - rect.top - h) / 2.0f;
     
     // Normalize val
@@ -2969,14 +3015,21 @@ void SettingsOverlay::DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rec
     D2D1_RECT_F trackRect = D2D1::RectF(x, y, x + w, y + h);
     pRT->FillRoundedRectangle(D2D1::RoundedRect(trackRect, h/2, h/2), m_brushControlBg.Get());
 
-    // Active Track
-    D2D1_RECT_F activeRect = D2D1::RectF(x, y, x + w * ratio, y + h);
-    pRT->FillRoundedRectangle(D2D1::RoundedRect(activeRect, h/2, h/2), m_brushAccent.Get());
+    if (!isDisabled) {
+        // Active Track
+        D2D1_RECT_F activeRect = D2D1::RectF(x, y, x + w * ratio, y + h);
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(activeRect, h/2, h/2), m_brushAccent.Get());
 
-    // Knob
-    float knobR = isHovered ? 8.0f : 6.0f;
-    D2D1_ELLIPSE knob = D2D1::Ellipse(D2D1::Point2F(x + w * ratio, y + h/2), knobR, knobR);
-    pRT->FillEllipse(knob, m_brushText.Get());
+        // Knob
+        float knobR = isHovered ? 8.0f : 6.0f;
+        D2D1_ELLIPSE knob = D2D1::Ellipse(D2D1::Point2F(x + w * ratio, y + h/2), knobR, knobR);
+        pRT->FillEllipse(knob, m_brushText.Get());
+    } else {
+        // Disabled Knob (Gray)
+        float knobR = 5.0f * s;
+        D2D1_ELLIPSE knob = D2D1::Ellipse(D2D1::Point2F(x + w * ratio, y + h/2), knobR, knobR);
+        pRT->FillEllipse(knob, m_brushTextDim.Get());
+    }
     
     // Optional: Draw Value Text next to slider?
     wchar_t buf[32];
@@ -2995,8 +3048,6 @@ void SettingsOverlay::DrawSlider(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rec
     float leftBound = x - 80.0f * s;
     D2D1_RECT_F valRect = D2D1::RectF(leftBound, rect.top, x - 10.0f * s, rect.bottom);
     pRT->DrawText(buf, (UINT32)wcslen(buf), m_textFormatItem.Get(), valRect, m_brushTextDim.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
-    // ^ Note: using TextAlignment Leading in Init, so this might be left aligned.
-    // Ideally right align this text. But OK for now.
 }
 
 std::vector<float> SettingsOverlay::CalculateSegmentWidths(const std::vector<std::wstring>& options, float totalW) {
@@ -3044,12 +3095,10 @@ std::vector<float> SettingsOverlay::CalculateSegmentWidths(const std::vector<std
     return widths;
 }
 
-void SettingsOverlay::DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options) {
+void SettingsOverlay::DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& rect, int selectedIdx, const std::vector<std::wstring>& options, bool isDisabled) {
     if (options.empty()) return;
 
     // Distribute remaining width
-    // Actually, stick to a fixed width or fill control area?
-    // Let's use Rect provided (Control Area).
     float totalW = rect.right - rect.left;
     std::vector<float> itemWidths = CalculateSegmentWidths(options, totalW);
     
@@ -3063,7 +3112,7 @@ void SettingsOverlay::DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& re
             selX += itemWidths[i];
         }
         D2D1_RECT_F selRect = D2D1::RectF(selX + 2, rect.top + 2, selX + itemWidths[selectedIdx] - 2, rect.bottom - 2);
-        pRT->FillRoundedRectangle(D2D1::RoundedRect(selRect, 3.0f, 3.0f), m_brushAccent.Get());
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(selRect, 3.0f, 3.0f), isDisabled ? m_brushControlBg.Get() : m_brushAccent.Get());
     }
 
     // Dividers/Text
@@ -3073,10 +3122,8 @@ void SettingsOverlay::DrawSegment(ID2D1DeviceContext* pRT, const D2D1_RECT_F& re
     for (size_t i = 0; i < options.size(); i++) {
         D2D1_RECT_F tRect = D2D1::RectF(currentX, rect.top, currentX + itemWidths[i], rect.bottom);
         
-        bool isSel = ((int)i == selectedIdx);
         // Draw Divider (if not first and not selected/adjacent) - simplified: just text
-        
-        pRT->DrawText(options[i].c_str(), (UINT32)options[i].length(), m_textFormatItem.Get(), tRect, m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
+        pRT->DrawText(options[i].c_str(), (UINT32)options[i].length(), m_textFormatItem.Get(), tRect, isDisabled ? m_brushTextDim.Get() : m_brushText.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE); 
         currentX += itemWidths[i];
     }
     m_textFormatItem->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING); // Restore Default
@@ -3388,18 +3435,21 @@ SettingsAction SettingsOverlay::OnLButtonDown(float x, float y) {
 
         // Toggle
         if (m_pHoverItem->type == OptionType::Toggle && m_pHoverItem->pBoolVal) {
+            if (m_pHoverItem->isDisabled) return SettingsAction::RepaintStatic;
             *m_pHoverItem->pBoolVal = !(*m_pHoverItem->pBoolVal);
             if (m_pHoverItem->onChange) m_pHoverItem->onChange();
             return SettingsAction::RepaintAll;
         }
         // Slider
         if (m_pHoverItem->type == OptionType::Slider && m_pHoverItem->pFloatVal) {
+            if (m_pHoverItem->isDisabled) return SettingsAction::RepaintStatic;
             m_pActiveSlider = m_pHoverItem;
             OnMouseMove(x, y);
             return SettingsAction::RepaintStatic;
         }
         // Segment
         if (m_pHoverItem->type == OptionType::Segment && m_pHoverItem->pIntVal) {
+            if (m_pHoverItem->isDisabled) return SettingsAction::RepaintStatic;
              const float s = m_uiScale;
              float controlX = m_pHoverItem->rect.left + LABEL_COLUMN_WIDTH * s;
              float controlW = m_pHoverItem->rect.right - controlX;

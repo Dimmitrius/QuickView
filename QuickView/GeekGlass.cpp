@@ -206,7 +206,7 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
 }
 
 void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlassConfig& config) {
-    if (!pRT || !config.enableGeekGlass || config.opacity <= 0.005f) return;
+    if (!pRT || config.opacity <= 0.005f) return;
 
     ComPtr<ID2D1DeviceContext> pContext;
     pRT->QueryInterface(IID_PPV_ARGS(&pContext));
@@ -219,6 +219,16 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlass
 
     // 0. Update Brushes and Shadow Mask first to ensure coordinate parity
     CreateOrUpdateBrushes(pRT, config);
+
+    // [Requirement] Traditional Mode Fallback: Zero-Complexity Solid Film
+    // Bypass all expensive GPU effects (Blur, Crop, Scale) when disabled.
+    if (!config.enableGeekGlass) {
+        if (m_baseTintBrush) {
+            // Note: tintAlpha here is g_config.GlassTintAlpha (85% defaults for trad mode)
+            pRT->FillRoundedRectangle(roundedRect, m_baseTintBrush.Get());
+        }
+        return; 
+    }
 
     // 1. Hardware Accelerated Drop Shadow (GPU Shadow Mask Branch)
     // Only drawn for Track A (internal compositing). Track B (DWM windows) uses
