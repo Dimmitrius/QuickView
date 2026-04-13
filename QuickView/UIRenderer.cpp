@@ -2574,6 +2574,24 @@ void UIRenderer::DrawHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect) {
     drawChannel(g_currentMetadata.HistB, D2D1::ColorF(0.0f, 0.4f, 1.0f, 0.4f));
     drawChannel(g_currentMetadata.HistG, D2D1::ColorF(0.2f, 0.9f, 0.3f, 0.4f));
     drawChannel(g_currentMetadata.HistR, D2D1::ColorF(1.0f, 0.3f, 0.3f, 0.4f));
+
+    // Draw HDR threshold indicator if applicable
+    if (g_currentMetadata.HistMapRange > 1.001f) {
+        float whiteRatio = 1.0f / g_currentMetadata.HistMapRange;
+        float whiteX = rect.left + whiteRatio * (rect.right - rect.left);
+        
+        ComPtr<ID2D1SolidColorBrush> dashBrush;
+        CreateScaledBrush(dc, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), hdrWhiteScale, &dashBrush);
+        
+        ComPtr<ID2D1StrokeStyle> dashStyle;
+        float dashes[] = {2.0f, 2.0f};
+        D2D1_STROKE_STYLE_PROPERTIES strokeProps = D2D1::StrokeStyleProperties(
+            D2D1_CAP_STYLE_FLAT, D2D1_CAP_STYLE_FLAT, D2D1_CAP_STYLE_ROUND, 
+            D2D1_LINE_JOIN_MITER, 10.0f, D2D1_DASH_STYLE_CUSTOM, 0.0f);
+        factory->CreateStrokeStyle(strokeProps, dashes, 2, &dashStyle);
+        
+        dc->DrawLine(D2D1::Point2F(whiteX, rect.top), D2D1::Point2F(whiteX, bottom), dashBrush.Get(), 1.0f * m_uiScale, dashStyle.Get());
+    }
 }
 
 void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, const CImageLoader::ImageMetadata& leftMeta, const CImageLoader::ImageMetadata& rightMeta) {
@@ -2645,6 +2663,25 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
     // Right (Orange-ish)
     D2D1::ColorF rightColor(1.0f, 0.6f, 0.2f, 0.8f);
     drawLine(rightHist, maxRight, rightColor, 1.5f * m_uiScale);
+
+    // Draw HDR threshold indicator if applicable
+    float mapRange = std::max(leftMeta.HistMapRange, rightMeta.HistMapRange);
+    if (mapRange > 1.001f) {
+        float whiteRatio = 1.0f / mapRange;
+        float whiteX = rect.left + whiteRatio * (rect.right - rect.left);
+        
+        ComPtr<ID2D1SolidColorBrush> dashBrush;
+        CreateScaledBrush(dc, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), hdrWhiteScale, &dashBrush);
+        
+        ComPtr<ID2D1StrokeStyle> dashStyle;
+        float dashes[] = {2.0f, 2.0f};
+        D2D1_STROKE_STYLE_PROPERTIES strokeProps = D2D1::StrokeStyleProperties(
+            D2D1_CAP_STYLE_FLAT, D2D1_CAP_STYLE_FLAT, D2D1_CAP_STYLE_ROUND, 
+            D2D1_LINE_JOIN_MITER, 10.0f, D2D1_DASH_STYLE_CUSTOM, 0.0f);
+        factory->CreateStrokeStyle(strokeProps, dashes, 2, &dashStyle);
+        
+        dc->DrawLine(D2D1::Point2F(whiteX, rect.top), D2D1::Point2F(whiteX, bottom), dashBrush.Get(), 1.0f * m_uiScale, dashStyle.Get());
+    }
 
     // Draw Background Grid / Baseline
     ComPtr<ID2D1SolidColorBrush> gridBrush;
@@ -2960,7 +2997,7 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
         if (!row.valueSub.empty()) rowWidth += MeasureTextWidth(row.valueSub) + 16.0f * s;
         width = (std::max)(width, rowWidth);
     }
-    width = (std::clamp)(width, 220.0f * s, 430.0f * s);
+    width = (std::clamp)(width, 220.0f * s, 300.0f * s);
     float height = 26.0f * s + (float)m_infoGrid.size() * GRID_ROW_HEIGHT * s + 14.0f * s;
     float startX = 16.0f * s;
     float startY = 32.0f * s; 

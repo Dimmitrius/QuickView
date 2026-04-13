@@ -24,10 +24,12 @@
 #include <hwy/foreach_target.h>
 #include <hwy/highway.h>
 
+#include "ImageTypes.h"
 #include "ImageLoaderSimd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 #include <vector>
 
 HWY_BEFORE_NAMESPACE();
@@ -237,6 +239,150 @@ void ComputeHistogramRowImpl(const uint8_t* row, int width,
         histR[r]++;
         const uint32_t luma = (r * 299 + g * 587 + b * 114 + 500) / 1000;
         histL[luma]++;
+    }
+}
+
+// ============================================================================
+// ComputeHistogramRowFloat - Float RGBA histogram + luminance
+// ============================================================================
+void ComputeHistogramRowFloatImpl(const float* row, int width, float mapRange,
+                                  uint32_t* histR, uint32_t* histG,
+                                  uint32_t* histB, uint32_t* histL) {
+    const hn::ScalableTag<float> df;
+    const hn::ScalableTag<uint32_t> du32;
+    const size_t N = hn::Lanes(df);
+
+    const float scale = 255.0f / (mapRange > 0.001f ? mapRange : 1.0f);
+    const auto vScale = hn::Set(df, scale);
+    const auto vZero = hn::Set(df, 0.0f);
+    const auto vMax = hn::Set(df, 255.0f);
+    const auto vHalf = hn::Set(df, 0.5f);
+
+    const auto vLumaR = hn::Set(df, 0.299f);
+    const auto vLumaG = hn::Set(df, 0.587f);
+    const auto vLumaB = hn::Set(df, 0.114f);
+
+    int x = 0;
+
+    if (N >= 4) {
+        HWY_ALIGN uint32_t rBuf[HWY_MAX_LANES_D(hn::ScalableTag<uint32_t>)];
+        HWY_ALIGN uint32_t gBuf[HWY_MAX_LANES_D(hn::ScalableTag<uint32_t>)];
+        HWY_ALIGN uint32_t bBuf[HWY_MAX_LANES_D(hn::ScalableTag<uint32_t>)];
+        HWY_ALIGN uint32_t lBuf[HWY_MAX_LANES_D(hn::ScalableTag<uint32_t>)];
+
+        const int step = static_cast<int>(N);
+        for (; x + step <= width; x += step) {
+            const float* ptr = row + x * 4;
+            hn::Vec<decltype(df)> vR, vG, vB, vA;
+            hn::LoadInterleaved4(df, ptr, vR, vG, vB, vA);
+
+            vR = hn::Mul(vR, vScale);
+            vG = hn::Mul(vG, vScale);
+            vB = hn::Mul(vB, vScale);
+
+            auto vLuma = hn::MulAdd(vR, vLumaR, vHalf);
+            vLuma = hn::MulAdd(vG, vLumaG, vLuma);
+            vLuma = hn::MulAdd(vB, vLumaB, vLuma);
+
+            vR = hn::Add(vR, vHalf);
+            vG = hn::Add(vG, vHalf);
+            vB = hn::Add(vB, vHalf);
+
+            vR = hn::Clamp(vR, vZero, vMax);
+            vG = hn::Clamp(vG, vZero, vMax);
+            vB = hn::Clamp(vB, vZero, vMax);
+            vLuma = hn::Clamp(vLuma, vZero, vMax);
+
+            auto vIntR = hn::ConvertTo(du32, vR);
+            auto vIntG = hn::ConvertTo(du32, vG);
+            auto vIntB = hn::ConvertTo(du32, vB);
+            auto vIntLuma = hn::ConvertTo(du32, vLuma);
+
+            hn::Store(vIntR, du32, rBuf);
+            hn::Store(vIntG, du32, gBuf);
+            hn::Store(vIntB, du32, bBuf);
+            hn::Store(vIntLuma, du32, lBuf);
+
+            for (int k = 0; k < step; ++k) {
+                histR[rBuf[k]]++;
+                histG[gBuf[k]]++;
+                histB[bBuf[k]]++;
+                histL[lBuf[k]]++;
+            }
+        }
+    }
+
+    // Scalar tail processing
+    for (; x < width; ++x) {
+        const float* px = row + x * 4;
+        float r = px[0] * scale;
+        float g = px[1] * scale;
+        float b = px[2] * scale;
+        
+        uint32_t ur = static_cast<uint32_t>(std::clamp(r + 0.5f, 0.0f, 255.0f));
+        uint32_t ug = static_cast<uint32_t>(std::clamp(g + 0.5f, 0.0f, 255.0f));
+        uint32_t ub = static_cast<uint32_t>(std::clamp(b + 0.5f, 0.0f, 255.0f));
+        uint32_t ul = static_cast<uint32_t>(std::clamp(r * 0.299f + g * 0.587f + b * 0.114f + 0.5f, 0.0f, 255.0f));
+        
+        histR[ur]++;
+        histG[ug]++;
+        histB[ub]++;
+        histL[ul]++;
+    }
+}
+
+// ============================================================================
+// ComputeHistogramRowGainMap - SDR + GainMap histogram
+// ============================================================================
+void ComputeHistogramRowGainMapImpl(const uint8_t* sdrRow, const uint8_t* gainMapRow,
+                                    int width, float mapRange, const ::QuickView::GpuShaderPayload& payload,
+                                    uint32_t* histR, uint32_t* histG,
+                                    uint32_t* histB, uint32_t* histL) {
+    const float W = payload.targetHeadroom;
+    const float mapMinR = payload.gainMapMin[0];
+    const float mapMinG = payload.gainMapMin[1];
+    const float mapMinB = payload.gainMapMin[2];
+    
+    const float mapMaxR = payload.gainMapMax[0];
+    const float mapMaxG = payload.gainMapMax[1];
+    const float mapMaxB = payload.gainMapMax[2];
+    
+    const float scale = 255.0f / (mapRange > 0.001f ? mapRange : 1.0f);
+    
+    float gmGainR[256];
+    float gmGainG[256];
+    float gmGainB[256];
+    
+    // We pre-divide SDR pixel values by 255, so incorporate 1/255 into LUT
+    const float inv255 = 1.0f / 255.0f;
+    for (int i = 0; i < 256; ++i) {
+        float gmVal = i * inv255;
+        float mapLogR = mapMinR + (mapMaxR - mapMinR) * gmVal;
+        float mapLogG = mapMinG + (mapMaxG - mapMinG) * gmVal;
+        float mapLogB = mapMinB + (mapMaxB - mapMinB) * gmVal;
+        
+        gmGainR[i] = std::exp2(mapLogR * W) * scale * inv255;
+        gmGainG[i] = std::exp2(mapLogG * W) * scale * inv255;
+        gmGainB[i] = std::exp2(mapLogB * W) * scale * inv255;
+    }
+    
+    for (int x = 0; x < width; ++x) {
+        const uint8_t* px = sdrRow + x * 4;
+        uint8_t gmIdx = gainMapRow[x]; // Assuming 1 byte per pixel
+        
+        float hdrB = px[0] * gmGainB[gmIdx];
+        float hdrG = px[1] * gmGainG[gmIdx];
+        float hdrR = px[2] * gmGainR[gmIdx];
+        
+        uint32_t ur = static_cast<uint32_t>(std::clamp(hdrR + 0.5f, 0.0f, 255.0f));
+        uint32_t ug = static_cast<uint32_t>(std::clamp(hdrG + 0.5f, 0.0f, 255.0f));
+        uint32_t ub = static_cast<uint32_t>(std::clamp(hdrB + 0.5f, 0.0f, 255.0f));
+        uint32_t ul = static_cast<uint32_t>(std::clamp(hdrR * 0.299f + hdrG * 0.587f + hdrB * 0.114f + 0.5f, 0.0f, 255.0f));
+        
+        histR[ur]++;
+        histG[ug]++;
+        histB[ub]++;
+        histL[ul]++;
     }
 }
 
@@ -500,6 +646,8 @@ HWY_EXPORT(SwizzleRGBAToBGRAImpl);
 HWY_EXPORT(ResizeBilinearImpl);
 HWY_EXPORT(FindPeakFloatImpl);
 HWY_EXPORT(ComputeHistogramRowImpl);
+HWY_EXPORT(ComputeHistogramRowFloatImpl);
+HWY_EXPORT(ComputeHistogramRowGainMapImpl);
 HWY_EXPORT(SumLuminance8BitRangeImpl);
 HWY_EXPORT(SumLuminanceFloatRangeImpl);
 HWY_EXPORT(TransformColorMatrix3x3Impl);
@@ -531,6 +679,19 @@ void ComputeHistogramRow(const uint8_t* row, int width,
                          uint32_t* histR, uint32_t* histG,
                          uint32_t* histB, uint32_t* histL) {
     HWY_DYNAMIC_DISPATCH(ComputeHistogramRowImpl)(row, width, histR, histG, histB, histL);
+}
+
+void ComputeHistogramRowFloat(const float* row, int width, float mapRange,
+                              uint32_t* histR, uint32_t* histG,
+                              uint32_t* histB, uint32_t* histL) {
+    HWY_DYNAMIC_DISPATCH(ComputeHistogramRowFloatImpl)(row, width, mapRange, histR, histG, histB, histL);
+}
+
+void ComputeHistogramRowGainMap(const uint8_t* sdrRow, const uint8_t* gainMapRow,
+                                int width, float mapRange, const ::QuickView::GpuShaderPayload& payload,
+                                uint32_t* histR, uint32_t* histG,
+                                uint32_t* histB, uint32_t* histL) {
+    HWY_DYNAMIC_DISPATCH(ComputeHistogramRowGainMapImpl)(sdrRow, gainMapRow, width, mapRange, payload, histR, histG, histB, histL);
 }
 
 uint64_t SumLuminance8BitRange(const uint8_t* row, int x0, int x1, bool isRgbaOrder) {

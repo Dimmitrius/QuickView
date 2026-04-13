@@ -9484,23 +9484,50 @@ void CImageLoader::ComputeHistogramFromFrame(const QuickView::RawImageFrame& fra
     double lapSumSq = 0.0;
     uint64_t lapCount = 0;
     
-    // Assume BGRA8888 (standard for RawImageFrame)
-    // Assume BGRA8888 (standard for RawImageFrame)
+    bool isFloat = (frame.format == PixelFormat::R32G32B32A32_FLOAT);
+    bool hasGainMap = (frame.blendOp == GpuBlendOp::UltraHdrGainMap && frame.auxLayer && frame.auxLayer->pixels);
+    
     for (UINT y = 0; y < frame.height; y += stepY) {
         const uint8_t* row = ptr + (UINT64)y * stride;
-        // [Highway] Delegate histogram + luminance computation to dynamic dispatch
-        ImageLoaderSimd::ComputeHistogramRow(row, frame.width,
-            pMetadata->HistR.data(), pMetadata->HistG.data(),
-            pMetadata->HistB.data(), pMetadata->HistL.data());
+        
+        if (isFloat) {
+            float mapRange = 4.0f; // 默认 4.0x SDR 头顶空间
+            if (frame.hdrMetadata.masteringMaxNits > 80.f) {
+                mapRange = frame.hdrMetadata.masteringMaxNits / 80.0f;
+            }
+            pMetadata->HistMapRange = mapRange;
+            ImageLoaderSimd::ComputeHistogramRowFloat((const float*)row, frame.width, mapRange,
+                pMetadata->HistR.data(), pMetadata->HistG.data(),
+                pMetadata->HistB.data(), pMetadata->HistL.data());
+        } else if (hasGainMap) {
+            float mapRange = std::exp2(frame.shaderPayload.targetHeadroom);
+            pMetadata->HistMapRange = mapRange;
+            const uint8_t* auxRow = frame.auxLayer->pixels + (UINT64)y * frame.auxLayer->stride;
+            ImageLoaderSimd::ComputeHistogramRowGainMap(row, auxRow, frame.width, mapRange, frame.shaderPayload,
+                pMetadata->HistR.data(), pMetadata->HistG.data(),
+                pMetadata->HistB.data(), pMetadata->HistL.data());
+        } else {
+            pMetadata->HistMapRange = 1.0f;
+            // [Highway] Delegate histogram + luminance computation to dynamic dispatch
+            ImageLoaderSimd::ComputeHistogramRow(row, frame.width,
+                pMetadata->HistR.data(), pMetadata->HistG.data(),
+                pMetadata->HistB.data(), pMetadata->HistL.data());
+        }
     }
 
     // Laplacian Sharpness (sampled)
     if (frame.width > lapStep * 2 && frame.height > lapStep * 2) {
         auto getLumaAt = [&](const uint8_t* rowPtr, UINT x) -> int {
-            const uint8_t b = rowPtr[x * 4 + 0];
-            const uint8_t g = rowPtr[x * 4 + 1];
-            const uint8_t r = rowPtr[x * 4 + 2];
-            return (int)((54 * r + 183 * g + 19 * b) >> 8);
+            if (isFloat) {
+                const float* px = (const float*)rowPtr + x * 4;
+                float r = px[0], g = px[1], b = px[2]; 
+                return (int)std::clamp((r * 0.299f + g * 0.587f + b * 0.114f) * 255.0f, 0.0f, 255.0f);
+            } else {
+                const uint8_t b = rowPtr[x * 4 + 0];
+                const uint8_t g = rowPtr[x * 4 + 1];
+                const uint8_t r = rowPtr[x * 4 + 2];
+                return (int)((54 * r + 183 * g + 19 * b) >> 8);
+            }
         };
 
         for (UINT y = lapStep; y + lapStep < frame.height; y += lapStep) {

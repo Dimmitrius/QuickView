@@ -91,6 +91,7 @@ public:
     std::vector<uint32_t> HistG;
     std::vector<uint32_t> HistB;
     std::vector<uint32_t> HistL; // Luminance
+    float HistMapRange = 1.0f;   // Linear SDR multiplier mapped to 255 bin
 
     // Compare Metrics
     double Sharpness = 0.0; // Laplacian variance

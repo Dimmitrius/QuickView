@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <cstddef>
 
+namespace QuickView { struct GpuShaderPayload; }
+
 namespace ImageLoaderSimd {
 
 // ============================================================================
@@ -33,6 +35,20 @@ float FindPeakFloat(const float* data, size_t pixelCount);
 void ComputeHistogramRow(const uint8_t* row, int width,
                          uint32_t* histR, uint32_t* histG,
                          uint32_t* histB, uint32_t* histL);
+
+/// Compute Float RGBA histogram row.
+/// Maps linear HDR values to 0-255 using an exposure mapping fn. 
+/// Assumes mapRange = max displayable HDR capacity (e.g. 4.0)
+void ComputeHistogramRowFloat(const float* row, int width, float mapRange,
+                              uint32_t* histR, uint32_t* histG,
+                              uint32_t* histB, uint32_t* histL);
+
+/// Compute SDR+GainMap histogram row.
+/// Combines 8-bit SDR and GainMap on the fly to calculate HDR histogram.
+void ComputeHistogramRowGainMap(const uint8_t* sdrRow, const uint8_t* gainMapRow,
+                                int width, float mapRange, const ::QuickView::GpuShaderPayload& payload,
+                                uint32_t* histR, uint32_t* histG,
+                                uint32_t* histB, uint32_t* histL);
 
 /// Sum luminance for a contiguous 8-bit 4-channel pixel span.
 /// Returns the sum of per-pixel luminance in 0..255 space.
