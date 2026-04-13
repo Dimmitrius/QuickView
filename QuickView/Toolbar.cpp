@@ -6,14 +6,6 @@
 extern AppConfig g_config;
 
 namespace {
-static D2D1_COLOR_F ScaleUiColor(const D2D1_COLOR_F& color, float hdrWhiteScale) {
-  const float scale = (std::max)(1.0f, hdrWhiteScale);
-  return D2D1::ColorF(
-      (std::max)(0.0f, color.r * scale),
-      (std::max)(0.0f, color.g * scale),
-      (std::max)(0.0f, color.b * scale),
-      color.a);
-}
 }
 
 // Icon Codes (Segoe Fluent Icons)
@@ -113,17 +105,17 @@ void Toolbar::SetUIScale(float scale) {
 
 void Toolbar::CreateResources(ID2D1RenderTarget *pRT) {
   if (!m_brushBg) {
-    pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f), m_hdrWhiteScale),
+    pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f),
                                &m_brushBg); // Master placeholder
-    pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), m_hdrWhiteScale),
+    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f),
                                &m_brushIcon);
-    pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.4f, 0.6f, 1.0f, 1.0f), m_hdrWhiteScale),
+    pRT->CreateSolidColorBrush(D2D1::ColorF(0.4f, 0.6f, 1.0f, 1.0f),
                                &m_brushIconActive); // Blue for active
-    pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f), m_hdrWhiteScale),
+    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f),
                                &m_brushIconDisabled);
-    pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 0.3f, 0.3f, 1.0f), m_hdrWhiteScale),
+    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.3f, 0.3f, 1.0f),
                                &m_brushWarning); // Red for warning
-    pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), m_hdrWhiteScale),
+    pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f),
                                &m_brushHover); // Hover highlight
 
     // Font
@@ -457,12 +449,12 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
   CreateResources(pRT);
 
   bool isLight = IsLightThemeActive();
-  m_brushBg->SetColor(ScaleUiColor(isLight ? D2D1::ColorF(0.95f, 0.95f, 0.95f, 1.0f) : D2D1::ColorF(0.1f, 0.1f, 0.1f, 1.0f), m_hdrWhiteScale));
-  m_brushIcon->SetColor(ScaleUiColor(isLight ? D2D1::ColorF(D2D1::ColorF::Black) : D2D1::ColorF(D2D1::ColorF::White), m_hdrWhiteScale));
-  m_brushIconActive->SetColor(ScaleUiColor(D2D1::ColorF(0.4f, 0.6f, 1.0f, 1.0f), m_hdrWhiteScale));
-  m_brushIconDisabled->SetColor(ScaleUiColor(isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.3f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f), m_hdrWhiteScale));
-  m_brushWarning->SetColor(ScaleUiColor(D2D1::ColorF(1.0f, 0.3f, 0.3f, 1.0f), m_hdrWhiteScale));
-  m_brushHover->SetColor(ScaleUiColor(isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.05f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), m_hdrWhiteScale));
+  m_brushBg->SetColor(isLight ? D2D1::ColorF(0.95f, 0.95f, 0.95f, 1.0f) : D2D1::ColorF(0.1f, 0.1f, 0.1f, 1.0f));
+  m_brushIcon->SetColor(isLight ? D2D1::ColorF(D2D1::ColorF::Black) : D2D1::ColorF(D2D1::ColorF::White));
+  m_brushIconActive->SetColor(D2D1::ColorF(0.4f, 0.6f, 1.0f, 1.0f));
+  m_brushIconDisabled->SetColor(isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.3f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f));
+  m_brushWarning->SetColor(D2D1::ColorF(1.0f, 0.3f, 0.3f, 1.0f));
+  m_brushHover->SetColor(isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.05f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f));
 
   ComPtr<ID2D1Layer> layer;
   if (SUCCEEDED(pRT->CreateLayer(&layer))) {
@@ -505,7 +497,7 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
             // Theme-aware Material Filler
             bool isLight = IsLightThemeActive();
             D2D1_COLOR_F fillerColor = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f);
-            m_brushBg->SetColor(ScaleUiColor(fillerColor, m_hdrWhiteScale));
+            m_brushBg->SetColor(fillerColor);
             m_brushBg->SetOpacity(masterOpacity); 
 
             pRT->FillRoundedRectangle(m_bgRect, m_brushBg.Get());
@@ -530,7 +522,7 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
       
       // Track (subtle)
       ComPtr<ID2D1SolidColorBrush> trackBr;
-      pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.3f, 0.3f, 0.4f, 0.3f), m_hdrWhiteScale), &trackBr);
+      pRT->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.4f, 0.3f), &trackBr);
       pRT->DrawLine(D2D1::Point2F(barLeft, barY), D2D1::Point2F(barRight, barY), trackBr.Get(), lineThickness);
       
       // Fill (accent blue)
@@ -539,14 +531,14 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
           ? D2D1::ColorF(0.25f, 0.56f, 1.0f, 0.8f) // Blue when playing
           : D2D1::ColorF(1.0f, 0.72f, 0.18f, 0.85f); // Orange when paused
         ComPtr<ID2D1SolidColorBrush> fillBr;
-        pRT->CreateSolidColorBrush(ScaleUiColor(accentColor, m_hdrWhiteScale), &fillBr);
+        pRT->CreateSolidColorBrush(accentColor, &fillBr);
         pRT->DrawLine(D2D1::Point2F(barLeft, barY), D2D1::Point2F(barLeft + fillW, barY), fillBr.Get(), lineThickness);
         
         // Playhead dot
         float dotRadius = m_animProgressHover ? 4.0f * m_uiScale : 3.0f * m_uiScale;
         D2D1_ELLIPSE dot = D2D1::Ellipse(D2D1::Point2F(barLeft + fillW, barY), dotRadius, dotRadius);
         ComPtr<ID2D1SolidColorBrush> dotBr;
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(m_animProgressHover ? 1.0f : 0.3f, 0.65f, 1.0f, 0.95f), m_hdrWhiteScale), &dotBr);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(m_animProgressHover ? 1.0f : 0.3f, 0.65f, 1.0f, 0.95f), &dotBr);
         pRT->FillEllipse(dot, dotBr.Get());
       }
     }
@@ -760,7 +752,7 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
         D2D1_RECT_F tipRect = D2D1::RectF(tipX, tipY, tipX + tipWidth, tipY + tipHeight);
         ComPtr<ID2D1SolidColorBrush> tipBg;
         D2D1_COLOR_F tipBgBase = isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.15f, 0.15f, 0.15f, 0.95f);
-        pRT->CreateSolidColorBrush(ScaleUiColor(tipBgBase, m_hdrWhiteScale), &tipBg);
+        pRT->CreateSolidColorBrush(tipBgBase, &tipBg);
         pRT->FillRoundedRectangle(D2D1::RoundedRect(tipRect, 4.0f * m_uiScale, 4.0f * m_uiScale), tipBg.Get());
         pRT->DrawText(tipText, (UINT32)tipLen, tooltipFormat.Get(), tipRect, m_brushIcon.Get());
       }

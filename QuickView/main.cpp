@@ -1445,17 +1445,9 @@ static bool RenderCompareComposite(HWND hwnd) {
         ComPtr<ID2D1SolidColorBrush> bgBrush;
         ComPtr<ID2D1SolidColorBrush> borderBrush;
         ComPtr<ID2D1SolidColorBrush> arrowBrush;
-        float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        auto scaleUiColorLocal = [hdrWhiteScale](const D2D1_COLOR_F& color) {
-            return D2D1::ColorF(
-                (std::max)(0.0f, color.r * hdrWhiteScale),
-                (std::max)(0.0f, color.g * hdrWhiteScale),
-                (std::max)(0.0f, color.b * hdrWhiteScale),
-                color.a);
-        };
-        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColorLocal(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.50f * opacity)), &bgBrush))) return;
-        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColorLocal(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * opacity)), &borderBrush))) return;
-        if (FAILED(ctx->CreateSolidColorBrush(scaleUiColorLocal(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f * opacity)), &arrowBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.50f * opacity), &bgBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * opacity), &borderBrush))) return;
+        if (FAILED(ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f * opacity), &arrowBrush))) return;
 
         D2D1_ELLIPSE ellipse = D2D1::Ellipse(D2D1::Point2F(splitX, centerY), radius, radius);
         ctx->FillEllipse(ellipse, bgBrush.Get());
@@ -1498,8 +1490,7 @@ static bool RenderCompareComposite(HWND hwnd) {
         ctx->PopAxisAlignedClip();
 
         ComPtr<ID2D1SolidColorBrush> dividerBrush;
-        float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f * hdrWhiteScale), &dividerBrush);
+        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.85f), &dividerBrush);
         if (dividerBrush) {
             ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 2.0f);
         }
@@ -1514,8 +1505,7 @@ static bool RenderCompareComposite(HWND hwnd) {
         DrawResourceIntoViewport(ctx, g_imageResource, rightExif, rightView, rightVp);
 
         ComPtr<ID2D1SolidColorBrush> dividerBrush;
-        float hdrWhiteScale = g_compEngine ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale()) : 1.0f;
-        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.35f * hdrWhiteScale), &dividerBrush);
+        ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.35f), &dividerBrush);
         if (dividerBrush) {
             ctx->DrawLine(D2D1::Point2F(splitX, 0.0f), D2D1::Point2F(splitX, (float)winH), dividerBrush.Get(), 1.0f);
         }
@@ -3513,18 +3503,6 @@ static void PerformZoomFit(HWND hwnd, float maxScreenPct = 1.0f, bool allowResiz
 
 void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
     if (!g_dialog.IsVisible || !context) return;
-
-    const float hdrWhiteScale =
-        (g_compEngine && g_compEngine->IsAdvancedColor())
-        ? (std::max)(1.0f, g_compEngine->GetDisplayColorState().GetSdrWhiteScale())
-        : 1.0f;
-    auto scaleUiColor = [&](const D2D1_COLOR_F& color) {
-        return D2D1::ColorF(
-            (std::max)(0.0f, color.r * hdrWhiteScale),
-            (std::max)(0.0f, color.g * hdrWhiteScale),
-            (std::max)(0.0f, color.b * hdrWhiteScale),
-            color.a);
-    };
     
     // Use clientRect instead of context->GetSize() to avoid Dirty Rect size issue
     D2D1_SIZE_F size = D2D1::SizeF((float)(clientRect.right - clientRect.left), (float)(clientRect.bottom - clientRect.top));
@@ -3534,7 +3512,7 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
     ComPtr<ID2D1SolidColorBrush> pOverlayBrush;
     bool isLight = IsLightThemeActive();
     D2D1_COLOR_F dimmerClr = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 0.4f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f);
-    context->CreateSolidColorBrush(scaleUiColor(dimmerClr), &pOverlayBrush);
+    context->CreateSolidColorBrush(dimmerClr, &pOverlayBrush);
     context->FillRectangle(D2D1::RectF(0, 0, size.width, size.height), pOverlayBrush.Get());
     
     // Box Background (Geek Glass or Fallback)
@@ -3559,7 +3537,7 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
         float masterOpacity = g_config.GlassModalsOpacity / 100.0f;
         ComPtr<ID2D1SolidColorBrush> materialBrush;
         D2D1_COLOR_F fillerColor = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f);
-        context->CreateSolidColorBrush(scaleUiColor(fillerColor), &materialBrush);
+        context->CreateSolidColorBrush(fillerColor, &materialBrush);
         if (materialBrush) {
             materialBrush->SetOpacity(masterOpacity);
             context->FillRoundedRectangle(D2D1::RoundedRect(layout.Box, 10.0f, 10.0f), materialBrush.Get());
@@ -3570,13 +3548,13 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
         ComPtr<ID2D1SolidColorBrush> pBgBrush;
         bool isLight = IsLightThemeActive();
         D2D1_COLOR_F bgClr = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.18f, 0.18f, 0.18f, 1.0f);
-        context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(bgClr.r, bgClr.g, bgClr.b, g_config.GlassModalsOpacity / 100.0f)), &pBgBrush);
+        context->CreateSolidColorBrush(D2D1::ColorF(bgClr.r, bgClr.g, bgClr.b, g_config.GlassModalsOpacity / 100.0f), &pBgBrush);
         context->FillRoundedRectangle(D2D1::RoundedRect(layout.Box, 10.0f, 10.0f), pBgBrush.Get());
     }
     
     // Border
     ComPtr<ID2D1SolidColorBrush> pBorderBrush;
-    context->CreateSolidColorBrush(scaleUiColor(g_dialog.AccentColor), &pBorderBrush);
+    context->CreateSolidColorBrush(g_dialog.AccentColor, &pBorderBrush);
     context->DrawRoundedRectangle(D2D1::RoundedRect(layout.Box, 10.0f, 10.0f), pBorderBrush.Get(), 2.0f);
     
     // Fonts
@@ -3606,8 +3584,8 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
     D2D1_COLOR_F txtDimClr = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.15f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f);
 
     ComPtr<ID2D1SolidColorBrush> pTextBrush, pGrayTextBrush;
-    context->CreateSolidColorBrush(scaleUiColor(txtClr), &pTextBrush);
-    context->CreateSolidColorBrush(scaleUiColor(txtDimClr), &pGrayTextBrush);
+    context->CreateSolidColorBrush(txtClr, &pTextBrush);
+    context->CreateSolidColorBrush(txtDimClr, &pGrayTextBrush);
     
     // Title (truncate to show end of filename with extension, single line)
     // [Fix] Use robust visual truncation instead of hardcoded char limit
@@ -3635,13 +3613,13 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
     if (g_dialog.HasInput) {
         ComPtr<ID2D1SolidColorBrush> pInputBg;
         D2D1_COLOR_F inputBgClr = isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f) : D2D1::ColorF(0.12f, 0.12f, 0.12f, 1.0f);
-        context->CreateSolidColorBrush(scaleUiColor(inputBgClr), &pInputBg);
+        context->CreateSolidColorBrush(inputBgClr, &pInputBg);
         context->FillRoundedRectangle(D2D1::RoundedRect(layout.Input, 6.0f, 6.0f), pInputBg.Get());
         
         // Border
         ComPtr<ID2D1SolidColorBrush> pInputBorder;
         D2D1_COLOR_F inputBordClr = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.2f) : D2D1::ColorF(0.35f, 0.35f, 0.35f, 1.0f);
-        context->CreateSolidColorBrush(scaleUiColor(inputBordClr), &pInputBorder);
+        context->CreateSolidColorBrush(inputBordClr, &pInputBorder);
         D2D1_RECT_F borderRect = layout.Input;
         context->DrawRoundedRectangle(D2D1::RoundedRect(borderRect, 6.0f, 6.0f), pInputBorder.Get(), 1.0f);
         
@@ -3679,7 +3657,7 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
         } else {
              ComPtr<ID2D1SolidColorBrush> pBtnBgBrush;
              D2D1_COLOR_F btnBgClr = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.1f) : D2D1::ColorF(0.25f, 0.25f, 0.25f, 1.0f);
-             context->CreateSolidColorBrush(scaleUiColor(btnBgClr), &pBtnBgBrush);
+             context->CreateSolidColorBrush(btnBgClr, &pBtnBgBrush);
              context->FillRoundedRectangle(D2D1::RoundedRect(btnRect, 4.0f, 4.0f), pBtnBgBrush.Get());
         }
         
@@ -3690,7 +3668,7 @@ void DrawDialog(ID2D1DeviceContext* context, const RECT& clientRect) {
         ID2D1SolidColorBrush* finalBtnTextBrush = isSelected ? pGrayTextBrush.Get() : pTextBrush.Get(); // Wait, selected bg is pBorderBrush (Accent)
         // If selected, use White text for better contrast on Accent Blue.
         ComPtr<ID2D1SolidColorBrush> whiteBrush;
-        context->CreateSolidColorBrush(scaleUiColor(D2D1::ColorF(D2D1::ColorF::White)), &whiteBrush);
+        context->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &whiteBrush);
         
         context->DrawText(text.c_str(), (UINT32)text.length(), fmtBtnCenter.Get(), textRect, isSelected ? whiteBrush.Get() : pTextBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
     }

@@ -100,8 +100,6 @@ public:
     void Init(ID2D1DeviceContext* pRT, HWND hwnd);
     void Render(ID2D1DeviceContext* pRT, float winW, float winH);
     void SetUIScale(float scale);
-    void SetHdrWhiteScale(float scale) { m_hdrWhiteScale = scale; }
-    
     SettingsAction OnMouseMove(float x, float y);
     SettingsAction OnLButtonDown(float x, float y);
     SettingsAction OnLButtonUp(float x, float y);
@@ -202,8 +200,6 @@ private:
     float m_windowWidth = 0.0f;
     float m_windowHeight = 0.0f;
     float m_uiScale = 1.0f;
-    float m_hdrWhiteScale = 1.0f;
-    
     float m_toastScrollY = 0.0f;
     float m_toastTotalHeight = 0.0f;
     

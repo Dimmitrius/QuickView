@@ -53,8 +53,6 @@ public:
     void UpdateLayout(float winW, float winH);
     void Render(ID2D1RenderTarget* pRT);
     void SetUIScale(float scale);
-    void SetHdrWhiteScale(float scale) { m_hdrWhiteScale = scale; }
-
     // Interaction
     bool OnMouseMove(float x, float y);
     bool OnClick(float x, float y, ToolbarButtonID& outId);
@@ -114,7 +112,6 @@ private:
     // Animation
     float m_opacity = 0.0f;
     float m_uiScale = 1.0f;
-    float m_hdrWhiteScale = 1.0f;
     float m_iconFontScale = 0.0f;
     float m_iconFontScaleSmall = 0.0f;
     float m_uiFontScale = 0.0f;

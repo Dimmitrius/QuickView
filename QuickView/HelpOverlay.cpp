@@ -5,16 +5,8 @@
 
 extern AppConfig g_config;
 
-namespace {
-static D2D1_COLOR_F ScaleUiColor(const D2D1_COLOR_F& color, float hdrWhiteScale) {
-    const float scale = (std::max)(1.0f, hdrWhiteScale);
-    return D2D1::ColorF(
-        (std::max)(0.0f, color.r * scale),
-        (std::max)(0.0f, color.g * scale),
-        (std::max)(0.0f, color.b * scale),
-        color.a);
-}
-}
+
+
 
 HelpOverlay::HelpOverlay() {
 }
@@ -49,14 +41,14 @@ void HelpOverlay::CreateResources(ID2D1RenderTarget* pRT) {
         D2D1_COLOR_F keyClr = isLight ? D2D1::ColorF(0.12f, 0.12f, 0.15f, 0.7f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f);
         D2D1_COLOR_F bordClr = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.15f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f);
 
-        pRT->CreateSolidColorBrush(ScaleUiColor(bgClr, m_hdrWhiteScale), &m_brushBg);
-        pRT->CreateSolidColorBrush(ScaleUiColor(txtClr, m_hdrWhiteScale), &m_brushText);
-        pRT->CreateSolidColorBrush(ScaleUiColor(headClr, m_hdrWhiteScale), &m_brushHeader);
-        pRT->CreateSolidColorBrush(ScaleUiColor(keyClr, m_hdrWhiteScale), &m_brushKey);
-        pRT->CreateSolidColorBrush(ScaleUiColor(bordClr, m_hdrWhiteScale), &m_brushBorder);
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), m_hdrWhiteScale), &m_brushScrollBg);
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f), m_hdrWhiteScale), &m_brushScrollThumb);
-        pRT->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.8f), m_hdrWhiteScale), &m_brushCloseBg);
+        pRT->CreateSolidColorBrush(bgClr, &m_brushBg);
+        pRT->CreateSolidColorBrush(txtClr, &m_brushText);
+        pRT->CreateSolidColorBrush(headClr, &m_brushHeader);
+        pRT->CreateSolidColorBrush(keyClr, &m_brushKey);
+        pRT->CreateSolidColorBrush(bordClr, &m_brushBorder);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), &m_brushScrollBg);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f), &m_brushScrollThumb);
+        pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.8f), &m_brushCloseBg);
     }
 
     if (m_brushBg) {
@@ -69,14 +61,14 @@ void HelpOverlay::CreateResources(ID2D1RenderTarget* pRT) {
         D2D1_COLOR_F scrlBg = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.05f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f);
         D2D1_COLOR_F scrlTh = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.2f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.3f);
 
-        m_brushBg->SetColor(ScaleUiColor(bgClr, m_hdrWhiteScale));
-        m_brushText->SetColor(ScaleUiColor(txtClr, m_hdrWhiteScale));
-        m_brushHeader->SetColor(ScaleUiColor(headClr, m_hdrWhiteScale));
-        m_brushKey->SetColor(ScaleUiColor(keyClr, m_hdrWhiteScale));
-        m_brushBorder->SetColor(ScaleUiColor(bordClr, m_hdrWhiteScale));
-        m_brushScrollBg->SetColor(ScaleUiColor(scrlBg, m_hdrWhiteScale));
-        m_brushScrollThumb->SetColor(ScaleUiColor(scrlTh, m_hdrWhiteScale));
-        m_brushCloseBg->SetColor(ScaleUiColor(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.8f), m_hdrWhiteScale));
+        m_brushBg->SetColor(bgClr);
+        m_brushText->SetColor(txtClr);
+        m_brushHeader->SetColor(headClr);
+        m_brushKey->SetColor(keyClr);
+        m_brushBorder->SetColor(bordClr);
+        m_brushScrollBg->SetColor(scrlBg);
+        m_brushScrollThumb->SetColor(scrlTh);
+        m_brushCloseBg->SetColor(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.8f));
     }
 
     if (!m_dwriteFactory) {
@@ -247,7 +239,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             // Theme-aware Material Filler
             bool isLight = IsLightThemeActive();
             D2D1_COLOR_F fillerColor = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f);
-            m_brushBg->SetColor(ScaleUiColor(fillerColor, m_hdrWhiteScale));
+            m_brushBg->SetColor(fillerColor);
             m_brushBg->SetOpacity(masterOpacity); 
 
             pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBg.Get());

@@ -218,7 +218,9 @@ private:
     // Advanced Color (HDR) Support
     bool m_allowAdvancedColor = true;
     bool m_isAdvancedColor = false;
-    DXGI_FORMAT m_surfaceFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    DXGI_FORMAT m_surfaceFormat = DXGI_FORMAT_B8G8R8A8_UNORM;      // Image layers (FP16 in HDR mode)
+    // UI layers always use SDR format - DWM handles SDR→HDR boost automatically
+    static constexpr DXGI_FORMAT kUiSurfaceFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
     QuickView::DisplayColorInfo m_displayColorInfo;
 
     // Background State Tracking (to avoid redundant redraws)

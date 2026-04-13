@@ -55,28 +55,7 @@ static std::wstring BuildDynamicRangeLabel(const CImageLoader::ImageMetadata& me
 static std::wstring BuildHdrSummary(const CImageLoader::ImageMetadata& metadata);
 static std::wstring BuildHdrDetail(const QuickView::HdrStaticMetadata& hdr);
 
-static float GetHdrUiWhiteScale(CompositionEngine* compEngine) {
-    if (!compEngine || !compEngine->IsAdvancedColor()) return 1.0f;
-    return (std::max)(1.0f, compEngine->GetDisplayColorState().GetSdrWhiteScale());
-}
 
-static D2D1_COLOR_F ScaleUiColor(const D2D1_COLOR_F& color, float hdrWhiteScale) {
-    const float scale = (std::max)(1.0f, hdrWhiteScale);
-    return D2D1::ColorF(
-        (std::max)(0.0f, color.r * scale),
-        (std::max)(0.0f, color.g * scale),
-        (std::max)(0.0f, color.b * scale),
-        color.a);
-}
-
-static HRESULT CreateScaledBrush(
-    ID2D1DeviceContext* dc,
-    const D2D1_COLOR_F& color,
-    float hdrWhiteScale,
-    ID2D1SolidColorBrush** brush)
-{
-    return dc->CreateSolidColorBrush(ScaleUiColor(color, hdrWhiteScale), brush);
-}
 
 static int ClampToInt(float value, int low, int high) {
     if (high < low) return low;
@@ -604,7 +583,7 @@ bool UIRenderer::RenderAll(HWND hwnd) {
             if (dc) {
                 // 鍒涘缓鐢诲埛
                 ComPtr<ID2D1SolidColorBrush> whiteBrush;
-                CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::White), GetHdrUiWhiteScale(m_compEngine), &whiteBrush);
+                dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &whiteBrush);
                 m_whiteBrush = whiteBrush;
                 
                 DrawOSD(dc, hwnd); // 灞€閮ㄧ粯鍒?
@@ -642,12 +621,10 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
 
     // [Geek Glass] Initialize lazily here (we have valid context on the UI static layer)
     m_geekGlass.InitializeResources(dc);
-
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     ComPtr<ID2D1SolidColorBrush> whiteBrush, blackBrush, accentBrush;
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(D2D1::ColorF::White), hdrWhiteScale), &whiteBrush);
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0, 0, 0, 0.6f), hdrWhiteScale), &blackBrush);
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.2f, 0.6f, 1.0f), hdrWhiteScale), &accentBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &whiteBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.6f), &blackBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f), &accentBrush);
     
     m_whiteBrush = whiteBrush;
     m_blackBrush = blackBrush;
@@ -661,7 +638,6 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
     
     // Toolbar
     if (g_toolbar.IsVisible()) {
-        g_toolbar.SetHdrWhiteScale(hdrWhiteScale);
         g_toolbar.SetGeekGlassData(m_bgCommandList.Get(), m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity());
         g_toolbar.Render(dc);
     }
@@ -692,14 +668,12 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
 
     // Settings Overlay
     if (g_settingsOverlay.IsVisible()) {
-        g_settingsOverlay.SetHdrWhiteScale(hdrWhiteScale);
         g_settingsOverlay.SetGeekGlassData(m_bgCommandList.Get(), m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity());
         g_settingsOverlay.Render(dc, (float)m_width, (float)m_height);
     }
     
     // Help Overlay (Top of Static Layer)
     if (g_helpOverlay.IsVisible()) {
-        g_helpOverlay.SetHdrWhiteScale(hdrWhiteScale);
         g_helpOverlay.SetGeekGlassData(m_bgCommandList.Get(), m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity());
         g_helpOverlay.Render(dc, (float)m_width, (float)m_height);
     }
@@ -711,11 +685,10 @@ void UIRenderer::RenderStaticLayer(ID2D1DeviceContext* dc, HWND hwnd) {
 
 void UIRenderer::RenderDynamicLayer(ID2D1DeviceContext* dc, HWND hwnd) {
     // 鍒涘缓鐢诲埛
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     ComPtr<ID2D1SolidColorBrush> whiteBrush, blackBrush, accentBrush;
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(D2D1::ColorF::White), hdrWhiteScale), &whiteBrush);
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0, 0, 0, 0.6f), hdrWhiteScale), &blackBrush);
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.2f, 0.6f, 1.0f), hdrWhiteScale), &accentBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &whiteBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.6f), &blackBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f), &accentBrush);
     
     m_whiteBrush = whiteBrush;
     m_blackBrush = blackBrush;
@@ -738,7 +711,6 @@ void UIRenderer::RenderDynamicLayer(ID2D1DeviceContext* dc, HWND hwnd) {
         
         // [v10.5] Dirty Rect Overlay - Red pulsing border for sub-rect updates
         if (m_animState.ShowDirtyRect && m_animState.HasDirtyRect) {
-            const float hdrW = hdrWhiteScale;
             float s2 = m_uiScale;
             
             // Transform image-space dirty rect to screen-space
@@ -771,13 +743,13 @@ void UIRenderer::RenderDynamicLayer(ID2D1DeviceContext* dc, HWND hwnd) {
             float alpha = 0.5f + 0.4f * sinf(t * 6.2831853f);
             
             ComPtr<ID2D1SolidColorBrush> dirtyBrush;
-            dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 0.15f, 0.1f, alpha), hdrW), &dirtyBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.15f, 0.1f, alpha), &dirtyBrush);
             dc->DrawRectangle(dirtyRect, dirtyBrush.Get(), 2.0f * s2);
             
             // Corner markers (thick 6px corners for emphasis)
             float cornerLen = 8.0f * s2;
             ComPtr<ID2D1SolidColorBrush> cornerBrush;
-            dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 0.3f, 0.2f, alpha * 1.2f), hdrW), &cornerBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.3f, 0.2f, alpha * 1.2f), &cornerBrush);
             float cw = 3.0f * s2;
             // Top-left
             dc->DrawLine(D2D1::Point2F(sx, sy), D2D1::Point2F(sx + cornerLen, sy), cornerBrush.Get(), cw);
@@ -813,7 +785,6 @@ void UIRenderer::RenderGalleryLayer(ID2D1DeviceContext* dc) {
     g_gallery.Update(0.016f);
     
     if (g_gallery.IsVisible()) {
-        g_gallery.SetHdrWhiteScale(GetHdrUiWhiteScale(m_compEngine));
         D2D1_SIZE_F rtSize = D2D1::SizeF((float)m_width, (float)m_height);
         g_gallery.Render(dc, rtSize);
     }
@@ -826,11 +797,9 @@ void UIRenderer::RenderGalleryLayer(ID2D1DeviceContext* dc) {
 void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
     if (m_osdOpacity <= 0.01f) return;
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-    
     // Background brushes
     ComPtr<ID2D1SolidColorBrush> bgBrush, textBrush;
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f * m_osdOpacity), hdrWhiteScale), &bgBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f * m_osdOpacity), &bgBrush);
     
     // [Fix] Theme-aware OSD Text: Automatically flip White text to Dark Grey in Light Mode
     D2D1_COLOR_F finalOsdColor = m_osdColor;
@@ -841,7 +810,7 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
         }
     }
     
-    D2D1_COLOR_F textColor = ScaleUiColor(finalOsdColor, hdrWhiteScale);
+    D2D1_COLOR_F textColor = finalOsdColor;
     textColor.a *= m_osdOpacity;
     dc->CreateSolidColorBrush(textColor, &textBrush);
 
@@ -891,7 +860,7 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
                     bool isLight = (config.theme == QuickView::UI::GeekGlass::ThemeMode::Light);
                     D2D1_COLOR_F fillerBase = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.04f, 0.04f, 0.04f, 1.0f);
                     float baseAlpha = (g_config.GlassOsdOpacity / 100.0f);
-                    D2D1_COLOR_F boosterColor = ScaleUiColor(D2D1::ColorF(fillerBase.r, fillerBase.g, fillerBase.b, baseAlpha), hdrWhiteScale);
+                    D2D1_COLOR_F boosterColor = D2D1::ColorF(fillerBase.r, fillerBase.g, fillerBase.b, baseAlpha);
                     dc->CreateSolidColorBrush(boosterColor, &boosterBrush);
                     dc->FillRoundedRectangle(D2D1::RoundedRect(r, 6.0f * s, 6.0f * s), boosterBrush.Get());
                     
@@ -981,7 +950,7 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
             bool isLight = (config.theme == QuickView::UI::GeekGlass::ThemeMode::Light);
             D2D1_COLOR_F fillerBase = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.04f, 0.04f, 0.04f, 1.0f);
             float baseAlpha = (g_config.GlassOsdOpacity / 100.0f);
-            D2D1_COLOR_F boosterColor = ScaleUiColor(D2D1::ColorF(fillerBase.r, fillerBase.g, fillerBase.b, baseAlpha), hdrWhiteScale);
+            D2D1_COLOR_F boosterColor = D2D1::ColorF(fillerBase.r, fillerBase.g, fillerBase.b, baseAlpha);
             dc->CreateSolidColorBrush(boosterColor, &boosterBrush);
             dc->FillRoundedRectangle(D2D1::RoundedRect(bgRect, 8.0f * s, 8.0f * s), boosterBrush.Get());
 
@@ -1003,7 +972,6 @@ void UIRenderer::DrawOSD(ID2D1DeviceContext* dc, HWND hwnd) {
 
 
 void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     const int totalTiles = (m_telemetry.tileCount > 0) ? m_telemetry.tileCount : 0;
     int readyTiles = m_telemetry.tilesReady;
     if (readyTiles < 0) readyTiles = 0;
@@ -1107,15 +1075,15 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
     if (alpha > 0.0f) {
         ComPtr<ID2D1SolidColorBrush> trackShadowBrush;
         D2D1_COLOR_F trackShadow = D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha); // [Fix] Deeper shadow
-        CreateScaledBrush(dc, trackShadow, hdrWhiteScale, &trackShadowBrush);
+        dc->CreateSolidColorBrush(trackShadow, &trackShadowBrush);
         dc->FillRectangle(fullBarShadow, trackShadowBrush.Get());
 
-        CreateScaledBrush(dc, trackColor, hdrWhiteScale, &trackBrush);
+        dc->CreateSolidColorBrush(trackColor, &trackBrush);
         dc->FillRectangle(fullBar, trackBrush.Get());
 
         ComPtr<ID2D1SolidColorBrush> trackStrokeBrush;
         D2D1_COLOR_F trackStroke = D2D1::ColorF(0.40f, 0.65f, 0.95f, 0.40f * alpha); // [Fix] Deeper stroke
-        CreateScaledBrush(dc, trackStroke, hdrWhiteScale, &trackStrokeBrush);
+        dc->CreateSolidColorBrush(trackStroke, &trackStrokeBrush);
         dc->FillRectangle(D2D1::RectF(0.0f, barY, drawW, barY + 1.0f), trackStrokeBrush.Get());
     }
 
@@ -1140,15 +1108,15 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
             D2D1_RECT_F segShadow = D2D1::RectF(left, barY + 1.0f, right, barY + barThickness + 2.0f);
 
             ComPtr<ID2D1SolidColorBrush> segShadowBrush;
-            CreateScaledBrush(dc, D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha), hdrWhiteScale, &segShadowBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha), &segShadowBrush);
             dc->FillRectangle(segShadow, segShadowBrush.Get());
 
             ComPtr<ID2D1SolidColorBrush> segGlowBrush;
-            CreateScaledBrush(dc, D2D1::ColorF(0.20f, 0.50f, 0.95f, (glowAlpha + 0.06f) * alpha), hdrWhiteScale, &segGlowBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.50f, 0.95f, (glowAlpha + 0.06f) * alpha), &segGlowBrush);
             dc->FillRectangle(segGlow, segGlowBrush.Get());
 
             ComPtr<ID2D1SolidColorBrush> segBrush;
-            CreateScaledBrush(dc, D2D1::ColorF(0.40f, 0.70f, 1.0f, (bodyAlpha + 0.04f) * alpha), hdrWhiteScale, &segBrush);
+            dc->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.70f, 1.0f, (bodyAlpha + 0.04f) * alpha), &segBrush);
             dc->FillRectangle(seg, segBrush.Get());
         };
 
@@ -1184,19 +1152,19 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
         ComPtr<ID2D1SolidColorBrush> fillGlowBrush;
         D2D1_COLOR_F glowColor = D2D1::ColorF(0.15f, 0.40f, 0.85f, 0.40f * alpha + flashBoost * 0.40f); // [Fix] Deeper glow
         if (glowColor.a > 1.0f) glowColor.a = 1.0f;
-        CreateScaledBrush(dc, glowColor, hdrWhiteScale, &fillGlowBrush);
+        dc->CreateSolidColorBrush(glowColor, &fillGlowBrush);
         ComPtr<ID2D1SolidColorBrush> fillShadowBrush;
         D2D1_COLOR_F fillShadowColor = D2D1::ColorF(0.08f, 0.15f, 0.25f, 0.90f * alpha); // [Fix] Deeper shadow
-        CreateScaledBrush(dc, fillShadowColor, hdrWhiteScale, &fillShadowBrush);
+        dc->CreateSolidColorBrush(fillShadowColor, &fillShadowBrush);
         dc->FillRectangle(fillShadow, fillShadowBrush.Get());
         dc->FillRectangle(fillGlow, fillGlowBrush.Get());
-        CreateScaledBrush(dc, fillColor, hdrWhiteScale, &fillBrush);
+        dc->CreateSolidColorBrush(fillColor, &fillBrush);
         dc->FillRectangle(fillRect, fillBrush.Get());
 
         ComPtr<ID2D1SolidColorBrush> fillStrokeBrush;
         D2D1_COLOR_F fillStroke = D2D1::ColorF(0.60f, 0.80f, 1.0f, 0.46f * alpha + flashBoost * 0.50f); // [Fix] Deeper stroke
         if (fillStroke.a > 1.0f) fillStroke.a = 1.0f;
-        CreateScaledBrush(dc, fillStroke, hdrWhiteScale, &fillStrokeBrush);
+        dc->CreateSolidColorBrush(fillStroke, &fillStrokeBrush);
         dc->FillRectangle(D2D1::RectF(0.0f, barY, fillW, barY + 1.0f), fillStrokeBrush.Get());
 
         // Progress head highlight: improves readability on bright/complex images.
@@ -1208,7 +1176,7 @@ void UIRenderer::DrawDecodingStatus(ID2D1DeviceContext* dc, HWND hwnd) {
             ComPtr<ID2D1SolidColorBrush> headBrush;
             D2D1_COLOR_F headColor = D2D1::ColorF(0.70f, 0.85f, 1.0f, 0.46f * alpha + flashBoost * 0.35f); // [Fix] Deeper highlight
             if (headColor.a > 1.0f) headColor.a = 1.0f;
-            CreateScaledBrush(dc, headColor, hdrWhiteScale, &headBrush);
+            dc->CreateSolidColorBrush(headColor, &headBrush);
             dc->FillRectangle(headRect, headBrush.Get());
         }
     }
@@ -1222,7 +1190,6 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
     if (!m_animState.IsAnimated || m_animState.TotalFrames <= 1) return;
     
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     float winW = (float)m_width;
     float winH = (float)m_height;
     
@@ -1244,7 +1211,7 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
     
     // Track background (frosted glass)
     ComPtr<ID2D1SolidColorBrush> trackBrush;
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.12f, 0.12f, 0.15f, 0.55f), hdrWhiteScale), &trackBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.12f, 0.12f, 0.15f, 0.55f), &trackBrush);
     dc->FillRoundedRectangle(D2D1::RoundedRect(trackRect, cornerR, cornerR), trackBrush.Get());
     
     // Fill progress
@@ -1256,7 +1223,7 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
     D2D1_COLOR_F fillColor = m_animState.InspectorMode 
         ? D2D1::ColorF(1.0f, 0.72f, 0.18f, 0.92f)   // Gold (inspector)
         : D2D1::ColorF(0.25f, 0.56f, 1.0f, 0.85f);   // Blue (playing)
-    dc->CreateSolidColorBrush(ScaleUiColor(fillColor, hdrWhiteScale), &fillBrush);
+    dc->CreateSolidColorBrush(fillColor, &fillBrush);
     dc->FillRoundedRectangle(D2D1::RoundedRect(fillRect, cornerR, cornerR), fillBrush.Get());
     
     // Playhead dot
@@ -1269,7 +1236,7 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
         
         D2D1_ELLIPSE dot = D2D1::Ellipse(D2D1::Point2F(dotX, dotY), dotR, dotR);
         ComPtr<ID2D1SolidColorBrush> dotBrush;
-        dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), hdrWhiteScale), &dotBrush);
+        dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &dotBrush);
         dc->FillEllipse(dot, dotBrush.Get());
     }
     
@@ -1292,7 +1259,7 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
         btnStartX - pillPad, btnY - 2.0f * s,
         btnStartX + totalBtnW + pillPad, btnY + btnSize + 2.0f * s);
     ComPtr<ID2D1SolidColorBrush> pillBrush;
-    dc->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.08f, 0.08f, 0.10f, 0.50f), hdrWhiteScale), &pillBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.08f, 0.10f, 0.50f), &pillBrush);
     dc->FillRoundedRectangle(D2D1::RoundedRect(pillRect, 14.0f * s, 14.0f * s), pillBrush.Get());
     
     // Draw each button
@@ -1316,7 +1283,7 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
             D2D1_COLOR_F iconColor = btns[i].active 
                 ? D2D1::ColorF(0.25f, 0.56f, 1.0f, 0.95f) // Active blue
                 : D2D1::ColorF(0.85f, 0.85f, 0.85f, 0.85f); // Default white
-            dc->CreateSolidColorBrush(ScaleUiColor(iconColor, hdrWhiteScale), &iconBrush);
+            dc->CreateSolidColorBrush(iconColor, &iconBrush);
             dc->DrawText(btns[i].icon, (UINT32)wcslen(btns[i].icon), iconFmt.Get(), bRect, iconBrush.Get());
         }
     }
@@ -1346,7 +1313,7 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
             D2D1_COLOR_F textColor = m_animState.InspectorMode 
                 ? D2D1::ColorF(1.0f, 0.72f, 0.18f, 0.85f)
                 : D2D1::ColorF(0.7f, 0.7f, 0.7f, 0.7f);
-            dc->CreateSolidColorBrush(ScaleUiColor(textColor, hdrWhiteScale), &textBrush);
+            dc->CreateSolidColorBrush(textColor, &textBrush);
             dc->DrawTextLayout(D2D1::Point2F(textX, textY), layout.Get(), textBrush.Get());
         }
     }
@@ -1355,7 +1322,6 @@ void UIRenderer::DrawAnimationScrubber(ID2D1DeviceContext* dc, HWND hwnd) {
 void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
     if (!m_showControls && m_winCtrlHover == -1) return;
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     float btnW = 38.0f * s;
     float btnH = 28.0f * s;
 
@@ -1391,11 +1357,11 @@ void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
     // Hover backgrounds
     if (m_winCtrlHover == 0) {
         ComPtr<ID2D1SolidColorBrush> redBrush;
-        CreateScaledBrush(dc, D2D1::ColorF(0.9f, 0.1f, 0.1f), hdrWhiteScale, &redBrush);
+        dc->CreateSolidColorBrush(D2D1::ColorF(0.9f, 0.1f, 0.1f), &redBrush);
         dc->FillRectangle(closeRect, redBrush.Get());
     } else if (m_winCtrlHover >= 1 && m_winCtrlHover <= 3) {
         ComPtr<ID2D1SolidColorBrush> grayBrush;
-        CreateScaledBrush(dc, palette.hoverFill, hdrWhiteScale, &grayBrush);
+        dc->CreateSolidColorBrush(palette.hoverFill, &grayBrush);
         if (m_winCtrlHover == 1) dc->FillRectangle(maxRect, grayBrush.Get());
         else if (m_winCtrlHover == 2) dc->FillRectangle(minRect, grayBrush.Get());
         else if (m_winCtrlHover == 3) dc->FillRectangle(pinRect, grayBrush.Get());
@@ -1404,9 +1370,9 @@ void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
     if (!m_iconFormat) return;
 
     ComPtr<ID2D1SolidColorBrush> foregroundBrush, shadowBrush, accentBrush;
-    CreateScaledBrush(dc, palette.foreground, hdrWhiteScale, &foregroundBrush);
-    CreateScaledBrush(dc, palette.shadow, hdrWhiteScale, &shadowBrush);
-    CreateScaledBrush(dc, palette.accent, hdrWhiteScale, &accentBrush);
+    dc->CreateSolidColorBrush(palette.foreground, &foregroundBrush);
+    dc->CreateSolidColorBrush(palette.shadow, &shadowBrush);
+    dc->CreateSolidColorBrush(palette.accent, &accentBrush);
     
     auto DrawIcon = [&](wchar_t icon, D2D1_RECT_F rect, ID2D1Brush* brush) {
         DrawTextWithFourWayShadow(dc, &icon, 1, m_iconFormat.Get(), rect, brush, shadowBrush.Get(), 1.2f * s);
@@ -1423,8 +1389,6 @@ void UIRenderer::DrawWindowControls(ID2D1DeviceContext* dc, HWND hwnd) {
 
 void UIRenderer::DrawBorderIndicators(ID2D1DeviceContext* dc) {
     if (m_width <= 0 || m_height <= 0) return;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-
     D2D1_SIZE_F imgSize = GetEffectiveImageSize();
     if (imgSize.width <= 0.0f || imgSize.height <= 0.0f) return;
 
@@ -1465,7 +1429,7 @@ void UIRenderer::DrawBorderIndicators(ID2D1DeviceContext* dc) {
     if (!drawLeft && !drawRight && !drawTop && !drawBottom) return;
 
     ComPtr<ID2D1SolidColorBrush> borderBrush;
-    CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.8f), hdrWhiteScale, &borderBrush); // Distinct accent color
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.8f), &borderBrush); // Distinct accent color
 
     float s = m_uiScale;
     float thickness = 4.0f * s; // 4px thick line, scaled
@@ -1519,17 +1483,15 @@ WindowControlHit UIRenderer::HitTestWindowControls(float x, float y) {
 // ============================================================================
 void UIRenderer::DrawDebugHUD(ID2D1DeviceContext* dc) {
     if (!m_debugFormat) return;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-    
     // 0. Resources
     ComPtr<ID2D1SolidColorBrush> redBrush, yellowBrush, greenBrush, blueBrush, grayBrush, blackTransBrush, whiteBrush;
-    CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::Red), hdrWhiteScale, &redBrush);
-    CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::Yellow), hdrWhiteScale, &yellowBrush);
-    CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::DodgerBlue), hdrWhiteScale, &blueBrush);
-    CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::Lime), hdrWhiteScale, &greenBrush);
-    CreateScaledBrush(dc, D2D1::ColorF(0.3f, 0.3f, 0.3f), hdrWhiteScale, &grayBrush);
-    CreateScaledBrush(dc, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.8f), hdrWhiteScale, &blackTransBrush); // Darker
-    CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::White), hdrWhiteScale, &whiteBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Red), &redBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Yellow), &yellowBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::DodgerBlue), &blueBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Lime), &greenBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.3f, 0.3f, 0.3f), &grayBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.8f), &blackTransBrush); // Darker
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &whiteBrush);
 
     const auto& s = m_telemetry;
     
@@ -2433,12 +2395,10 @@ void UIRenderer::BuildInfoGrid() {
 void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY, float width, const AdaptiveUiPalette& palette) {
     if (m_infoGrid.empty() || !m_panelFormat) return;
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-    
     ComPtr<ID2D1SolidColorBrush> brushMain, brushDim, brushHover;
-    CreateScaledBrush(dc, palette.foreground, hdrWhiteScale, &brushMain);
-    CreateScaledBrush(dc, palette.textDim, hdrWhiteScale, &brushDim);
-    CreateScaledBrush(dc, palette.hoverFill, hdrWhiteScale, &brushHover);
+    dc->CreateSolidColorBrush(palette.foreground, &brushMain);
+    dc->CreateSolidColorBrush(palette.textDim, &brushDim);
+    dc->CreateSolidColorBrush(palette.hoverFill, &brushHover);
     
     const float iconW = GRID_ICON_WIDTH * s;
     const float labelW = GRID_LABEL_WIDTH * s;
@@ -2531,8 +2491,6 @@ void UIRenderer::DrawInfoGrid(ID2D1DeviceContext* dc, float startX, float startY
 
 void UIRenderer::DrawHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect) {
     if (g_currentMetadata.HistR.empty()) return;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-    
     // Get factory from device context
     ComPtr<ID2D1Factory> factory;
     dc->GetFactory(&factory);
@@ -2567,7 +2525,7 @@ void UIRenderer::DrawHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect) {
         sink->Close();
         
         ComPtr<ID2D1SolidColorBrush> brush;
-        CreateScaledBrush(dc, color, hdrWhiteScale, &brush);
+        dc->CreateSolidColorBrush(color, &brush);
         dc->FillGeometry(path.Get(), brush.Get());
     };
     
@@ -2581,7 +2539,7 @@ void UIRenderer::DrawHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect) {
         float whiteX = rect.left + whiteRatio * (rect.right - rect.left);
         
         ComPtr<ID2D1SolidColorBrush> dashBrush;
-        CreateScaledBrush(dc, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), hdrWhiteScale, &dashBrush);
+        dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &dashBrush);
         
         ComPtr<ID2D1StrokeStyle> dashStyle;
         float dashes[] = {2.0f, 2.0f};
@@ -2595,7 +2553,6 @@ void UIRenderer::DrawHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect) {
 }
 
 void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, const CImageLoader::ImageMetadata& leftMeta, const CImageLoader::ImageMetadata& rightMeta) {
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     // Get factory from device context
     ComPtr<ID2D1Factory> factory;
     dc->GetFactory(&factory);
@@ -2652,7 +2609,7 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
         sink->Close();
 
         ComPtr<ID2D1SolidColorBrush> brush;
-        CreateScaledBrush(dc, color, hdrWhiteScale, &brush);
+        dc->CreateSolidColorBrush(color, &brush);
         dc->DrawGeometry(path.Get(), brush.Get(), strokeWidth);
     };
 
@@ -2671,7 +2628,7 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
         float whiteX = rect.left + whiteRatio * (rect.right - rect.left);
         
         ComPtr<ID2D1SolidColorBrush> dashBrush;
-        CreateScaledBrush(dc, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), hdrWhiteScale, &dashBrush);
+        dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &dashBrush);
         
         ComPtr<ID2D1StrokeStyle> dashStyle;
         float dashes[] = {2.0f, 2.0f};
@@ -2685,14 +2642,14 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
 
     // Draw Background Grid / Baseline
     ComPtr<ID2D1SolidColorBrush> gridBrush;
-    CreateScaledBrush(dc, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), hdrWhiteScale, &gridBrush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.1f), &gridBrush);
     dc->DrawLine(D2D1::Point2F(rect.left, bottom), D2D1::Point2F(rect.right, bottom), gridBrush.Get(), 1.0f * m_uiScale);
 
     // Draw Legend
     if (m_panelFormat) {
         ComPtr<ID2D1SolidColorBrush> leftBrush, rightBrush;
-        CreateScaledBrush(dc, leftColor, hdrWhiteScale, &leftBrush);
-        CreateScaledBrush(dc, rightColor, hdrWhiteScale, &rightBrush);
+        dc->CreateSolidColorBrush(leftColor, &leftBrush);
+        dc->CreateSolidColorBrush(rightColor, &rightBrush);
 
         float legendY = bottom + 2.0f * m_uiScale;
         float center = rect.left + (rect.right - rect.left) / 2.0f;
@@ -2713,8 +2670,6 @@ void UIRenderer::DrawCompareHistogram(ID2D1DeviceContext* dc, D2D1_RECT_F rect, 
 void UIRenderer::DrawCompactInfo(ID2D1DeviceContext* dc) {
     if (g_imagePath.empty() || !m_panelFormat) return;
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-    
     std::wstring info;
     
     // [v10.5] Animation mode: show frame-centric info
@@ -2784,10 +2739,10 @@ void UIRenderer::DrawCompactInfo(ID2D1DeviceContext* dc) {
 
     // Shadow Text
     ComPtr<ID2D1SolidColorBrush> brushShadow, brushText, brushYellow, brushRed;
-    CreateScaledBrush(dc, palette.shadow, hdrWhiteScale, &brushShadow);
-    CreateScaledBrush(dc, palette.foreground, hdrWhiteScale, &brushText);
-    CreateScaledBrush(dc, palette.warning, hdrWhiteScale, &brushYellow);
-    CreateScaledBrush(dc, palette.danger, hdrWhiteScale, &brushRed);
+    dc->CreateSolidColorBrush(palette.shadow, &brushShadow);
+    dc->CreateSolidColorBrush(palette.foreground, &brushText);
+    dc->CreateSolidColorBrush(palette.warning, &brushYellow);
+    dc->CreateSolidColorBrush(palette.danger, &brushRed);
     
     DrawTextWithFourWayShadow(dc, info.c_str(), (UINT32)info.length(), m_panelFormat.Get(), rect, brushText.Get(), brushShadow.Get(), 1.1f * s);
 
@@ -2985,7 +2940,6 @@ D2D1_COLOR_F UIRenderer::LerpColor(const D2D1_COLOR_F& a, const D2D1_COLOR_F& b,
 void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
     if (!g_runtime.ShowInfoPanel || !m_panelFormat) return;
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     BuildInfoGrid();  // Populate m_infoGrid from g_currentMetadata before sizing.
     
     // Panel Rect
@@ -3039,7 +2993,7 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
         bool isLight = IsLightThemeActive();
         D2D1_COLOR_F fillerColor = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f);
         
-        dc->CreateSolidColorBrush(ScaleUiColor(fillerColor, hdrWhiteScale), &materialBrush);
+        dc->CreateSolidColorBrush(fillerColor, &materialBrush);
         if (materialBrush) {
             materialBrush->SetOpacity(masterOpacity);
             dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 8.0f * s, 8.0f * s), materialBrush.Get());
@@ -3056,7 +3010,7 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
 
     // Create base brushes
     ComPtr<ID2D1SolidColorBrush> brushMain;
-    CreateScaledBrush(dc, palette.foreground, hdrWhiteScale, &brushMain);
+    dc->CreateSolidColorBrush(palette.foreground, &brushMain);
     
     // Buttons
     m_panelCloseRect = D2D1::RectF(startX + width - 20.0f * s, startY + 4.0f * s, startX + width - 4.0f * s, startY + 20.0f * s);
@@ -3095,15 +3049,13 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
         
         m_gpsLinkRect = D2D1::RectF(startX + width - 85.0f * s, line2Y, startX + width - padding, line2Y + 18.0f * s);
         ComPtr<ID2D1SolidColorBrush> brushLink;
-        CreateScaledBrush(dc, palette.accent, hdrWhiteScale, &brushLink);
+        dc->CreateSolidColorBrush(palette.accent, &brushLink);
         dc->DrawText(L"OpenMap", 7, m_panelFormat.Get(), m_gpsLinkRect, brushLink.Get());
     }
 }
 
 void UIRenderer::DrawGridTooltip(ID2D1DeviceContext* dc) {
     if (!m_panelFormat) return;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-    
     InfoRow row;
     if (m_hoverRowIndex >= 0 && m_hoverRowIndex < (int)m_infoGrid.size()) {
         row = m_infoGrid[m_hoverRowIndex];
@@ -3130,9 +3082,9 @@ void UIRenderer::DrawGridTooltip(ID2D1DeviceContext* dc) {
     D2D1_RECT_F boxRect = D2D1::RectF(x, y, x + boxWidth, y + boxHeight);
     
     ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText;
-    CreateScaledBrush(dc, D2D1::ColorF(0.1f, 0.1f, 0.12f, 0.95f), hdrWhiteScale, &brushBg);
-    CreateScaledBrush(dc, D2D1::ColorF(0.4f, 0.4f, 0.45f), hdrWhiteScale, &brushBorder);
-    CreateScaledBrush(dc, D2D1::ColorF(D2D1::ColorF::White), hdrWhiteScale, &brushText);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.1f, 0.1f, 0.12f, 0.95f), &brushBg);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.4f, 0.4f, 0.45f), &brushBorder);
+    dc->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &brushText);
     
     dc->FillRoundedRectangle(D2D1::RoundedRect(boxRect, 4.0f * s, 4.0f * s), brushBg.Get());
     dc->DrawRoundedRectangle(D2D1::RoundedRect(boxRect, 4.0f * s, 4.0f * s), brushBorder.Get(), 1.0f * s);
@@ -3146,15 +3098,14 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
     if (g_config.NavIndicator != 0) return;
     if (g_viewState.CompareActive && g_config.DisableEdgeNavInCompare) return;
     const float s = m_uiScale;
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     float circleRadius = 16.0f * s;
     float arrowSize = 8.0f * s;
     float strokeWidth = 2.0f * s;
     float margin = 32.0f * s;
 
     ComPtr<ID2D1SolidColorBrush> brushCircle, brushArrow;
-    CreateScaledBrush(dc, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.5f), hdrWhiteScale, &brushCircle);
-    CreateScaledBrush(dc, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), hdrWhiteScale, &brushArrow);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.5f), &brushCircle);
+    dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &brushArrow);
 
     ComPtr<ID2D1Factory> factory;
     dc->GetFactory(&factory);
@@ -3251,7 +3202,6 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
 }
 
 void UIRenderer::DrawComparePaneIndicator(ID2D1DeviceContext* dc, HWND hwnd) {
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
     int pane = 0;
     float splitRatio = 0.5f;
     bool isWipe = false;
@@ -3277,7 +3227,7 @@ void UIRenderer::DrawComparePaneIndicator(ID2D1DeviceContext* dc, HWND hwnd) {
     const float splitX = isWipe ? (xOffset + drawWidth * splitRatio) : (xOffset + drawWidth * 0.5f);
 
     ComPtr<ID2D1SolidColorBrush> brush;
-    CreateScaledBrush(dc, D2D1::ColorF(0.10f, 0.65f, 1.0f, 0.80f), hdrWhiteScale, &brush);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.10f, 0.65f, 1.0f, 0.80f), &brush);
     if (!brush) return;
 
     D2D1_RECT_F rect{};
@@ -3422,8 +3372,6 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         m_lastHUDRect = {};
         return;
     }
-    const float hdrWhiteScale = GetHdrUiWhiteScale(m_compEngine);
-
     CImageLoader::ImageMetadata leftMeta, rightMeta;
     if (!GetCompareInfoSnapshot(leftMeta, rightMeta)) return;
 
@@ -3515,13 +3463,13 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
         ComPtr<ID2D1SolidColorBrush> leftShadowBrush, leftTextBrush, leftWinBrush;
         ComPtr<ID2D1SolidColorBrush> rightShadowBrush, rightTextBrush, rightWinBrush, rightRedBrush;
-        CreateScaledBrush(dc, leftPalette.shadow, hdrWhiteScale, &leftShadowBrush);
-        CreateScaledBrush(dc, leftPalette.foreground, hdrWhiteScale, &leftTextBrush);
-        CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.9f, 0.4f), hdrWhiteScale, &leftWinBrush);
-        CreateScaledBrush(dc, rightPalette.shadow, hdrWhiteScale, &rightShadowBrush);
-        CreateScaledBrush(dc, rightPalette.foreground, hdrWhiteScale, &rightTextBrush);
-        CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.9f, 0.4f), hdrWhiteScale, &rightWinBrush);
-        CreateScaledBrush(dc, rightPalette.danger, hdrWhiteScale, &rightRedBrush);
+        dc->CreateSolidColorBrush(leftPalette.shadow, &leftShadowBrush);
+        dc->CreateSolidColorBrush(leftPalette.foreground, &leftTextBrush);
+        dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.9f, 0.4f), &leftWinBrush);
+        dc->CreateSolidColorBrush(rightPalette.shadow, &rightShadowBrush);
+        dc->CreateSolidColorBrush(rightPalette.foreground, &rightTextBrush);
+        dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.9f, 0.4f), &rightWinBrush);
+        dc->CreateSolidColorBrush(rightPalette.danger, &rightRedBrush);
 
         auto DrawMetrics = [&](const std::vector<LiteMetric>& metrics, float startX, bool alignRight,
                                ID2D1SolidColorBrush* shadowBrush,
@@ -3727,14 +3675,14 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
     const AdaptiveUiPalette basePalette = BuildAdaptivePalette(hudLuma, nullptr);
 
     ComPtr<ID2D1SolidColorBrush> brushBg, brushBorder, brushText, brushLabel, brushGood, brushBad, brushWarn, brushWinner;
-    CreateScaledBrush(dc, D2D1::ColorF(0.005f, 0.005f, 0.008f, g_config.GlassPanelsOpacity / 100.0f), hdrWhiteScale, &brushBg); // [HUD Adjust] Apply User Alpha
-    CreateScaledBrush(dc, D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.6f), hdrWhiteScale, &brushBorder);
-    CreateScaledBrush(dc, basePalette.foreground, hdrWhiteScale, &brushText);
-    CreateScaledBrush(dc, basePalette.textDim, hdrWhiteScale, &brushLabel);
-    CreateScaledBrush(dc, basePalette.success, hdrWhiteScale, &brushGood);
-    CreateScaledBrush(dc, basePalette.danger, hdrWhiteScale, &brushBad);
-    CreateScaledBrush(dc, basePalette.warning, hdrWhiteScale, &brushWarn);
-    CreateScaledBrush(dc, basePalette.success, hdrWhiteScale, &brushWinner);
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.005f, 0.005f, 0.008f, g_config.GlassPanelsOpacity / 100.0f), &brushBg); // [HUD Adjust] Apply User Alpha
+    dc->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.6f, 1.0f, 0.6f), &brushBorder);
+    dc->CreateSolidColorBrush(basePalette.foreground, &brushText);
+    dc->CreateSolidColorBrush(basePalette.textDim, &brushLabel);
+    dc->CreateSolidColorBrush(basePalette.success, &brushGood);
+    dc->CreateSolidColorBrush(basePalette.danger, &brushBad);
+    dc->CreateSolidColorBrush(basePalette.warning, &brushWarn);
+    dc->CreateSolidColorBrush(basePalette.success, &brushWinner);
 
     // Top-roll: No top corners rounded
     D2D1_RECT_F clipRect = D2D1::RectF(panelX, panelY - 10 * s, panelX + panelW, panelY + panelH);
@@ -3764,7 +3712,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         bool isLight = IsLightThemeActive();
         D2D1_COLOR_F fillerColor = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 1.0f) : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f);
         
-        dc->CreateSolidColorBrush(ScaleUiColor(fillerColor, hdrWhiteScale), &materialBrush);
+        dc->CreateSolidColorBrush(fillerColor, &materialBrush);
         if (materialBrush) {
             materialBrush->SetOpacity(masterOpacity);
             dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), materialBrush.Get());
@@ -3841,7 +3789,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
 
             if (PointInRect((float)m_lastMousePos.x, (float)m_lastMousePos.y, rowRect)) {
                 ComPtr<ID2D1SolidColorBrush> brushHover;
-                CreateScaledBrush(dc, D2D1::ColorF(1, 1, 1, 0.05f), hdrWhiteScale, &brushHover);
+                dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.05f), &brushHover);
                 dc->FillRectangle(rowRect, brushHover.Get());
                 
                 // Rely on HitTest to set m_hoverRowIndex

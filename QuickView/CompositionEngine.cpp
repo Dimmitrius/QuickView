@@ -829,7 +829,7 @@ HRESULT CompositionEngine::CreateLayerSurface(UILayer layer, UINT width, UINT he
     
     HRESULT hr = m_device->CreateSurface(
         width, height,
-        m_surfaceFormat,
+        kUiSurfaceFormat,
         DXGI_ALPHA_MODE_PREMULTIPLIED,
         &data.surface
     );
@@ -847,7 +847,7 @@ HRESULT CompositionEngine::CreateAllSurfaces(UINT width, UINT height) {
     
     // Ensure background surface
     m_backgroundLayer.surface.Reset();
-    HRESULT hr = m_device->CreateSurface(width, height, m_surfaceFormat, DXGI_ALPHA_MODE_PREMULTIPLIED, &m_backgroundLayer.surface);
+    HRESULT hr = m_device->CreateSurface(width, height, kUiSurfaceFormat, DXGI_ALPHA_MODE_PREMULTIPLIED, &m_backgroundLayer.surface);
     if (SUCCEEDED(hr)) {
         m_backgroundLayer.width = width;
         m_backgroundLayer.height = height;
@@ -867,7 +867,7 @@ ID2D1DeviceContext* CompositionEngine::BeginLayerUpdate(UILayer layer, const REC
     
     D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-        D2D1::PixelFormat(m_surfaceFormat, D2D1_ALPHA_MODE_PREMULTIPLIED)
+        D2D1::PixelFormat(kUiSurfaceFormat, D2D1_ALPHA_MODE_PREMULTIPLIED)
     );
     
     data.target.Reset();

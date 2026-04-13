@@ -8,16 +8,8 @@
 
 extern AppConfig g_config;
 
-namespace {
-static D2D1_COLOR_F ScaleUiColor(const D2D1_COLOR_F& color, float hdrWhiteScale) {
-    const float scale = (std::max)(1.0f, hdrWhiteScale);
-    return D2D1::ColorF(
-        (std::max)(0.0f, color.r * scale),
-        (std::max)(0.0f, color.g * scale),
-        (std::max)(0.0f, color.b * scale),
-        color.a);
-}
-}
+
+
 
 GalleryOverlay::GalleryOverlay() {}
 
@@ -104,9 +96,9 @@ void GalleryOverlay::Render(ID2D1DeviceContext* pDC, const D2D1_SIZE_F& size) {
     
     // Init resources
     bool isLight = IsLightThemeActive();
-    if (!m_brushBg) pDC->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f), m_hdrWhiteScale), &m_brushBg);
-    if (!m_brushSelection) pDC->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(D2D1::ColorF::DodgerBlue), m_hdrWhiteScale), &m_brushSelection); // Accent
-    if (!m_brushText) pDC->CreateSolidColorBrush(ScaleUiColor(D2D1::ColorF(D2D1::ColorF::White), m_hdrWhiteScale), &m_brushText);
+    if (!m_brushBg) pDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f), &m_brushBg);
+    if (!m_brushSelection) pDC->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::DodgerBlue), &m_brushSelection); // Accent
+    if (!m_brushText) pDC->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_brushText);
 
     D2D1_COLOR_F bgClr = isLight ? D2D1::ColorF(0.95f, 0.95f, 0.97f, 0.4f)
                                  : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f);
@@ -115,9 +107,9 @@ void GalleryOverlay::Render(ID2D1DeviceContext* pDC, const D2D1_SIZE_F& size) {
     D2D1_COLOR_F accClr = isLight ? D2D1::ColorF(0.0f, 0.45f, 0.9f, 1.0f)
                                   : D2D1::ColorF(D2D1::ColorF::DodgerBlue);
 
-    m_brushBg->SetColor(ScaleUiColor(bgClr, m_hdrWhiteScale));
-    m_brushSelection->SetColor(ScaleUiColor(accClr, m_hdrWhiteScale));
-    m_brushText->SetColor(ScaleUiColor(txtClr, m_hdrWhiteScale));
+    m_brushBg->SetColor(bgClr);
+    m_brushSelection->SetColor(accClr);
+    m_brushText->SetColor(txtClr);
 
     // Background (Controllable Dimmer)
     if (g_config.EnableAmbientDimmer) {
@@ -236,7 +228,7 @@ void GalleryOverlay::Render(ID2D1DeviceContext* pDC, const D2D1_SIZE_F& size) {
                 D2D1_COLOR_F phBase =
                     isLight ? D2D1::ColorF(0.85f, 0.85f, 0.85f, 1.0f)
                             : D2D1::ColorF(0.2f, 0.2f, 0.2f, 1.0f);
-                D2D1_COLOR_F color = ScaleUiColor(phBase, m_hdrWhiteScale);
+                D2D1_COLOR_F color = phBase;
                 color.a *= m_opacity;
 
                 ComPtr<ID2D1SolidColorBrush> phBrush;

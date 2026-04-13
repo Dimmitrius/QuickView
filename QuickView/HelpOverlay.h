@@ -18,8 +18,6 @@ public:
     void Init(ID2D1RenderTarget* pRT, HWND hwnd);
     void Render(ID2D1RenderTarget* pRT, float winW, float winH);
     void SetUIScale(float scale);
-    void SetHdrWhiteScale(float scale) { m_hdrWhiteScale = scale; }
-
     void SetVisible(bool visible);
     bool IsVisible() const { return m_visible; }
     void Toggle() { SetVisible(!m_visible); }
@@ -47,8 +45,6 @@ private:
     float m_scrollOffset = 0.0f;
     float m_contentHeight = 0.0f;
     float m_uiScale = 1.0f;
-    float m_hdrWhiteScale = 1.0f;
-    
     // Interaction
     bool m_hoverClose = false;
     D2D1_RECT_F m_closeRect = {};
