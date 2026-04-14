@@ -2098,6 +2098,7 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
             // Override with local scale awareness for Settings UI if needed
             config.blurStandardDeviation *= m_uiScale; 
 
+            config.shadowOpacity = g_config.GlassShadowOpacity;
             config.pBackgroundCommandList = m_bgCmdList;
             config.backgroundTransform = m_bgTransform;
             m_geekGlass.DrawGeekGlassPanel(pRT, config);
@@ -2110,7 +2111,8 @@ void SettingsOverlay::Render(ID2D1DeviceContext* pRT, float winW, float winH) {
             
             if (materialBrush) {
                 materialBrush->SetOpacity(config.opacity); // Use global Modal opacity
-                pRT->FillRoundedRectangle(hudRounded, materialBrush.Get());
+                // [Fix] Scaled Radius to match GeekGlass properly
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(hudRect, config.cornerRadius, config.cornerRadius), materialBrush.Get());
             }
         } else {
             ComPtr<ID2D1SolidColorBrush> brushPanelBg;

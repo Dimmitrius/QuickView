@@ -461,8 +461,18 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
   if (SUCCEEDED(pRT->CreateLayer(&layer))) {
     D2D1_LAYER_PARAMETERS params = D2D1::LayerParameters();
     params.contentBounds = m_bgRect.rect;
+    
+    // [Fix] Expand layer bounds to accommodate shadow diffusion
+    // Gaussian shadow standard deviation is 12.0f * uiScale, 3-sigma is 36.0f. 
+    // We add a 60px margin to be safe.
+    float shadowMargin = 60.0f * m_uiScale;
+    params.contentBounds.left -= shadowMargin;
+    params.contentBounds.top -= shadowMargin;
+    params.contentBounds.right += shadowMargin;
+    params.contentBounds.bottom += shadowMargin;
+
     if (m_animMode) {
-      params.contentBounds.top -= 10.0f * m_uiScale; // Expand layer bounds upwards to prevent clipping the progress bar
+      params.contentBounds.top -= 10.0f * m_uiScale; // Extra room for progress bar
     }
     params.opacity = m_opacity;
 
@@ -486,6 +496,7 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
             config.opacity = g_config.GlassPanelsOpacity / 100.0f;
         } 
         config.strokeWeight = g_config.GetVectorStrokeWeight();
+        config.shadowOpacity = g_config.GlassShadowOpacity;
         config.pBackgroundCommandList = m_bgCmdList;
         config.backgroundTransform = m_bgTransform;
         
@@ -501,7 +512,8 @@ void Toolbar::Render(ID2D1RenderTarget *pRT) {
             m_brushBg->SetColor(fillerColor);
             m_brushBg->SetOpacity(masterOpacity); 
 
-            pRT->FillRoundedRectangle(m_bgRect, m_brushBg.Get());
+            // [Fix] Match corner radius exactly to prevent straight-edge leaking
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(m_bgRect.rect, config.cornerRadius, config.cornerRadius), m_brushBg.Get());
             
             // Restore High-end Reflexes
             m_geekGlass.DrawGeekGlassToppings(dc.Get(), config);

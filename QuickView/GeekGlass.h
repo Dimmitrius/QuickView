@@ -90,6 +90,8 @@ namespace QuickView::UI::GeekGlass {
         ComPtr<ID2D1LinearGradientBrush> m_bevelBrush;
         ComPtr<ID2D1SolidColorBrush> m_baseTintBrush;
         ComPtr<ID2D1Bitmap> m_noiseBitmap;
+        ComPtr<ID2D1Geometry> m_shadowClipGeometry;
+        ComPtr<ID2D1Layer> m_shadowLayer;
 
         // Validation states
         ThemeMode m_currentTheme = ThemeMode::Dark;
@@ -98,6 +100,7 @@ namespace QuickView::UI::GeekGlass {
         float m_currentTintAlpha = 0.65f;
         float m_currentSpecularOpacity = 0.15f;
         float m_currentShadowOpacity = 0.45f;
+        float m_currentCornerRadius = 8.0f;
         D2D1_RECT_F m_currentBounds = {};
     };
     

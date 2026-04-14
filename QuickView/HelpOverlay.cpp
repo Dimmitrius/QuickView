@@ -227,6 +227,7 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             config.opacity = g_config.GlassModalsOpacity / 100.0f;
         }
         config.strokeWeight = g_config.GetVectorStrokeWeight();
+        config.shadowOpacity = g_config.GlassShadowOpacity;
         config.pBackgroundCommandList = m_bgCmdList;
         config.backgroundTransform = m_bgTransform;
         
@@ -242,7 +243,8 @@ void HelpOverlay::Render(ID2D1RenderTarget* pRT, float winW, float winH) {
             m_brushBg->SetColor(fillerColor);
             m_brushBg->SetOpacity(masterOpacity); 
 
-            pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, 8.0f * s, 8.0f * s), m_brushBg.Get());
+            // [Fix] Consistent corner radius
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(m_finalRect, config.cornerRadius, config.cornerRadius), m_brushBg.Get());
             
             // Restore High-end Reflexes
             m_geekGlass.DrawGeekGlassToppings(dc.Get(), config);

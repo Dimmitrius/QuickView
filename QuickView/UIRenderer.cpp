@@ -2976,6 +2976,7 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
         glassConfig.opacity = g_config.GlassPanelsOpacity / 100.0f;
     }
     glassConfig.strokeWeight = g_config.GetVectorStrokeWeight();
+    glassConfig.shadowOpacity = g_config.GlassShadowOpacity;
     glassConfig.pBackgroundCommandList = m_bgCommandList.Get();
     
     if (m_compEngine) {
@@ -2996,7 +2997,8 @@ void UIRenderer::DrawInfoPanel(ID2D1DeviceContext* dc) {
         dc->CreateSolidColorBrush(fillerColor, &materialBrush);
         if (materialBrush) {
             materialBrush->SetOpacity(masterOpacity);
-            dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, 8.0f * s, 8.0f * s), materialBrush.Get());
+            // [Fix] Ensure corner radius matches exactly to prevent straight-edge leaking
+            dc->FillRoundedRectangle(D2D1::RoundedRect(panelRect, glassConfig.cornerRadius, glassConfig.cornerRadius), materialBrush.Get());
         }
         
         // Restore High-end Reflexes
@@ -3131,6 +3133,7 @@ void UIRenderer::DrawNavIndicators(ID2D1DeviceContext* dc) {
             if (g_config.EnableGeekGlass) {
                 config.opacity = g_config.GlassPanelsOpacity / 100.0f; // treat arrows as panels
             }
+            config.shadowOpacity = g_config.GlassShadowOpacity;
             config.pBackgroundCommandList = m_bgCommandList.Get();
             config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
             geekGlass.DrawGeekGlassPanel(dc, config);
@@ -3699,9 +3702,7 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         config.specularOpacity = g_config.GlassSpecularOpacity;
         config.blurStandardDeviation = g_config.GlassBlurSigma * s;
         config.opacity = g_config.GlassPanelsOpacity / 100.0f;
-        if (g_config.EnableGeekGlass) {
-            config.opacity = g_config.GlassPanelsOpacity / 100.0f;
-        }
+        config.shadowOpacity = g_config.GlassShadowOpacity;
         config.pBackgroundCommandList = m_bgCommandList.Get();
         config.backgroundTransform = m_compEngine ? m_compEngine->GetScreenTransform() : D2D1::Matrix3x2F::Identity();
         geekGlass.DrawGeekGlassPanel(dc, config);
@@ -3715,7 +3716,8 @@ void UIRenderer::DrawCompareInfoHUD(ID2D1DeviceContext* dc) {
         dc->CreateSolidColorBrush(fillerColor, &materialBrush);
         if (materialBrush) {
             materialBrush->SetOpacity(masterOpacity);
-            dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, 8.0f * s, 8.0f * s), materialBrush.Get());
+            // [Fix] Consistent corner radius
+            dc->FillRoundedRectangle(D2D1::RoundedRect(clipRect, config.cornerRadius, config.cornerRadius), materialBrush.Get());
         }
         
         geekGlass.DrawGeekGlassToppings(dc, config);

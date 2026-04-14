@@ -55,6 +55,9 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
          0.001f) ||
         (std::abs(config.shadowOpacity - m_currentShadowOpacity) > 0.001f);
 
+    bool sizeChanged = (std::abs(width - (m_currentBounds.right - m_currentBounds.left)) > 0.001f) ||
+                       (std::abs(height - (m_currentBounds.bottom - m_currentBounds.top)) > 0.001f);
+
     if (config.tintProfile == 1 && (
         config.customTintColor.r != m_currentCustomTintColor.r || 
         config.customTintColor.g != m_currentCustomTintColor.g || 
@@ -63,7 +66,8 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
     }
 
     bool needsRebuild = !m_diagonalBrush || !m_bevelBrush || !m_baseTintBrush ||
-                        themeChanged || materialChanged;
+                        themeChanged || materialChanged || sizeChanged ||
+                        (std::abs(config.cornerRadius - m_currentCornerRadius) > 0.001f);
 
     if (!needsRebuild) {
       // Just update points if moving
@@ -86,6 +90,7 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
     m_currentTintAlpha = config.tintAlpha;
     m_currentSpecularOpacity = config.specularOpacity;
     m_currentShadowOpacity = config.shadowOpacity;
+    m_currentCornerRadius = config.cornerRadius;
     m_currentBounds = config.panelBounds;
 
     ComPtr<ID2D1GradientStopCollection> pStops;
@@ -200,6 +205,29 @@ void GeekGlassEngine::CreateOrUpdateBrushes(ID2D1RenderTarget* pRT, const GeekGl
           tempDC->FillRoundedRectangle(localRect, maskBrush.Get());
           tempDC->EndDraw();
           m_shadowMask->Close();
+
+          // [Geek Upgrade] Hollow Shadow Clip Construction
+          // We create a geometry representing the "Exterior" of the panel
+          // This ensures the shadow doesn't bleed into the semi-transparent panel interior.
+          ComPtr<ID2D1Factory> factory;
+          pRT->GetFactory(&factory);
+          if (factory) {
+            ComPtr<ID2D1RoundedRectangleGeometry> roundedGeom;
+            D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), config.cornerRadius, config.cornerRadius);
+            factory->CreateRoundedRectangleGeometry(&rr, &roundedGeom);
+            
+            ComPtr<ID2D1RectangleGeometry> outerRect;
+            float m = 120.0f; // Safe margin for diffusion
+            factory->CreateRectangleGeometry(D2D1::RectF(-m, -m, width + m, height + m), &outerRect);
+            
+            m_shadowClipGeometry.Reset();
+            ID2D1Geometry* geometries[] = { outerRect.Get(), roundedGeom.Get() };
+            // Use ALTERNATE fill mode: Huge Rect XOR Rounded Rect = Hollow Rect
+            ComPtr<ID2D1GeometryGroup> group;
+            if (SUCCEEDED(factory->CreateGeometryGroup(D2D1_FILL_MODE_ALTERNATE, geometries, 2, &group))) {
+                m_shadowClipGeometry = group;
+            }
+          }
         }
       }
     }
@@ -237,20 +265,38 @@ void GeekGlassEngine::DrawGeekGlassPanel(ID2D1RenderTarget* pRT, const GeekGlass
         config.track == RenderTrack::TrackA_CommandList &&
         config.opacity > 0.15f && config.shadowOpacity > 0.005f) {
       // [Performance Optimization] Direct GPU Draw
+      
+      // RESTORE: Essential parameters that were missing in previous edit
       m_shadowEffect->SetInput(0, m_shadowMask.Get());
-
-      // Scale shadow opacity with master control
+      
       float shadowMasterAlpha = config.shadowOpacity * config.opacity;
-      if (config.theme == ThemeMode::Light)
-        shadowMasterAlpha *= 0.6f;
-      m_shadowEffect->SetValue(D2D1_SHADOW_PROP_COLOR,
-                               D2D1::ColorF(0, 0, 0, shadowMasterAlpha));
+      if (config.theme == ThemeMode::Light) shadowMasterAlpha *= 0.6f;
+      m_shadowEffect->SetValue(D2D1_SHADOW_PROP_COLOR, D2D1::ColorF(0, 0, 0, shadowMasterAlpha));
 
-      // Offset (2.0, 3.0) for depth, drawing relative to the panel start
+      // Offset (2.0, 3.0) for depth
       D2D1_POINT_2F shadowPos = D2D1::Point2F(config.panelBounds.left + 2.0f,
                                               config.panelBounds.top + 3.0f);
-      pContext->DrawImage(m_shadowEffect.Get(), shadowPos,
-                          D2D1_INTERPOLATION_MODE_LINEAR);
+      
+      // Diffusion Scaling: Adjust blur radius for DPI
+      float dpiX, dpiY;
+      pContext->GetDpi(&dpiX, &dpiY);
+      float s = dpiX / 96.0f;
+      m_shadowEffect->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION, 12.0f * s);
+
+      // Hollow Shadow Clipping: Exclude the panel interior
+      if (m_shadowClipGeometry) {
+          if (!m_shadowLayer) pContext->CreateLayer(&m_shadowLayer);
+          
+          D2D1_LAYER_PARAMETERS params = D2D1::LayerParameters();
+          params.geometricMask = m_shadowClipGeometry.Get();
+          params.maskTransform = D2D1::Matrix3x2F::Translation(config.panelBounds.left, config.panelBounds.top);
+          
+          pContext->PushLayer(params, m_shadowLayer.Get());
+          pContext->DrawImage(m_shadowEffect.Get(), shadowPos, D2D1_INTERPOLATION_MODE_LINEAR);
+          pContext->PopLayer();
+      } else {
+          pContext->DrawImage(m_shadowEffect.Get(), shadowPos, D2D1_INTERPOLATION_MODE_LINEAR);
+      }
     }
 
     if (pContext && config.enableGeekGlass && config.track == RenderTrack::TrackA_CommandList && 

@@ -4353,6 +4353,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"GeekGlass", L"GlassBlurSigma", std::to_wstring(g_config.GlassBlurSigma).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassTintAlpha", std::to_wstring(g_config.GlassTintAlpha).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassSpecularOpacity", std::to_wstring(g_config.GlassSpecularOpacity).c_str(), iniPath.c_str());
+    WritePrivateProfileStringW(L"GeekGlass", L"GlassShadowOpacity", std::to_wstring(g_config.GlassShadowOpacity).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassOsdOpacity", std::to_wstring(g_config.GlassOsdOpacity).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassPanelsOpacity", std::to_wstring(g_config.GlassPanelsOpacity).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"GeekGlass", L"GlassModalsOpacity", std::to_wstring(g_config.GlassModalsOpacity).c_str(), iniPath.c_str());
@@ -4524,10 +4525,11 @@ void LoadConfig() {
     g_config.EnableGeekGlass = GetPrivateProfileIntW(L"GeekGlass", L"EnableGeekGlass", 1, iniPath.c_str()) != 0;
     g_config.GlassUIAnimations = GetPrivateProfileIntW(L"GeekGlass", L"GlassUIAnimations", 1, iniPath.c_str()) != 0;
     
-    wchar_t bufGGB[32], bufGGTA[32], bufGGSO[32], bufGGO[32], bufGGP[32], bufGGM[32], bufGGMenu[32];
+    wchar_t bufGGB[32], bufGGTA[32], bufGGSO[32], bufGGSH[32], bufGGO[32], bufGGP[32], bufGGM[32], bufGGMenu[32];
     GetPrivateProfileStringW(L"GeekGlass", L"GlassBlurSigma", L"25.0", bufGGB, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassTintAlpha", L"0.65", bufGGTA, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassSpecularOpacity", L"0.15", bufGGSO, 32, iniPath.c_str());
+    GetPrivateProfileStringW(L"GeekGlass", L"GlassShadowOpacity", L"0.45", bufGGSH, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassOsdOpacity", L"15.0", bufGGO, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassPanelsOpacity", L"45.0", bufGGP, 32, iniPath.c_str());
     GetPrivateProfileStringW(L"GeekGlass", L"GlassModalsOpacity", L"75.0", bufGGM, 32, iniPath.c_str());
@@ -4535,6 +4537,7 @@ void LoadConfig() {
     g_config.GlassBlurSigma = (float)_wtof(bufGGB);
     g_config.GlassTintAlpha = (float)_wtof(bufGGTA);
     g_config.GlassSpecularOpacity = (float)_wtof(bufGGSO);
+    g_config.GlassShadowOpacity = (float)_wtof(bufGGSH);
     g_config.GlassOsdOpacity = (float)_wtof(bufGGO);
     g_config.GlassPanelsOpacity = (float)_wtof(bufGGP);
     g_config.GlassModalsOpacity = (float)_wtof(bufGGM);
