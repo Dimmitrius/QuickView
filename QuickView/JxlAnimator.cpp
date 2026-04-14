@@ -5,6 +5,8 @@
 #include <jxl/decode_cxx.h>
 #include <jxl/resizable_parallel_runner.h>
 #include <jxl/resizable_parallel_runner_cxx.h>
+#include "ImageLoaderSimd.h"
+#include <vector>
 
 namespace QuickView {
 
@@ -15,6 +17,7 @@ public:
     }
     ~JxlAnimator() override {
         DestroyDecoder();
+        if (m_accumulationBuffer) _aligned_free(m_accumulationBuffer);
     }
 
     bool Initialize(std::shared_ptr<QuickView::MappedFile> file, QuickView::PixelFormat preferredFormat) override {
@@ -27,23 +30,14 @@ public:
 
         JxlPixelFormat pixFmt = { 4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0 };
         
-        uint8_t* pixels = nullptr;
-        size_t bufferSize = 0;
-        int stride = 0;
-        
         uint32_t currentDelayMs = 100;
         
         for (;;) {
             JxlDecoderStatus st = JxlDecoderProcessInput(m_decoder.get());
             
-            if (st == JXL_DEC_ERROR) {
-                if (pixels) _aligned_free(pixels);
-                return nullptr;
-            }
-            if (st == JXL_DEC_NEED_MORE_INPUT) {
-                if (pixels) _aligned_free(pixels);
-                return nullptr;
-            }
+            if (st == JXL_DEC_ERROR) return nullptr;
+            if (st == JXL_DEC_NEED_MORE_INPUT) return nullptr;
+            
             if (st == JXL_DEC_COLOR_ENCODING) {
                 JxlColorEncoding ce = {};
                 ce.color_space = JXL_COLOR_SPACE_RGB;
@@ -64,55 +58,45 @@ public:
                 }
             }
             else if (st == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
-                size_t reqSize;
-                JxlDecoderImageOutBufferSize(m_decoder.get(), &pixFmt, &reqSize);
-                
-                stride = (m_basicInfo.xsize * 4 + 15) & ~15;
-                bufferSize = (size_t)stride * m_basicInfo.ysize;
-                pixels = (uint8_t*)_aligned_malloc(bufferSize, 64);
-                if (!pixels) return nullptr;
-                
-                // Set the output buffer for coalesced frame
-                JxlDecoderSetImageOutBuffer(m_decoder.get(), &pixFmt, pixels, bufferSize);
+                // Point libjxl to our persistent accumulation buffer.
+                // Since coalescing is ON, libjxl blends the current frame onto this buffer.
+                if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(m_decoder.get(), &pixFmt, m_accumulationBuffer, m_accumulationBufferSize)) {
+                    return nullptr;
+                }
             }
             else if (st == JXL_DEC_FULL_IMAGE) {
-                // Done decoding one fully composited frame
+                // Done decoding one fully composited frame into m_accumulationBuffer
                 break;
             }
             else if (st == JXL_DEC_SUCCESS) {
-                // All frames decoded
-                if (pixels) _aligned_free(pixels);
                 m_isFinished = true;
                 return nullptr;
             }
         }
         
-        if (!pixels) return nullptr;
-        
+        // At this point, m_accumulationBuffer contains the fully composited RGBA frame.
         auto frame = std::make_shared<RawImageFrame>();
         frame->width = m_basicInfo.xsize;
         frame->height = m_basicInfo.ysize;
-        frame->stride = stride;
+        frame->stride = (frame->width * 4 + 15) & ~15;
         frame->format = PixelFormat::BGRA8888;
         frame->quality = DecodeQuality::Full;
-        frame->pixels = pixels;
+        
+        size_t outSize = (size_t)frame->stride * frame->height;
+        frame->pixels = (uint8_t*)_aligned_malloc(outSize, 64);
+        if (!frame->pixels) return nullptr;
         frame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
         
-        // Convert RGBA to BGRA
+        // Copy from accumulation buffer
+        // Note: libjxl output was RGBA (from pixFmt), we want BGRA.
+        // Copy row by row to handle potential stride differences between accumulation buffer and frame.
+        int accStride = (frame->width * 4 + 15) & ~15; 
         for (int y = 0; y < frame->height; ++y) {
-            uint32_t* row = reinterpret_cast<uint32_t*>(frame->pixels + (size_t)y * frame->stride);
-            for (int x = 0; x < frame->width; ++x) {
-                uint32_t rgba = row[x];
-                // rgba is ABGR in little endian: MSB A B G R LSB
-                // wait, if it's JXL_TYPE_UINT8, memory is [R, G, B, A]
-                uint8_t* p = reinterpret_cast<uint8_t*>(&row[x]);
-                uint8_t r = p[0];
-                uint8_t g = p[1];
-                uint8_t b = p[2];
-                uint8_t a = p[3];
-                row[x] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
-            }
+            memcpy(frame->pixels + (size_t)y * frame->stride, m_accumulationBuffer + (size_t)y * accStride, (size_t)frame->width * 4);
         }
+        
+        // SIMD Optimized RGBA -> BGRA swizzle
+        ImageLoaderSimd::SwizzleRGBAToBGRA(frame->pixels, (size_t)frame->width * frame->height);
         
         auto& meta = frame->frameMeta;
         meta.index = m_currentIndex++;
@@ -173,6 +157,9 @@ private:
             JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING | JXL_DEC_FRAME | JXL_DEC_FULL_IMAGE)) {
             return false;
         }
+        
+        // [BugFix] Explicitly enable coalescing for transparent animations to avoid artifacts
+        JxlDecoderSetCoalescing(m_decoder.get(), JXL_TRUE);
 
         auto rv = JxlDecoderSetInput(m_decoder.get(), m_mappedFile->data(), m_mappedFile->size());
         if (rv != JXL_DEC_SUCCESS) return false;
@@ -187,6 +174,21 @@ private:
             if (st == JXL_DEC_ERROR) return false;
             if (st == JXL_DEC_BASIC_INFO) {
                 if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(m_decoder.get(), &m_basicInfo)) return false;
+                
+                // Allocate or re-allocate accumulation buffer
+                size_t stride = (m_basicInfo.xsize * 4 + 15) & ~15;
+                size_t neededSize = stride * m_basicInfo.ysize;
+                if (!m_accumulationBuffer || m_accumulationBufferSize < neededSize) {
+                    if (m_accumulationBuffer) _aligned_free(m_accumulationBuffer);
+                    m_accumulationBuffer = (uint8_t*)_aligned_malloc(neededSize, 64);
+                    m_accumulationBufferSize = neededSize;
+                }
+                if (m_accumulationBuffer) {
+                    memset(m_accumulationBuffer, 0, m_accumulationBufferSize);
+                } else {
+                    return false;
+                }
+
                 if (m_basicInfo.have_animation) {
                     m_animInfo = m_basicInfo.animation;
                     // Pre-scan for total frames (very fast since we don't decode pixels)
@@ -201,6 +203,8 @@ private:
     }
 
     std::shared_ptr<QuickView::MappedFile> m_mappedFile;
+    uint8_t* m_accumulationBuffer = nullptr;
+    size_t m_accumulationBufferSize = 0;
     JxlDecoderPtr m_decoder;
     JxlResizableParallelRunnerPtr m_runner;
     JxlBasicInfo m_basicInfo = {};
