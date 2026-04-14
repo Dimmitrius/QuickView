@@ -346,7 +346,7 @@ bool SettingsOverlay::RegisterAssociations() {
         L".jpg", L".jpeg", L".jpe", L".jfif", L".png", L".bmp", L".dib", L".gif", 
         L".tif", L".tiff", L".ico", 
         // Web / Modern
-        L".webp", L".avif", L".heic", L".heif", L".svg", L".svgz", L".jxl",
+        L".webp", L".avif", L".avifs", L".heic", L".heif", L".svg", L".svgz", L".jxl", L".apng",
         // Professional / HDR / Legacy
         L".exr", L".hdr", L".pic", L".psd", L".psb", L".tga", L".pcx", L".qoi", 
         L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp", L".jxr", L".hif",
@@ -446,7 +446,7 @@ void SettingsOverlay::UnregisterAssociations() {
     const wchar_t* exts[] = {
         L".jpg", L".jpeg", L".jpe", L".jfif", L".png", L".bmp", L".dib", L".gif", 
         L".tif", L".tiff", L".ico", 
-        L".webp", L".avif", L".heic", L".heif", L".svg", L".svgz", L".jxl",
+        L".webp", L".avif", L".avifs", L".heic", L".heif", L".svg", L".svgz", L".jxl", L".apng",
         L".exr", L".hdr", L".pic", L".psd", L".psb", L".tga", L".pcx", L".qoi", 
         L".wbmp", L".pam", L".pbm", L".pgm", L".ppm", L".wdp", L".hdp", L".jxr", L".hif",
         L".arw", L".cr2", L".cr3", L".crw", L".dng", L".nef", L".orf", L".raf", L".rw2", L".srw", L".x3f",

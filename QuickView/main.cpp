@@ -4176,9 +4176,9 @@ static constexpr FormatExtRule g_formatRules[] = {
 
     // Core formats
     { L"jpeg", L".jpg", L".jpeg", L".jpe", L".jfif" },
-    { L"png",  L".png" },
+    { L"png",  L".png", L".apng" },
     { L"webp", L".webp" },
-    { L"avif", L".avif" },
+    { L"avif", L".avif", L".avifs" },
     { L"gif",  L".gif" },
     { L"bmp",  L".bmp", L".dib" },
     { L"tiff", L".tiff", L".tif" },

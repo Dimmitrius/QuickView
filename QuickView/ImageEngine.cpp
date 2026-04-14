@@ -563,7 +563,7 @@ bool ImageEngine::ShouldSkipFastLaneForFastFormat(const std::wstring& path) {
     std::transform(e.begin(), e.end(), e.begin(), ::towlower);
     
     // Fast formats where Wuffs decode is faster than WIC thumbnail
-    bool isFastFormat = (e == L".png" || e == L".gif" || e == L".bmp" ||
+    bool isFastFormat = (e == L".png" || e == L".apng" || e == L".gif" || e == L".bmp" ||
                          e == L".tga" || e == L".wbmp" || e == L".qoi" ||
                          e == L".ppm" || e == L".pgm" || e == L".pbm" || e == L".pam");
     if (!isFastFormat) return false;
