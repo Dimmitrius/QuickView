@@ -191,6 +191,7 @@ struct AppConfig {
     // [v3.2.2] Zoom Snap Damping (Time Lock)
     bool EnableZoomSnapDamping = true;
     bool MouseAnchoredWindowZoom = false; // Expand window toward the mouse position during zoom
+    bool RightButtonDragZoom = false;     // Hold right button and drag vertically to zoom
     MouseAction LeftDragAction = MouseAction::WindowDrag;
     MouseAction MiddleDragAction = MouseAction::PanImage;
     MouseAction MiddleClickAction = MouseAction::ExitApp;
@@ -330,9 +331,13 @@ struct ViewState {
     bool IsDragging = false;
     bool IsInteracting = false;  // True during drag/zoom/resize for dynamic interpolation
     bool IsMiddleDragWindow = false;  // True when middle button is dragging window
+    bool IsRightButtonDragZoom = false; // True when right button vertical drag is zooming
+    bool IsRightButtonDown = false;     // Track pending right-click vs drag-zoom
     POINT LastMousePos = { 0, 0 };
     POINT DragStartPos = { 0, 0 };  // For click vs drag detection
+    POINT RightDragZoomStartScreenPos = { 0, 0 }; // Stable screen-space anchor for right-drag zoom
     DWORD DragStartTime = 0;        // For click vs drag detection
+    float RightDragZoomStartTotalScale = 1.0f;
     POINT WindowDragStart = { 0, 0 }; // Window position at drag start
     POINT CursorDragStart = { 0, 0 }; // Cursor screen position at drag start
     int EdgeHoverState = 0; // -1=Left, 0=None, 1=Right
@@ -350,6 +355,10 @@ struct ViewState {
         IsDragging = false;
         IsInteracting = false;
         IsMiddleDragWindow = false;
+        IsRightButtonDragZoom = false;
+        IsRightButtonDown = false;
+        RightDragZoomStartScreenPos = { 0, 0 };
+        RightDragZoomStartTotalScale = 1.0f;
         EdgeHoverState = 0;
         EdgeHoverLeft = 0;
         EdgeHoverRight = 0;

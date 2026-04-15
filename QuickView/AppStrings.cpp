@@ -227,6 +227,7 @@ const wchar_t *Settings_Option_AutoFit = nullptr;
 const wchar_t *Settings_Label_InvertWheel = nullptr;
 const wchar_t *Settings_Label_ZoomSnapDamping = nullptr; // New
 const wchar_t *Settings_Label_MouseAnchorZoom = nullptr;
+const wchar_t *Settings_Label_RightButtonDragZoom = nullptr;
 const wchar_t *Settings_Label_InvertButtons = nullptr;
 const wchar_t *Settings_Label_ZoomModeIn = nullptr;
 const wchar_t *Settings_Label_ZoomModeOut = nullptr;
@@ -785,6 +786,8 @@ struct EN {
       L"Zoom 100% Snap Damping";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"Mouse-Anchored Window Zoom";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"Right Button Drag Zoom";
   static constexpr const wchar_t *Settings_Label_InvertButtons =
       L"Invert Side Buttons";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn = L"Zoom Mode (In)";
@@ -1170,6 +1173,8 @@ struct CN {
       L"缩放 100% 吸附阻尼";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"窗口缩放以鼠标为中线";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"右键拖动缩放";
   static constexpr const wchar_t *Settings_Label_InvertButtons = L"反转侧键";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn = L"放大插值算法";
   static constexpr const wchar_t *Settings_Label_ZoomModeOut = L"缩小插值算法";
@@ -1754,6 +1759,8 @@ struct TW {
       L"縮放 100% 吸附阻尼";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"視窗縮放以滑鼠為中線";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"右鍵拖曳縮放";
   static constexpr const wchar_t *Settings_Label_InvertButtons = L"反轉側鍵";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn = L"放大插值演算法";
   static constexpr const wchar_t *Settings_Label_ZoomModeOut =
@@ -2268,6 +2275,8 @@ struct JA {
       L"100%ズーム吸着ダンピング";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"マウス中心でウィンドウを拡大";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"右ドラッグでズーム";
   static constexpr const wchar_t *Settings_Label_InvertButtons =
       L"サイドボタン反転";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn =
@@ -2859,6 +2868,8 @@ struct RU {
       L"Задержка привязки зума (100%)";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"Масштабировать окно от позиции мыши";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"Масштаб правой кнопкой мыши";
   static constexpr const wchar_t *Settings_Label_InvertButtons =
       L"Инвертировать действие боковых кнопок";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn =
@@ -3417,6 +3428,8 @@ struct DE {
       L"Zoom 100% Einrast-Dämpfung";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"Fensterzoom am Mauszeiger ausrichten";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"Zoom mit Rechtsziehen";
   static constexpr const wchar_t *Settings_Label_InvertButtons =
       L"Seitentasten invertieren";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn =
@@ -3968,6 +3981,8 @@ struct ES {
       L"Amortiguación de ajuste 100%";
   static constexpr const wchar_t *Settings_Label_MouseAnchorZoom =
       L"Zoom de ventana anclado al raton";
+  static constexpr const wchar_t *Settings_Label_RightButtonDragZoom =
+      L"Zoom con arrastre derecho";
   static constexpr const wchar_t *Settings_Label_InvertButtons =
       L"Invertir botones laterales";
   static constexpr const wchar_t *Settings_Label_ZoomModeIn =
@@ -4454,6 +4469,7 @@ template <typename T> void ApplyT() {
   Settings_Label_InvertWheel = T::Settings_Label_InvertWheel;
   Settings_Label_ZoomSnapDamping = T::Settings_Label_ZoomSnapDamping;
   Settings_Label_MouseAnchorZoom = T::Settings_Label_MouseAnchorZoom;
+  Settings_Label_RightButtonDragZoom = T::Settings_Label_RightButtonDragZoom;
   Settings_Label_InvertButtons = T::Settings_Label_InvertButtons;
   Settings_Label_ZoomModeIn = T::Settings_Label_ZoomModeIn;
   Settings_Label_ZoomModeOut = T::Settings_Label_ZoomModeOut;

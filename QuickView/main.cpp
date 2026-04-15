@@ -3330,26 +3330,19 @@ static void PerformZoom100(HWND hwnd, bool allowResizeWindow = true) {
 // Forward Declaration
 static VisualState GetVisualState();
 
-// [Shared] Unified Zoom Calculation
-// Handles robust size retrieval, fit scale, small image protection, and magnetic snap
-static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = false) {
+static float GetCurrentTotalScale(HWND hwnd) {
     if (!g_imageResource) return g_viewState.Zoom;
 
-    // 1. Get Robust Visual Size
     D2D1_SIZE_F visualSize = GetVisualImageSize();
     float imageWidth = visualSize.width;
     float imageHeight = visualSize.height;
     if (imageWidth <= 0 || imageHeight <= 0) return g_viewState.Zoom;
 
-    // 2. Base Fit Scale
     RECT rc; GetClientRect(hwnd, &rc);
     float scaleW = (float)rc.right / imageWidth;
     float scaleH = (float)rc.bottom / imageHeight;
     float fitScale = (scaleW < scaleH) ? scaleW : scaleH;
 
-    // 3. [Logic] Small Image Protection
-    // If image < 200px, Fit Scale shouldn't blow it up to screen size by default.
-    // Base fit becomes 1.0 for small images.
     if (!g_imageResource.isSvg) {
         if (g_runtime.LockWindowSize) {
             if (!g_config.UpscaleSmallImagesWhenLocked && fitScale > 1.0f) {
@@ -3362,10 +3355,56 @@ static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = f
         }
     }
 
-    // 4. Current State
-    // [Fix] Use Target Zoom if animating to maintain momentum for fast scrolling.
     float sourceZoom = (g_smoothWindowZoom.active) ? g_smoothWindowZoom.targetZoom : g_viewState.Zoom;
-    float currentTotalScale = fitScale * sourceZoom;
+    return fitScale * sourceZoom;
+}
+
+static float ClampTotalScale(HWND hwnd, float newTotalScale) {
+    if (!g_imageResource) return newTotalScale;
+
+    D2D1_SIZE_F visualSize = GetVisualImageSize();
+    float imageWidth = visualSize.width;
+    float imageHeight = visualSize.height;
+    if (imageWidth <= 0 || imageHeight <= 0) return newTotalScale;
+
+    RECT rc; GetClientRect(hwnd, &rc);
+    float scaleW = (float)rc.right / imageWidth;
+    float scaleH = (float)rc.bottom / imageHeight;
+    float fitScale = (scaleW < scaleH) ? scaleW : scaleH;
+
+    if (!g_imageResource.isSvg) {
+        if (g_runtime.LockWindowSize) {
+            if (!g_config.UpscaleSmallImagesWhenLocked && fitScale > 1.0f) {
+                fitScale = 1.0f;
+            }
+        } else {
+            if (imageWidth < 200.0f && imageHeight < 200.0f && fitScale > 1.0f) {
+                fitScale = 1.0f;
+            }
+        }
+    }
+
+    float minScale = 0.1f * fitScale;
+    float maxScale = std::max(50.0f * fitScale, 50.0f);
+    if (g_imageResource.isSvg && !UseSvgViewportRendering(g_imageResource)) {
+        maxScale = std::min(maxScale, GetSvgMaxSharpTotalScale(g_imageResource));
+    }
+
+    if (newTotalScale < minScale) newTotalScale = minScale;
+    if (newTotalScale > maxScale) newTotalScale = maxScale;
+    return newTotalScale;
+}
+
+// [Shared] Unified Zoom Calculation
+// Handles robust size retrieval, fit scale, small image protection, and magnetic snap
+static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = false) {
+    if (!g_imageResource) return g_viewState.Zoom;
+
+    D2D1_SIZE_F visualSize = GetVisualImageSize();
+    float imageWidth = visualSize.width;
+    if (imageWidth <= 0) return g_viewState.Zoom;
+
+    float currentTotalScale = GetCurrentTotalScale(hwnd);
 
     // 0. [Logic] Magnetic Snap Time Lock (Moved here to use valid currentTotalScale)
     static DWORD s_lastSnapTime = 0;
@@ -3422,17 +3461,28 @@ static float CalculateTargetZoom(HWND hwnd, float delta, bool isFineInterval = f
         s_lastSnapTime = GetTickCount();
     }
     
-    // 7. Limits
-    float minScale = 0.1f * fitScale;
-    float maxScale = std::max(50.0f * fitScale, 50.0f);
-    if (g_imageResource.isSvg && !UseSvgViewportRendering(g_imageResource)) {
-        maxScale = std::min(maxScale, GetSvgMaxSharpTotalScale(g_imageResource));
-    }
-    
-    if (newTotalScale < minScale) newTotalScale = minScale;
-    if (newTotalScale > maxScale) newTotalScale = maxScale;
+    return ClampTotalScale(hwnd, newTotalScale);
+}
 
-    return newTotalScale;
+static void ShowZoomOsd(HWND hwnd, float newTotalScale) {
+    D2D1_SIZE_F visualSize = GetVisualImageSize();
+    float osdScale = newTotalScale;
+    if (g_currentMetadata.Width > 0 && g_currentMetadata.Height > 0) {
+        VisualState vs = GetVisualState();
+        float originalDim = (float)(vs.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
+        if (originalDim > 0) {
+            osdScale = newTotalScale * (visualSize.width / originalDim);
+        }
+    }
+
+    int percent = (int)(std::round(osdScale * 100.0f));
+    bool is100 = (abs(osdScale - 1.0f) < 0.001f);
+
+    wchar_t zoomBuf[32];
+    swprintf_s(zoomBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, percent);
+    D2D1_COLOR_F color = is100 ? D2D1::ColorF(0.4f, 1.0f, 0.4f)
+                               : D2D1::ColorF(D2D1::ColorF::White);
+    g_osd.Show(hwnd, zoomBuf, false, false, color);
 }
 
 static void PerformZoomFit(HWND hwnd, float maxScreenPct = 1.0f, bool allowResizeWindow = true) {
@@ -4416,6 +4466,7 @@ void SaveConfig() {
     WritePrivateProfileStringW(L"Controls", L"InvertXButton", g_config.InvertXButton ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"EnableZoomSnapDamping", g_config.EnableZoomSnapDamping ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"MouseAnchoredWindowZoom", g_config.MouseAnchoredWindowZoom ? L"1" : L"0", iniPath.c_str());
+    WritePrivateProfileStringW(L"Controls", L"RightButtonDragZoom", g_config.RightButtonDragZoom ? L"1" : L"0", iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"LeftDragAction", std::to_wstring((int)g_config.LeftDragAction).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"MiddleDragAction", std::to_wstring((int)g_config.MiddleDragAction).c_str(), iniPath.c_str());
     WritePrivateProfileStringW(L"Controls", L"MiddleClickAction", std::to_wstring((int)g_config.MiddleClickAction).c_str(), iniPath.c_str());
@@ -4631,6 +4682,7 @@ void LoadConfig() {
     g_config.InvertXButton = GetPrivateProfileIntW(L"Controls", L"InvertXButton", 0, iniPath.c_str()) != 0;
     g_config.EnableZoomSnapDamping = GetPrivateProfileIntW(L"Controls", L"EnableZoomSnapDamping", 1, iniPath.c_str()) != 0;
     g_config.MouseAnchoredWindowZoom = GetPrivateProfileIntW(L"Controls", L"MouseAnchoredWindowZoom", 0, iniPath.c_str()) != 0;
+    g_config.RightButtonDragZoom = GetPrivateProfileIntW(L"Controls", L"RightButtonDragZoom", 0, iniPath.c_str()) != 0;
     g_config.LeftDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"LeftDragAction", (int)MouseAction::WindowDrag, iniPath.c_str());
     g_config.MiddleDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"MiddleDragAction", (int)MouseAction::PanImage, iniPath.c_str());
     g_config.MiddleClickAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"MiddleClickAction", (int)MouseAction::ExitApp, iniPath.c_str());
@@ -6866,6 +6918,50 @@ SKIP_EDGE_NAV:;
               if (g_uiRenderer) g_uiRenderer->SetWindowControlHover(g_winCtrlHoverState);
               MarkStaticLayerDirty();  // Window Controls hover change (includes InvalidateRect)
           }
+
+         if (g_viewState.IsRightButtonDown && !g_viewState.IsRightButtonDragZoom) {
+             POINT cursorPos{};
+             GetCursorPos(&cursorPos);
+             const int dxFromStart = abs(cursorPos.x - g_viewState.RightDragZoomStartScreenPos.x);
+             const int dyFromStart = abs(cursorPos.y - g_viewState.RightDragZoomStartScreenPos.y);
+             if (dxFromStart > 4 || dyFromStart > 4) {
+                 g_viewState.IsRightButtonDragZoom = true;
+                 g_viewState.LastMousePos = pt;
+             }
+         }
+
+         if (g_viewState.IsRightButtonDragZoom) {
+             g_viewState.LastMousePos = pt;
+
+             if (g_imageResource && !IsCompareModeActive()) {
+                 constexpr float kPixelsPerStep = 48.0f;
+                 POINT cursorPos{};
+                 GetCursorPos(&cursorPos);
+                 const float totalDy = (float)(cursorPos.y - g_viewState.RightDragZoomStartScreenPos.y);
+                 const float dragSteps = -totalDy / (kPixelsPerStep * (std::max)(0.75f, g_uiScale));
+                 if (fabsf(dragSteps) > 0.0001f) {
+                     g_viewState.IsInteracting = true;
+                     SetTimer(hwnd, IDT_INTERACTION, 150, nullptr);
+
+                     float multiplier = 1.0f;
+                     if (dragSteps > 0.0f) multiplier = 1.0f + 0.1f * dragSteps;
+                     else multiplier = 1.0f / (1.0f + 0.1f * fabsf(dragSteps));
+
+                     float newTotalScale = ClampTotalScale(hwnd, g_viewState.RightDragZoomStartTotalScale * multiplier);
+                     POINT anchorPt = g_viewState.RightDragZoomStartScreenPos;
+                     PerformSmartZoom(hwnd, newTotalScale, &anchorPt, false, false);
+                     RequestRepaint(PaintLayer::Dynamic);
+                     ShowZoomOsd(hwnd, newTotalScale);
+                 } else {
+                     float startScale = ClampTotalScale(hwnd, g_viewState.RightDragZoomStartTotalScale);
+                     POINT anchorPt = g_viewState.RightDragZoomStartScreenPos;
+                     PerformSmartZoom(hwnd, startScale, &anchorPt, false, false);
+                     RequestRepaint(PaintLayer::Dynamic);
+                     ShowZoomOsd(hwnd, startScale);
+                 }
+             }
+             return 0;
+         }
          
          // Middle button window drag
          if (g_viewState.IsMiddleDragWindow) {
@@ -7131,6 +7227,37 @@ SKIP_EDGE_NAV:;
                     PerformZoom100(hwnd);
                 }
             }
+        }
+        return 0;
+    }
+
+    case WM_RBUTTONDOWN: {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        g_viewState.IsRightButtonDown = false;
+        g_viewState.IsRightButtonDragZoom = false;
+
+        const bool canStartRightDragZoom =
+            g_config.RightButtonDragZoom &&
+            g_imageResource &&
+            !IsCompareModeActive() &&
+            !g_gallery.IsVisible() &&
+            !g_settingsOverlay.IsVisible() &&
+            !g_helpOverlay.IsVisible() &&
+            !g_dialog.IsVisible &&
+            !g_viewState.IsDragging &&
+            !g_viewState.IsMiddleDragWindow &&
+            !g_viewState.IsPendingFullscreenExitDrag;
+
+        if (canStartRightDragZoom) {
+            POINT cursorPos{};
+            GetCursorPos(&cursorPos);
+            g_viewState.IsRightButtonDown = true;
+            g_viewState.LastMousePos = pt;
+            g_viewState.DragStartPos = pt;
+            g_viewState.RightDragZoomStartScreenPos = cursorPos;
+            g_viewState.DragStartTime = GetTickCount();
+            g_viewState.RightDragZoomStartTotalScale = GetCurrentTotalScale(hwnd);
+            SetCapture(hwnd);
         }
         return 0;
     }
@@ -8032,33 +8159,7 @@ SKIP_EDGE_NAV:;
         RequestRepaint(PaintLayer::Dynamic);
 
              
-        // [Fix] Re-fetch Size for OSD (CalculateTargetZoom consumed it internally)
-        D2D1_SIZE_F visualSize = GetVisualImageSize();
-
-        
-        // Show Zoom OSD relative to Original Image Size
-        float osdScale = newTotalScale;
-        if (g_currentMetadata.Width > 0 && g_currentMetadata.Height > 0) {
-             VisualState vs = GetVisualState();
-             float originalDim = (float)(vs.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
-             if (originalDim > 0) {
-                 osdScale = newTotalScale * (visualSize.width / originalDim);
-                 
-                 // [Debug OSD]
-                 wchar_t dbg[256];
-                 swprintf_s(dbg, L"[OSD] VisualW=%.0f MetaW=%.0f NewScale=%.4f OSD=%.4f\n", visualSize.width, originalDim, newTotalScale, osdScale);
-                 OutputDebugStringW(dbg);
-             }
-        }
-        
-        int percent = (int)(std::round(osdScale * 100.0f));
-        bool is100 = (abs(osdScale - 1.0f) < 0.001f);
-        
-        wchar_t zoomBuf[32];
-        swprintf_s(zoomBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, percent);
-        D2D1_COLOR_F color = is100 ? D2D1::ColorF(0.4f, 1.0f, 0.4f) : D2D1::ColorF(D2D1::ColorF::White); // Green if 100%
-        
-        g_osd.Show(hwnd, zoomBuf, false, false, color);
+        ShowZoomOsd(hwnd, newTotalScale);
         return 0;
     }
 
@@ -8096,6 +8197,10 @@ SKIP_EDGE_NAV:;
         if ((HWND)lParam != hwnd) {
             g_winCtrlPressedState = -1;
         }
+        g_viewState.IsRightButtonDown = false;
+        g_viewState.IsRightButtonDragZoom = false;
+        g_viewState.RightDragZoomStartScreenPos = { 0, 0 };
+        g_viewState.RightDragZoomStartTotalScale = 1.0f;
         if (g_viewState.IsPendingFullscreenExitDrag) {
             g_viewState.IsPendingFullscreenExitDrag = false;
         }
@@ -8415,23 +8520,7 @@ SKIP_EDGE_NAV:;
             g_viewState.IsInteracting = true;
             SetTimer(hwnd, IDT_INTERACTION, 150, nullptr);
 
-
-            
-             // Show Zoom OSD relative to Original Image Size
-            float osdScale = newTotalScale;
-            if (g_currentMetadata.Width > 0 && g_currentMetadata.Height > 0) {
-                 VisualState vs = GetVisualState();
-                 D2D1_SIZE_F effSize = GetVisualImageSize(); // [Fix] Define effSize
-                 float originalDim = (float)(vs.IsRotated90 ? g_currentMetadata.Height : g_currentMetadata.Width);
-                 if (originalDim > 0) {
-                     osdScale = newTotalScale * (effSize.width / originalDim);
-                 }
-            }
-            
-            int percent = (int)(std::round(osdScale * 100.0f));
-            wchar_t zoomBuf[32];
-            swprintf_s(zoomBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, percent);
-            g_osd.Show(hwnd, zoomBuf, false, (abs(osdScale - 1.0f) < 0.001f), D2D1::ColorF(D2D1::ColorF::White));
+            ShowZoomOsd(hwnd, newTotalScale);
             break;
         }
 
@@ -8463,6 +8552,21 @@ SKIP_EDGE_NAV:;
     }
     
     case WM_RBUTTONUP: {
+        const bool wasRightDragZoom = g_viewState.IsRightButtonDragZoom;
+        const bool wasRightButtonDown = g_viewState.IsRightButtonDown;
+        if (wasRightDragZoom || wasRightButtonDown) {
+            if (GetCapture() == hwnd) {
+                ReleaseCapture();
+            }
+            g_viewState.IsRightButtonDragZoom = false;
+            g_viewState.IsRightButtonDown = false;
+            g_viewState.RightDragZoomStartScreenPos = { 0, 0 };
+            g_viewState.RightDragZoomStartTotalScale = 1.0f;
+            if (wasRightDragZoom) {
+                return 0;
+            }
+        }
+
         // Show context menu
         POINT ptClient = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
         POINT pt = ptClient;
