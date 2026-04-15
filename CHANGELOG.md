@@ -1,5 +1,38 @@
 # Changelog
 
+## [5.2.1] - The Animation & Personalization Update
+**Release Date**: 2026-04-15
+
+### ✨ Features
+- **Comprehensive Animation Engine (#92)**:
+  - High-performance, multi-threaded decoding for `.gif`, `.webp`, `.apng`, and `.avifs`.
+  - Introduced **Frame Inspector** mode: Pause animations and step frame-by-frame (`Alt + Left/Right`).
+- **Personalized Theme System (#129)**:
+  - New Theme Settings page with **Dark**, **Light**, and **System Sync** modes.
+  - Granular control over **Accent Colors** and **Text Colors**.
+  - **Ambient Dimmer**: Innovative background dimming logic for distraction-free viewing.
+- **Professional Debug Tools**:
+  - Implemented **Dirty Rect** visualization for animations, allowing designers to see precisely what regions are refreshing.
+- **Geek Context Menu Overhaul**:
+  - Refactored right-click menu architecture for faster indexing and cleaner layout.
+- **Interaction Evolution (#132, #129)**:
+  - Added professional **Vertical Drag Zoom** (Right Mouse Button).
+
+### ⚡ Performance
+- **JXL Pipeline Optimization (#137)**: Optimized memory-mapped file reuse and thread local storage management in JPEG XL decoding.
+
+### 🐛 Bug Fixes
+- **HDR Fidelity (#131)**: Fixed "washed out" colors on HDR monitors by implementing a robust 16-bit float scRGB color path.
+- **Decoding Stability (#137)**: Fixed a regression in the JXL decoder causing memory accumulation during fast scrolling.
+- **Visual Accuracy (#127)**: Resolved sub-pixel blurring issues on 1080p displays for native 1:1 image scales.
+- **UI Logic**: Fixed `SettingsOverlay` focus stealing and Z-order issues with modal dialogs.
+- **Navigation**: Resolved edge navigation clicking dead-zones on high-DPI monitors.
+
+### 🤝 Acknowledgments
+- **@SpaceInMe**: For the sharp-eye bug report on 1080p display blurring.
+- **@1kari-s**: For the suggestion and implementation of the vertical drag-to-zoom logic.
+
+
 ## [5.0.0] - The Advanced Color & Architecture Update
 **Release Date**: 2026-04-05
 

@@ -1,35 +1,28 @@
-# QuickView v5.0.0 - The Advanced Color & Architecture Update
-**Release Date**: 2026-04-05
+# QuickView v5.2.1 - The Animation & Personalization Update
+**Release Date**: 2026-04-15
 
-Welcome to the most significant update in QuickView's history. Version 5.0.0 introduces a modernized core architecture and professional-grade color tools, moving Beyond SDR.
+QuickView v5.2.1 focus on modern motion formats and deep visual personalization, delivering our most refined "Geek Glass" experience yet.
 
-### 🚀 Google Highway & ARM64 Support
-We've re-engineered our SIMD acceleration using **Google Highway**. 
-- **Broader Hardware Support**: Optimized performance for all CPUs (SSE4, AVX2, AVX-512, NEON).
-- **Native ARM64**: QuickView now runs natively on Windows on ARM with full hardware acceleration.
+### 🎬 Full Animation Support
+QuickView now provides a high-performance viewing experience for modern and classic animation formats.
+- **Universal Formats**: Full hardware-accelerated support for `.gif`, `.webp`, `.apng`, and `.avifs`.
+- **Frame Inspector**: Pause animations and use `Alt + Arrow Keys` to step through frames with precision.
 
-### 🌈 Professional HDR Pipeline
-QuickView now features a full **32-bit float scRGB linear** rendering pipeline.
-- **Ultra HDR (Gain Map)**: Native GPU-accelerated composition for Google Ultra HDR and Samsung Gain Maps.
-- **Tone Mapping**: Professional HDR-to-SDR roll-off mapping ensures stunning results even on standard displays.
-- **HDR Pro Panel**: Real-time peak luminance estimation and detailed structural metadata for JXL, AVIF, EXR, and HEIC.
+### 🎨 Deep Personalization
+We've overhauled the theme engine to give you absolute control over your environment.
+- **Theme Modes**: Choose between **Dark**, **Light**, or **Automatic** (system-synced) UI modes.
+- **Accent Customization**: Pick custom accent colors and text colors to match your workflow.
+- **Ambient Dimmer**: A configurable overlay that dims the background when interacting with menus or galleries to focus the eye.
 
-### 🎨 GPU-Driven CMS & Soft Proofing
-Accurate color reproduction is now at the heart of QuickView.
-- **Modern CMS**: Hardware-accelerated ICC profile extraction and application via Direct2D dual-node pipeline.
-- **Soft Proofing**: Professional simulation of output profiles (e.g., CMYK, Printer profiles) directly in the viewport.
-- **V4 Support**: Full compatibility with the latest ICC v4 and Compact ICC profiles.
+### 🛡️ Professional Animation Debugger
+Designed for artists and performance enthusiasts.
+- **Dirty Rect Indicator**: Toggle a dedicated debug button in animation mode to visualize the exact pixel regions currently being updated on the GPU. Enable in `Settings > Visuals > Professional Tools`.
 
-### 🧭 Advanced Navigation (#118)
-- **Natural Sorting**: Browsing order now matches Windows Explorer perfectly.
-- **Circular Loops**: Enhanced cross-folder navigation with independent toggle controls.
-- **Interactive Tooltips**: Complex settings now feature detailed descriptions on hover.
+### 🛠 Reliability & UX Enhancements
+- **HDR Color Fix (#131)**: Optimized the linear rendering path to ensure HDR images no longer appear "washed out" on HDR-enabled displays.
+- **JXL Stability (#137)**: Resolved a regression in the JPEG XL decoder causing memory leakage during rapid page-turning.
+- **Sharp Initial Scaling (#127)**: Fixed a bug where 1080p images could appear slightly blurry on native 1080p monitors.
+- **Right-Click Drag Zoom (#132, #129)**: Introduced professional vertical drag zooming by holding the Right Mouse Button.
+- **Natural Metadata**: Improved EXIF parsing performance and accuracy for modern camera brands.
 
-### 🛠 Reliability Improvements
-- Resolved **HeavyLanePool** deadlock during rapid navigation (#85).
-- Fixed window resizing and info panel constraints (#88, #89).
-- Fixed AVIF HDR gain map decoding crash (#124).
-- Fixed manual rotation coordinate drift on zoomed images (#91).
-
-### 🤝 Acknowledgments
-Special thanks to **@Dimmitrius** for optimization of the Russian translation, and our community for continuous feedback.
+---

@@ -88,34 +88,40 @@ QuickView supports almost all modern and professional image formats:
 - **V4 Profile Support**: Robust handling of ICC v4 and Compact ICC profiles.
 
 ### 🧭 Advanced Navigation (#118)
-- **Natural Sorting**: Browsing order now standardizes to Windows Explorer's natural numeric sorting.
-- **Loop & Traverse**: Decoupled folder looping and subfolder traversal options for granular control.
+# QuickView v5.2.1 - The Animation & Personalization Update
+**Release Date**: 2026-04-15
 
-### 🚀 Core Architecture: "Titan System"
-- **Gigapixel Tiling**: The new Titan Pipeline dynamically slices massive image datasets into LOD (Level of Detail) tiles, enabling smooth 60fps panning over images that previously caused OOM crashes.
-- **Smart Pull & Prefetch**: Memory is now intelligently streamed. QuickView only decodes and uploads the tiles currently visible on your monitor, predicting panning direction to prefetch adjacent chunks.
-- **Direct-to-MMF Decode**: Zero-copy Memory-Mapped File strategy to pipeline gigantic source images directly to the render composition engine.
+### 🎬 Full Animation Support (#92)
+- **Universal Playback**: High-performance support for `.gif`, `.webp`, `.apng`, and `.avifs` animations.
+- **Frame Inspector**: Pause animations and traverse frame-by-frame using `Alt + Left/Right` to analyze motion or extract specific keyframes.
 
-### ✨ Next-Gen Formats & Deep Cache
--   **Native JPEG XL (JXL)**: Full, hyper-optimized support for the next-gen JXL format, backed by parallel HeavyLane workers for massive speedups.
--   **Pro Design Formats**: Full support for Photoshop's Massive Document Format (PSB) alongside instant PSD/PSB thumbnail extraction.
--   **Shell-Accelerated Gallery**: The `T` Gallery now taps directly into the Windows Explorer Thumbnail Cache, making initial indexing of massive folders completely instantaneous.
+### 🛠️ Professional Tools: Dirty Rect
+- **Visual Refresh Debugging**: Introduced the **Dirty Rect** tool for professional designers and developers. It visualizes the exact region currently being decoded and refreshed by the GPU.
+- **Toggleable UI**: Enable the "Show Dirty Rect button" in `Settings > Visuals > Professional Tools`.
+<br><img src="ScreenShot/Dirty_Rect.gif" alt="Dirty Rect Debugging" width="100%" style="border-radius: 6px; margin-top: 10px;">
 
-### 💎 PerMonitorV2 & Precision UX
--   **True High-DPI**: The interface has been untethered from Windows' legacy scaling. We support explicit native D2D UI scaling with granular manual overrides (100%-250%).
--   **Always Fullscreen**: Command QuickView to automatically launch images in exclusive Fullscreen mode (`Off`, `Large Only`, `All`) with intelligent auto-exit.
--   **AVX-512 SIMD Resizing**: Critical bilinear scaling paths have been unrolled using AVX2/AVX-512 instructions for blazing-fast zooming.
+### 🎨 Deep Personalization & Themes (#129)
+- **Dark/Light Mode**: Full support for system-synchronized or manual Dark/Light UI modes.
+- **Accent Color Control**: Customize the UI highlight color to match your Windows accent or personal preference.
+- **Ambient Dimmer**: Added a configurable immersion overlay that dims the background when menus or galleries are active, enhancing visual focus.
 
-### 🔍 Pro-Level Comparison
-- **Visual Benchmarking**: Side-by-side comparison with synchronized zoom, pan, and rotation. 
-- **Analytical HUD**: Real-time RGB envelope/dual-curve histograms, Entropy, and Sharpness metrics.
-- **Smart Partition**: Integrated interaction divider with automated quality-winner identification.
+### 🌈 HDR & Advanced Color (#131)
+- **16-bit scRGB Pipeline**: Fully resolved "washed out" colors on HDR displays by migrating to a native scRGB float pipeline.
+- **Automatic CMS**: Smart ICC profile detection and GPU-accelerated color space conversion.
+
+### 🧭 Navigation & Input (#132)
+- **Right-Click Drag Zoom**: Professional-grade zooming by holding the right mouse button and dragging vertically.
+- **Smart Initial Scale (#127)**: Resolved blurring on 1080p displays by ensuring pixel-perfect initial alignment.
 
 ---
 
 ## ✨ Key Features
 
-### 1. 🏎️ Extreme Performance
+### 1. 🏎️ Extreme Performance & Architecture
+- **Google Highway SIMD**: Dynamic dispatching for SSE4, AVX2, AVX-512, and ARM64 NEON.
+- **Titan Tiling System**: Handle gigapixel images with smooth 60fps panning by only decoding what's visible.
+- **Zero-Latency JXL (#137)**: Native JPEG XL support with optimized thread pooling and memory management.
+
 > *"Speed is a feature."*
 
 QuickView leverages **Multi-Threaded Decoding** for modern formats like **JXL** and **AVIF**, delivering up to **6x faster** load times on 8-core CPUs compared to standard viewers.
@@ -201,10 +207,9 @@ We don't use generic codecs. We use the **State-of-the-Art** libraries for each 
 🗺️ Roadmap
 We are constantly evolving. Here is what's currently in development:
 
-- **Animation Support:** Full playback for GIF/WebP/APNG.
-- **Frame Inspector:** Pause and analyze animations frame-by-frame.
-- **Tracing Mode:** Semi-transparent overlay mode, designed for designers to reference and trace over other windows.
-- **Video Wall Port:** Direct output to multi-monitor visual arrays.
+- **Tracing Mode**: Semi-transparent overlay mode, designed for designers to reference and trace over other windows.
+- **Video Wall Port**: Direct output to multi-monitor visual arrays.
+- **Plugin System**: Open architecture for community-developed codecs and filters.
 
 ---
 
