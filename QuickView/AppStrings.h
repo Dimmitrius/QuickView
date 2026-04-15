@@ -385,6 +385,7 @@ namespace AppStrings {
     extern const wchar_t* Help_Mouse_Middle;
     extern const wchar_t* Help_Mouse_Wheel;
     extern const wchar_t* Help_Mouse_Right;
+    extern const wchar_t* Help_Mouse_RightVerticalDrag;
     extern const wchar_t* Help_Action_MoveWindow;
     extern const wchar_t* Help_Action_PanImage;
     extern const wchar_t* Help_Action_ContextMenu;

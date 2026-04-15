@@ -98,6 +98,8 @@ void HelpOverlay::RebuildList() {
     bool wheelPrimaryNavigate = (g_config.WheelActionMode == 1);
     m_items.push_back({ false, AppStrings::Help_Mouse_Wheel, wheelPrimaryNavigate ? AppStrings::Help_Action_NextPrev : AppStrings::Help_Action_Zoom });
     m_items.push_back({ false, L"Ctrl + Scroll", wheelPrimaryNavigate ? AppStrings::Help_Action_Zoom : AppStrings::Help_Action_NextPrev });
+    m_items.push_back({ false, AppStrings::Help_Mouse_RightVerticalDrag, AppStrings::Help_Action_Zoom });
+    m_items.push_back({ false, AppStrings::Help_Mouse_Right, AppStrings::Help_Action_ContextMenu });
     m_items.push_back({ false, AppStrings::Settings_Label_LeftDrag, AppStrings::Help_Action_MoveWindow });
     m_items.push_back({ false, AppStrings::Settings_Label_MiddleDrag, AppStrings::Help_Action_PanImage });
     // Ctrl+Left Drag = Middle Drag (Pan)

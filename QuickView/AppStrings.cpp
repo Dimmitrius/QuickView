@@ -354,6 +354,7 @@ const wchar_t *Help_Mouse_Left = nullptr;
 const wchar_t *Help_Mouse_Middle = nullptr;
 const wchar_t *Help_Mouse_Wheel = nullptr;
 const wchar_t *Help_Mouse_Right = nullptr;
+const wchar_t *Help_Mouse_RightVerticalDrag = nullptr;
 const wchar_t *Help_Action_MoveWindow = nullptr;
 const wchar_t *Help_Action_PanImage = nullptr;
 const wchar_t *Help_Action_ContextMenu = nullptr;
@@ -927,6 +928,8 @@ struct EN {
   static constexpr const wchar_t *Help_Mouse_Middle = L"Middle Button";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"Wheel";
   static constexpr const wchar_t *Help_Mouse_Right = L"Right Button";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"Right Button Vertical Drag";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"Move Window / Exit Fullscreen / Exit Maximized";
   static constexpr const wchar_t *Help_Action_PanImage = L"Pan Image";
@@ -1289,6 +1292,8 @@ struct CN {
   static constexpr const wchar_t *Help_Mouse_Middle = L"中键";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"滚轮";
   static constexpr const wchar_t *Help_Mouse_Right = L"右键";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"右键上下拖动";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"平移窗口/退出全屏/退出最大化";
   static constexpr const wchar_t *Help_Action_PanImage = L"平移图片";
@@ -1890,6 +1895,8 @@ struct TW {
   static constexpr const wchar_t *Help_Mouse_Middle = L"中鍵";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"滾輪";
   static constexpr const wchar_t *Help_Mouse_Right = L"右鍵";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"右鍵上下拖曳";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"平移視窗/退出全屏/退出最大化";
   static constexpr const wchar_t *Help_Action_PanImage = L"平移圖片";
@@ -2403,6 +2410,8 @@ struct JA {
   static constexpr const wchar_t *Help_Mouse_Middle = L"中ボタン";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"ホイール";
   static constexpr const wchar_t *Help_Mouse_Right = L"右ボタン";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"右ボタン上下ドラッグ";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"ウィンドウ移動 / 全画面終了 / 最大化解除";
   static constexpr const wchar_t *Help_Action_PanImage = L"画像をパン";
@@ -3024,6 +3033,8 @@ struct RU {
   static constexpr const wchar_t *Help_Mouse_Middle = L"Средняя кнопка";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"Колёсико";
   static constexpr const wchar_t *Help_Mouse_Right = L"Правая кнопка";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"Вертикальное перетаскивание правой кнопкой";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"Перемещение окна / Выход из полноэкранного режима / Выход из "
       L"максимизированного";
@@ -3558,6 +3569,8 @@ struct DE {
   static constexpr const wchar_t *Help_Mouse_Middle = L"Mittlere Taste";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"Mausrad";
   static constexpr const wchar_t *Help_Mouse_Right = L"Rechte Taste";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"Rechte Taste vertikal ziehen";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"Fenster bewegen / Vollbild beenden / Maximierung aufheben";
   static constexpr const wchar_t *Help_Action_PanImage = L"Bild schwenken";
@@ -4119,6 +4132,8 @@ struct ES {
   static constexpr const wchar_t *Help_Mouse_Middle = L"Botón central";
   static constexpr const wchar_t *Help_Mouse_Wheel = L"Rueda";
   static constexpr const wchar_t *Help_Mouse_Right = L"Botón derecho";
+  static constexpr const wchar_t *Help_Mouse_RightVerticalDrag =
+      L"Arrastre vertical con botón derecho";
   static constexpr const wchar_t *Help_Action_MoveWindow =
       L"Mover ventana / Salir de pantalla completa / Salir de maximizado";
   static constexpr const wchar_t *Help_Action_PanImage = L"Mover imagen";
@@ -4581,6 +4596,7 @@ template <typename T> void ApplyT() {
   Help_Mouse_Middle = T::Help_Mouse_Middle;
   Help_Mouse_Wheel = T::Help_Mouse_Wheel;
   Help_Mouse_Right = T::Help_Mouse_Right;
+  Help_Mouse_RightVerticalDrag = T::Help_Mouse_RightVerticalDrag;
   Help_Action_MoveWindow = T::Help_Action_MoveWindow;
   Help_Action_PanImage = T::Help_Action_PanImage;
   Help_Action_ContextMenu = T::Help_Action_ContextMenu;

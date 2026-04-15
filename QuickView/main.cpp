@@ -1097,6 +1097,10 @@ static void SetRightCompareView(const CompareView& view) {
     g_viewState.ExifOrientation = view.ExifOrientation;
 }
 
+static CompareView g_rightDragZoomStartLeftView{};
+static CompareView g_rightDragZoomStartRightView{};
+static bool g_hasRightDragZoomStartViews = false;
+
 static D2D1_SIZE_F GetOrientedSize(const ImageResource& res, int exifOrientation);
 
 static float ComputeZoomStep(float wheelDelta) {
@@ -1109,6 +1113,26 @@ static float ComputeZoomMultiplier(float delta, bool fineInterval) {
     float step = fineInterval ? 0.01f : 0.1f;
     if (delta > 0.0f) return 1.0f + step * delta;
     return 1.0f / (1.0f + step * fabsf(delta));
+}
+
+static POINT GetViewportCenterPoint(const D2D1_RECT_F& viewport) {
+    return {
+        (LONG)((viewport.left + viewport.right) * 0.5f),
+        (LONG)((viewport.top + viewport.bottom) * 0.5f)
+    };
+}
+
+static POINT MapPointBetweenViewports(const POINT& pt,
+                                      const D2D1_RECT_F& fromVp,
+                                      const D2D1_RECT_F& toVp) {
+    POINT mapped = pt;
+    float fromW = fromVp.right - fromVp.left;
+    float fromH = fromVp.bottom - fromVp.top;
+    float nx = (fromW > 1.0f) ? ((float)pt.x - fromVp.left) / fromW : 0.5f;
+    float ny = (fromH > 1.0f) ? ((float)pt.y - fromVp.top) / fromH : 0.5f;
+    mapped.x = (LONG)(toVp.left + nx * (toVp.right - toVp.left));
+    mapped.y = (LONG)(toVp.top + ny * (toVp.bottom - toVp.top));
+    return mapped;
 }
 
 static void ZoomCompareView(CompareView& view,
@@ -1144,7 +1168,6 @@ static void ZoomCompareView(CompareView& view,
     view.PanY = view.PanY * ratio + dy * (1.0f - ratio);
     view.Zoom = newZoom;
 }
-
 
 static D2D1_RECT_F GetCompareViewport(HWND hwnd, ComparePane pane) {
     RECT rc{};
@@ -2796,34 +2819,45 @@ static std::wstring PickFolder(HWND hwnd, const std::wstring& initialPath) {
     return folderPath;
 }
 
-static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval) {
+static void ApplyCompareZoomWithMultiplier(HWND hwnd,
+                                           ComparePane pane,
+                                           float multiplier,
+                                           const POINT* anchorPt,
+                                           bool syncZoom) {
     if (!IsCompareModeActive()) return;
-    const ComparePane pane = g_compare.selectedPane;
+
     const ComparePane other = (pane == ComparePane::Left) ? ComparePane::Right : ComparePane::Left;
 
-    auto applyToPane = [&](ComparePane p) {
+    auto applyToPane = [&](ComparePane p, const POINT* paneAnchorPt) {
         D2D1_RECT_F fitVp = GetCompareViewport(hwnd, p);
         D2D1_RECT_F centerVp = GetCompareInteractionViewport(hwnd, p);
-        POINT centerPt = {
-            (LONG)((centerVp.left + centerVp.right) * 0.5f),
-            (LONG)((centerVp.top + centerVp.bottom) * 0.5f)
-        };
-        float multiplier = ComputeZoomMultiplier(delta, fineInterval);
+        POINT effectiveAnchor = GetViewportCenterPoint(centerVp);
+        if (g_config.MouseAnchoredWindowZoom && paneAnchorPt) {
+            effectiveAnchor = *paneAnchorPt;
+        }
 
         if (p == ComparePane::Left) {
             if (!g_compare.left.valid) return;
-            ZoomCompareView(g_compare.left.view, g_compare.left.resource, fitVp, centerVp, multiplier, centerPt);
+            ZoomCompareView(g_compare.left.view, g_compare.left.resource, fitVp, centerVp, multiplier, effectiveAnchor);
         } else {
             if (!g_imageResource) return;
             CompareView right = GetRightCompareView();
-            ZoomCompareView(right, g_imageResource, fitVp, centerVp, multiplier, centerPt);
+            ZoomCompareView(right, g_imageResource, fitVp, centerVp, multiplier, effectiveAnchor);
             SetRightCompareView(right);
         }
     };
 
-    applyToPane(pane);
-    if (g_compare.syncZoom) {
-        applyToPane(other);
+    applyToPane(pane, anchorPt);
+    if (syncZoom) {
+        POINT mappedAnchor{};
+        const POINT* otherAnchor = nullptr;
+        if (g_config.MouseAnchoredWindowZoom && anchorPt) {
+            D2D1_RECT_F fromVp = GetCompareInteractionViewport(hwnd, pane);
+            D2D1_RECT_F toVp = GetCompareInteractionViewport(hwnd, other);
+            mappedAnchor = MapPointBetweenViewports(*anchorPt, fromVp, toVp);
+            otherAnchor = &mappedAnchor;
+        }
+        applyToPane(other, otherAnchor);
     }
 
     MarkCompareDirty();
@@ -2833,6 +2867,13 @@ static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval) {
     swprintf_s(leftBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, (int)std::round(g_compare.left.view.Zoom * 100.0f));
     swprintf_s(rightBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, (int)std::round(GetRightCompareView().Zoom * 100.0f));
     g_osd.ShowCompare(hwnd, leftBuf, rightBuf);
+}
+
+static void ApplyCompareZoomStep(HWND hwnd, float delta, bool fineInterval) {
+    if (!IsCompareModeActive()) return;
+    const ComparePane pane = g_compare.selectedPane;
+    float multiplier = ComputeZoomMultiplier(delta, fineInterval);
+    ApplyCompareZoomWithMultiplier(hwnd, pane, multiplier, nullptr, g_compare.syncZoom);
 }
 
 // 渚挎嵎锟?(淇濇寔鍚戝悗鍏煎)
@@ -4682,7 +4723,7 @@ void LoadConfig() {
     g_config.InvertXButton = GetPrivateProfileIntW(L"Controls", L"InvertXButton", 0, iniPath.c_str()) != 0;
     g_config.EnableZoomSnapDamping = GetPrivateProfileIntW(L"Controls", L"EnableZoomSnapDamping", 1, iniPath.c_str()) != 0;
     g_config.MouseAnchoredWindowZoom = GetPrivateProfileIntW(L"Controls", L"MouseAnchoredWindowZoom", 0, iniPath.c_str()) != 0;
-    g_config.RightButtonDragZoom = GetPrivateProfileIntW(L"Controls", L"RightButtonDragZoom", 0, iniPath.c_str()) != 0;
+    g_config.RightButtonDragZoom = GetPrivateProfileIntW(L"Controls", L"RightButtonDragZoom", 1, iniPath.c_str()) != 0;
     g_config.LeftDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"LeftDragAction", (int)MouseAction::WindowDrag, iniPath.c_str());
     g_config.MiddleDragAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"MiddleDragAction", (int)MouseAction::PanImage, iniPath.c_str());
     g_config.MiddleClickAction = (MouseAction)GetPrivateProfileIntW(L"Controls", L"MiddleClickAction", (int)MouseAction::ExitApp, iniPath.c_str());
@@ -6933,7 +6974,23 @@ SKIP_EDGE_NAV:;
          if (g_viewState.IsRightButtonDragZoom) {
              g_viewState.LastMousePos = pt;
 
-             if (g_imageResource && !IsCompareModeActive()) {
+             if (IsCompareModeActive()) {
+                 POINT cursorPos{};
+                 GetCursorPos(&cursorPos);
+                 const float totalDy = (float)(cursorPos.y - g_viewState.RightDragZoomStartScreenPos.y);
+                 const float dragSteps = -totalDy / (48.0f * (std::max)(0.75f, g_uiScale));
+                 float multiplier = 1.0f;
+                 if (dragSteps > 0.0f) multiplier = 1.0f + 0.1f * dragSteps;
+                 else if (dragSteps < 0.0f) multiplier = 1.0f / (1.0f + 0.1f * fabsf(dragSteps));
+
+                 g_viewState.IsInteracting = true;
+                 SetTimer(hwnd, IDT_INTERACTION, 150, nullptr);
+                 if (g_hasRightDragZoomStartViews) {
+                     g_compare.left.view = g_rightDragZoomStartLeftView;
+                     SetRightCompareView(g_rightDragZoomStartRightView);
+                 }
+                 ApplyCompareZoomWithMultiplier(hwnd, g_compare.activePane, multiplier, &g_viewState.DragStartPos, g_compare.syncZoom);
+             } else if (g_imageResource) {
                  constexpr float kPixelsPerStep = 48.0f;
                  POINT cursorPos{};
                  GetCursorPos(&cursorPos);
@@ -7239,7 +7296,6 @@ SKIP_EDGE_NAV:;
         const bool canStartRightDragZoom =
             g_config.RightButtonDragZoom &&
             g_imageResource &&
-            !IsCompareModeActive() &&
             !g_gallery.IsVisible() &&
             !g_settingsOverlay.IsVisible() &&
             !g_helpOverlay.IsVisible() &&
@@ -7251,12 +7307,29 @@ SKIP_EDGE_NAV:;
         if (canStartRightDragZoom) {
             POINT cursorPos{};
             GetCursorPos(&cursorPos);
+            if (IsCompareModeActive()) {
+                g_compare.activePane = HitTestComparePane(hwnd, pt);
+            }
             g_viewState.IsRightButtonDown = true;
             g_viewState.LastMousePos = pt;
             g_viewState.DragStartPos = pt;
             g_viewState.RightDragZoomStartScreenPos = cursorPos;
             g_viewState.DragStartTime = GetTickCount();
             g_viewState.RightDragZoomStartTotalScale = GetCurrentTotalScale(hwnd);
+            if (IsCompareModeActive()) {
+                if (g_compare.activePane == ComparePane::Left) {
+                    g_viewState.RightDragZoomStartComparePrimaryZoom = g_compare.left.view.Zoom;
+                    g_viewState.RightDragZoomStartCompareSecondaryZoom = GetRightCompareView().Zoom;
+                } else {
+                    g_viewState.RightDragZoomStartComparePrimaryZoom = GetRightCompareView().Zoom;
+                    g_viewState.RightDragZoomStartCompareSecondaryZoom = g_compare.left.view.Zoom;
+                }
+                g_rightDragZoomStartLeftView = g_compare.left.view;
+                g_rightDragZoomStartRightView = GetRightCompareView();
+                g_hasRightDragZoomStartViews = true;
+            } else {
+                g_hasRightDragZoomStartViews = false;
+            }
             SetCapture(hwnd);
         }
         return 0;
@@ -8091,45 +8164,7 @@ SKIP_EDGE_NAV:;
             ScreenToClient(hwnd, &mousePt);
             ComparePane pane = HitTestComparePane(hwnd, mousePt);
             g_compare.activePane = pane;
-            ComparePane other = (pane == ComparePane::Left) ? ComparePane::Right : ComparePane::Left;
-
-            auto zoomPane = [&](ComparePane p, const POINT& mappedPt) {
-                if (p == ComparePane::Left) {
-                    if (!g_compare.left.valid) return;
-                    D2D1_RECT_F fitVp = GetCompareViewport(hwnd, ComparePane::Left);
-                    D2D1_RECT_F centerVp = GetCompareInteractionViewport(hwnd, ComparePane::Left);
-                    ZoomCompareView(g_compare.left.view, g_compare.left.resource, fitVp, centerVp, ComputeZoomStep(delta), mappedPt);
-                } else {
-                    if (!g_imageResource) return;
-                    CompareView right = GetRightCompareView();
-                    D2D1_RECT_F fitVp = GetCompareViewport(hwnd, ComparePane::Right);
-                    D2D1_RECT_F centerVp = GetCompareInteractionViewport(hwnd, ComparePane::Right);
-                    ZoomCompareView(right, g_imageResource, fitVp, centerVp, ComputeZoomStep(delta), mappedPt);
-                    SetRightCompareView(right);
-                }
-            };
-
-            zoomPane(pane, mousePt);
-            if (g_compare.syncZoom) {
-                POINT mapped = mousePt;
-                D2D1_RECT_F fromVp = GetCompareInteractionViewport(hwnd, pane);
-                D2D1_RECT_F toVp = GetCompareInteractionViewport(hwnd, other);
-                float fromW = fromVp.right - fromVp.left;
-                float fromH = fromVp.bottom - fromVp.top;
-                float nx = (fromW > 1.0f) ? ((float)mousePt.x - fromVp.left) / fromW : 0.5f;
-                float ny = (fromH > 1.0f) ? ((float)mousePt.y - fromVp.top) / fromH : 0.5f;
-                mapped.x = (LONG)(toVp.left + nx * (toVp.right - toVp.left));
-                mapped.y = (LONG)(toVp.top + ny * (toVp.bottom - toVp.top));
-                zoomPane(other, mapped);
-            }
-
-            MarkCompareDirty();
-            RequestRepaint(PaintLayer::Image | PaintLayer::Dynamic);
-
-            wchar_t leftBuf[32], rightBuf[32];
-            swprintf_s(leftBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, (int)std::round(g_compare.left.view.Zoom * 100.0f));
-            swprintf_s(rightBuf, L"%s%d%%", AppStrings::OSD_ZoomPrefix, (int)std::round(GetRightCompareView().Zoom * 100.0f));
-            g_osd.ShowCompare(hwnd, leftBuf, rightBuf);
+            ApplyCompareZoomWithMultiplier(hwnd, pane, ComputeZoomStep(delta), &mousePt, g_compare.syncZoom);
             return 0;
         }
 
@@ -8201,6 +8236,9 @@ SKIP_EDGE_NAV:;
         g_viewState.IsRightButtonDragZoom = false;
         g_viewState.RightDragZoomStartScreenPos = { 0, 0 };
         g_viewState.RightDragZoomStartTotalScale = 1.0f;
+        g_viewState.RightDragZoomStartComparePrimaryZoom = 1.0f;
+        g_viewState.RightDragZoomStartCompareSecondaryZoom = 1.0f;
+        g_hasRightDragZoomStartViews = false;
         if (g_viewState.IsPendingFullscreenExitDrag) {
             g_viewState.IsPendingFullscreenExitDrag = false;
         }
@@ -8562,6 +8600,9 @@ SKIP_EDGE_NAV:;
             g_viewState.IsRightButtonDown = false;
             g_viewState.RightDragZoomStartScreenPos = { 0, 0 };
             g_viewState.RightDragZoomStartTotalScale = 1.0f;
+            g_viewState.RightDragZoomStartComparePrimaryZoom = 1.0f;
+            g_viewState.RightDragZoomStartCompareSecondaryZoom = 1.0f;
+            g_hasRightDragZoomStartViews = false;
             if (wasRightDragZoom) {
                 return 0;
             }
