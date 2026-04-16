@@ -275,10 +275,8 @@ public:
   // ============================================================================
   // [P15] Format-Agnostic Full Decode from Memory
   // ============================================================================
-  // Decodes entire image from memory buffer to BGRA pixels.
-  // Dispatches to optimal decoder: TurboJPEG / Wuffs (PNG) / libjxl (JXL) / WIC
-  // fallback. Output: heap-allocated BGRA buffer in outFrame (caller owns via
-  // memoryDeleter).
+  // Decodes a full frame from a memory buffer via the unified buffer dispatcher.
+  // Output pixels are heap-allocated and owned by outFrame::memoryDeleter.
   static HRESULT FullDecodeFromMemory(const uint8_t *data, size_t size,
                                       QuickView::RawImageFrame *outFrame,
                                       CancelPredicate checkCancel = nullptr);
@@ -326,8 +324,8 @@ public:
                       float targetHdrHeadroomStops = -1.0f);
 
   /// <summary>
-  /// [Optimization] Load full image from memory pointer (for MMF Preload) with
-  /// optional IDCT Scaling
+  /// Load a frame directly from a mapped/in-memory buffer via the unified
+  /// buffer dispatcher, with WIC fallback for unsupported formats.
   /// </summary>
   HRESULT LoadToFrameFromMemory(const uint8_t *data, size_t size,
                                 QuickView::RawImageFrame *outFrame,

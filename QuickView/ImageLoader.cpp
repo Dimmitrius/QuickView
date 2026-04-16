@@ -446,12 +446,34 @@ namespace QuickView {
         // Forward declarations for integrated unified decoders
         namespace Wuffs {
             static HRESULT LoadPNG(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+            static HRESULT LoadGIF(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+            static HRESULT LoadBMP(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+            static HRESULT LoadTGA(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+            static HRESULT LoadQOI(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+            static HRESULT LoadWBMP(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
             static HRESULT LoadNetPBM(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+        }
+        namespace JPEG {
+            static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
         }
         namespace WebP {
             static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
         }
         namespace JXL {
+            static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+        }
+        namespace AVIF {
+            static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+        }
+        namespace TinyEXR {
+            static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+        }
+        namespace Stb {
+            static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+            static HRESULT LoadHdr(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
+        }
+        namespace PsdComposite {
+            static bool IsPSB(const uint8_t* data, size_t size);
             static HRESULT Load(const uint8_t* data, size_t size, const DecodeContext& ctx, DecodeResult& result);
         }
 
@@ -568,7 +590,190 @@ static std::wstring DetectFormatFromContent(const uint8_t* magic, size_t size) {
     return L"Unknown";
 }
 
-// [Optimization] Load full image from memory pointer (for MMF Preload)
+namespace {
+
+bool IsUnifiedBufferCodec(const std::wstring& fmt) {
+    return fmt == L"JPEG" || fmt == L"WebP" || fmt == L"PNG" || fmt == L"GIF" || fmt == L"BMP" || fmt == L"JXL" ||
+           fmt == L"AVIF" || fmt == L"QOI" || fmt == L"TGA" || fmt == L"PNM" || fmt == L"WBMP" ||
+           fmt == L"PSD" || fmt == L"HDR" || fmt == L"PIC" || fmt == L"PCX" || fmt == L"EXR";
+}
+
+bool ShouldProbeAnimatedBufferCodec(const std::wstring& fmt) {
+    return fmt == L"WebP" || fmt == L"GIF" || fmt == L"PNG" || fmt == L"AVIF" || fmt == L"JXL";
+}
+
+void MoveDecodeResultToFrame(const QuickView::Codec::DecodeResult& result,
+                             QuickView::RawImageFrame* outFrame,
+                             QuantumArena* arena) {
+    outFrame->pixels = result.pixels;
+    outFrame->width = result.width;
+    outFrame->height = result.height;
+    outFrame->stride = result.stride;
+    outFrame->format = result.format;
+    if (arena && arena->Owns(result.pixels)) {
+        outFrame->memoryDeleter = nullptr;
+    } else {
+        outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
+    }
+}
+
+HRESULT LoadBufferUnified(const uint8_t* mappedData,
+                          size_t mappedSize,
+                          const std::wstring& fmt,
+                          const QuickView::Codec::DecodeContext& ctx,
+                          QuickView::Codec::DecodeResult& result) {
+    using namespace QuickView::Codec;
+
+    if (!mappedData || !mappedSize) return E_INVALIDARG;
+
+    if (fmt == L"AVIF") {
+        HRESULT hr = AVIF::Load(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"libavif (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"JXL") {
+        // Titan-only preview remains outside the low-level codec implementations,
+        // but the dispatch source is now shared by every memory entrypoint.
+        if (ctx.isTitanMode && (ctx.targetWidth > 0 || ctx.targetHeight > 0 || ctx.forceRenderFull)) {
+            CImageLoader::ThumbData tmp;
+            HRESULT hr = CImageLoader::LoadThumbJXL_DC(
+                mappedData, mappedSize, &tmp, ctx.pMetadata, ctx.forceRenderFull, ctx.allowFakeBase);
+            if (hr == E_ABORT) {
+                if (ctx.targetWidth < 1000 && ctx.targetHeight < 1000) {
+                    return E_ABORT;
+                }
+            } else if (SUCCEEDED(hr) && tmp.isValid) {
+                result.width = tmp.width;
+                result.height = tmp.height;
+                result.stride = tmp.stride;
+                size_t bufSize = static_cast<size_t>(tmp.stride) * static_cast<size_t>(tmp.height);
+                result.pixels = ctx.allocator(bufSize);
+                if (!result.pixels) return E_OUTOFMEMORY;
+                memcpy(result.pixels, tmp.pixels.data(), bufSize);
+                result.format = PixelFormat::BGRA8888;
+                result.success = true;
+                result.metadata.LoaderName = tmp.loaderName;
+                return S_OK;
+            } else if (FAILED(hr) && hr != E_NOTIMPL) {
+                return hr;
+            }
+        }
+
+        HRESULT hr = JXL::Load(mappedData, mappedSize, ctx, result);
+        if (hr == E_OUTOFMEMORY || hr == E_ABORT) return hr;
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"libjxl (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"WebP") {
+        HRESULT hr = WebP::Load(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"WebP (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"JPEG") {
+        HRESULT hr = JPEG::Load(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"TurboJPEG (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"PNG") {
+        HRESULT hr = Wuffs::LoadPNG(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs PNG (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"GIF") {
+        HRESULT hr = Wuffs::LoadGIF(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs GIF (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"BMP") {
+        HRESULT hr = Wuffs::LoadBMP(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs BMP (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"QOI") {
+        HRESULT hr = Wuffs::LoadQOI(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs QOI (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"TGA") {
+        HRESULT hr = Wuffs::LoadTGA(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs TGA (Unified)";
+            return S_OK;
+        }
+        hr = Stb::Load(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            return S_OK;
+        }
+    } else if (fmt == L"PNM") {
+        HRESULT hr = Wuffs::LoadNetPBM(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs NetPBM (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"WBMP") {
+        HRESULT hr = Wuffs::LoadWBMP(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            result.metadata.LoaderName = L"Wuffs WBMP (Unified)";
+            return S_OK;
+        }
+    } else if (fmt == L"EXR") {
+        HRESULT hr = TinyEXR::Load(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            return S_OK;
+        }
+    } else if (fmt == L"PSD") {
+        const bool isPsb = PsdComposite::IsPSB(mappedData, mappedSize);
+        if (isPsb) {
+            HRESULT hr = PsdComposite::Load(mappedData, mappedSize, ctx, result);
+            if (hr == E_ABORT || hr == E_OUTOFMEMORY) return hr;
+            if (SUCCEEDED(hr)) return S_OK;
+        } else {
+            HRESULT hr = Stb::Load(mappedData, mappedSize, ctx, result);
+            if (SUCCEEDED(hr)) {
+                return S_OK;
+            }
+        }
+
+        PreviewExtractor::ExtractedData exData;
+        if (PreviewExtractor::ExtractFromPSD(mappedData, mappedSize, exData) && exData.IsValid()) {
+            HRESULT previewHr = JPEG::Load(exData.pData, exData.size, ctx, result);
+            if (SUCCEEDED(previewHr)) {
+                result.metadata.Format = L"PSD";
+                result.metadata.LoaderName = L"PSD Preview (Embedded JPEG)";
+                if (result.metadata.FormatDetails.empty()) {
+                    result.metadata.FormatDetails = L"PSD Preview";
+                } else {
+                    result.metadata.FormatDetails += L" / PSD Preview";
+                }
+                return S_OK;
+            }
+        }
+    } else if (fmt == L"HDR") {
+        HRESULT hr = Stb::LoadHdr(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            return S_OK;
+        }
+    } else if (fmt == L"PIC" || fmt == L"PCX") {
+        HRESULT hr = Stb::Load(mappedData, mappedSize, ctx, result);
+        if (SUCCEEDED(hr)) {
+            return S_OK;
+        }
+    }
+
+    return E_NOTIMPL;
+}
+
+} // namespace
+
+// Unified in-memory frame loading entry for MMF/Titan paths.
 HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size, 
                                             QuickView::RawImageFrame* outFrame,
                                             class QuantumArena* arena,
@@ -753,47 +958,12 @@ HRESULT CImageLoader::LoadToFrameFromMemory(const uint8_t* data, size_t size,
         ctx.isTitanMode = true; // explicitly for MMF paths
         
         DecodeResult result;
-        HRESULT hrUnified = E_NOTIMPL;
-
-        if (fmt == L"PNG") hrUnified = Wuffs::LoadPNG(data, size, ctx, result);
-        else if (fmt == L"WebP") hrUnified = QuickView::Codec::WebP::Load(data, size, ctx, result);
-        else if (fmt == L"PNM") hrUnified = Wuffs::LoadNetPBM(data, size, ctx, result);
-        else if (fmt == L"JXL") {
-            // [JXL DC] Stage 1 scaled decoding via DC preview
-            if (targetWidth > 0 || targetHeight > 0) {
-                CImageLoader::ThumbData tmp;
-                HRESULT dcHr = CImageLoader::LoadThumbJXL_DC(data, size, &tmp, pMetadata, false, false);
-                if (dcHr == E_ABORT) return E_ABORT;
-                if (SUCCEEDED(dcHr) && tmp.isValid) {
-                    result.width = tmp.width;
-                    result.height = tmp.height;
-                    result.stride = tmp.stride;
-                    // JXL DC preview gives RGBA pixels; we need space for it
-                    size_t bufSize = (size_t)tmp.stride * tmp.height;
-                    result.pixels = ctx.allocator(bufSize);
-                    if (result.pixels) {
-                        memcpy(result.pixels, tmp.pixels.data(), bufSize);
-                        result.metadata.LoaderName = tmp.loaderName;
-                        hrUnified = S_OK;
-                    } else hrUnified = E_OUTOFMEMORY;
-                } else {
-                    hrUnified = JXL::Load(data, size, ctx, result);
-                }
-            } else {
-                hrUnified = JXL::Load(data, size, ctx, result);
-            }
-        }
+        HRESULT hrUnified = LoadBufferUnified(data, size, fmt, ctx, result);
 
         if (hrUnified == E_OUTOFMEMORY || hrUnified == E_ABORT) return hrUnified;
         
         if (SUCCEEDED(hrUnified) && result.pixels) {
-            outFrame->pixels = result.pixels;
-            outFrame->width = result.width;
-            outFrame->height = result.height;
-            outFrame->stride = result.stride;
-            outFrame->format = result.format;
-            if (arena && arena->Owns(result.pixels)) { outFrame->memoryDeleter = nullptr; }
-            else { outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); }; }
+            MoveDecodeResultToFrame(result, outFrame, arena);
             
             if (pMetadata && result.width > 0) {
                 pMetadata->Width = result.width; 
@@ -1810,177 +1980,29 @@ HRESULT CImageLoader::FullDecodeFromMemory(const uint8_t* data, size_t size,
     if (!data || size < 4 || !outFrame) return E_INVALIDARG;
 
     std::wstring fmt = DetectFormatFromContent(data, size);
-
-    // ---------------------------------------------------------------
-    // JPEG path: delegate to existing TurboJPEG loader
-    // ---------------------------------------------------------------
-    if (fmt == L"JPEG") {
-        QuickView::RegionRect fullRegion = { 0, 0, 0x7fffffff, 0x7fffffff };
-        return LoadTileFromMemory(data, size, fullRegion, 1.0f, outFrame, nullptr, 0, 0);
+    if (!IsUnifiedBufferCodec(fmt)) {
+        OutputDebugStringW(L"[P15] FullDecodeFromMemory: unsupported format\n");
+        return E_NOTIMPL;
     }
 
-    // ---------------------------------------------------------------
-    // PNG path: Wuffs (AVX2 accelerated, outputs BGRA directly)
-    // ---------------------------------------------------------------
-    if (fmt == L"PNG") {
-        uint32_t w = 0, h = 0;
-        uint8_t* directBuf = nullptr;
-        
-        // Use AllocatorFunc overload: Wuffs writes directly into our _aligned_malloc buffer.
-        // This eliminates the intermediate std::vector<uint8_t> (4.8GB for 40000x30000).
-        auto allocator = [&](size_t sz) -> uint8_t* {
-            directBuf = (uint8_t*)_aligned_malloc(sz, 32);
-            return directBuf;
-        };
-        
-        if (!WuffsLoader::DecodePNG(data, size, &w, &h, allocator, nullptr)) {
-            if (directBuf) _aligned_free(directBuf);
-            wchar_t dbg[128];
-            size_t neededMB = ((size_t)w * h * 4) / (1024 * 1024);
-            swprintf_s(dbg, L"[P15] Wuffs PNG decode failed (need ~%zu MB BGRA)\n", neededMB);
-            OutputDebugStringW(dbg);
-            return E_FAIL;
-        }
+    DecodeContext ctx;
+    ctx.allocator = [](size_t s) -> uint8_t* {
+        return static_cast<uint8_t*>(_aligned_malloc(s, 64));
+    };
+    ctx.freeFunc = [](uint8_t* p) {
+        _aligned_free(p);
+    };
+    ctx.checkCancel = checkCancel;
 
-        if (!directBuf) return E_OUTOFMEMORY;
-        
-        outFrame->pixels = directBuf;
-        outFrame->width = (int)w;
-        outFrame->height = (int)h;
-        outFrame->stride = (int)((size_t)w * 4);
-        outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
-
-        OutputDebugStringW(L"[P15] PNG decoded via Wuffs OK\n");
-        return S_OK;
+    DecodeResult result;
+    HRESULT hr = LoadBufferUnified(data, size, fmt, ctx, result);
+    if (FAILED(hr) || !result.pixels) {
+        if (FAILED(hr)) return hr;
+        return E_FAIL;
     }
 
-    // ---------------------------------------------------------------
-    // JXL path: libjxl (RGBA output → SIMD BGRA swizzle)
-    // ---------------------------------------------------------------
-    if (fmt == L"JXL") {
-        JxlDecoder* dec = JxlDecoderCreate(NULL);
-        if (!dec) return E_OUTOFMEMORY;
-
-        // [Fix Bug #85] Avoid global runner contention/corruption in fallback paths.
-        size_t runnerThreads = std::thread::hardware_concurrency();
-        if (runnerThreads == 0) runnerThreads = 4;
-        
-        // [Optimization] Limit parallel threads for JXL to avoid system-wide contention
-        // during rapid scrolling. 16 is plenty for even 100MP images.
-        if (runnerThreads > 16) runnerThreads = 16;
-
-        void* runner = JxlThreadParallelRunnerCreate(NULL, runnerThreads);
-        if (!runner) { JxlDecoderDestroy(dec); return E_OUTOFMEMORY; }
-        JxlDecoderSetParallelRunner(dec, JxlThreadParallelRunner, runner);
-
-        if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec,
-            JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE)) {
-            JxlDecoderDestroy(dec);
-            return E_FAIL;
-        }
-        JxlDecoderSetInput(dec, data, size);
-        JxlDecoderCloseInput(dec);
-
-        JxlBasicInfo info = {};
-        JxlPixelFormat pixFmt = { 4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0 };
-        uint8_t* outBuf = nullptr;
-        size_t outBufSize = 0;
-        HRESULT hr = E_FAIL;
-
-        for (;;) {
-            if (checkCancel && checkCancel()) {
-                hr = E_ABORT;
-                break;
-            }
-
-            JxlDecoderStatus st = JxlDecoderProcessInput(dec);
-            if (st == JXL_DEC_ERROR) break;
-            if (st == JXL_DEC_SUCCESS) { hr = S_OK; break; }
-
-            if (st == JXL_DEC_BASIC_INFO) {
-                if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec, &info)) break;
-
-                // Force sRGB output
-                JxlColorEncoding ce = {};
-                ce.color_space = JXL_COLOR_SPACE_RGB;
-                ce.white_point = JXL_WHITE_POINT_D65;
-                ce.primaries = JXL_PRIMARIES_SRGB;
-                ce.transfer_function = JXL_TRANSFER_FUNCTION_SRGB;
-                ce.rendering_intent = JXL_RENDERING_INTENT_PERCEPTUAL;
-                JxlDecoderSetOutputColorProfile(dec, &ce, NULL, 0);
-            }
-            else if (st == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
-                if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec, &pixFmt, &outBufSize)) break;
-
-                // [Fix Bug #137] Loosen memory wall. 
-                // We rely on _aligned_malloc returning nullptr if allocation fails.
-                // For massive images (e.g. 1.2Gpx JXL), 4.5GB is a hard requirement.
-                // OS VMM can handle over-committing via pagefile.
-                {
-                    MEMORYSTATUSEX ms = { sizeof(ms) };
-                    if (GlobalMemoryStatusEx(&ms)) {
-                        // Only abort if we are truly hitting system-wide exhaustion (85% committed)
-                        // instead of just checking a relative percentage of physical RAM.
-                        if (outBufSize > ms.ullAvailPageFile && outBufSize > (ms.ullAvailPhys * 9 / 10)) {
-                             wchar_t dbg[192];
-                             swprintf_s(dbg, L"[P15] JXL heap decode aborted (CRITICAL): need %zu MB, only %llu MB pagefile available\n",
-                                        outBufSize / (1024*1024), ms.ullAvailPageFile / (1024*1024));
-                             OutputDebugStringW(dbg);
-                             JxlDecoderDestroy(dec);
-                             JxlThreadParallelRunnerDestroy(runner);
-                             return E_OUTOFMEMORY;
-                        }
-                    }
-                }
-
-                outBuf = (uint8_t*)_aligned_malloc(outBufSize, 32);
-                if (!outBuf) { hr = E_OUTOFMEMORY; break; }
-
-                if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec, &pixFmt, outBuf, outBufSize)) {
-                    _aligned_free(outBuf); outBuf = nullptr;
-                    break;
-                }
-            }
-            else if (st == JXL_DEC_FULL_IMAGE) {
-                hr = S_OK;
-                break;
-            }
-        }
-        JxlDecoderDestroy(dec);
-        JxlThreadParallelRunnerDestroy(runner);
-
-        if (FAILED(hr)) {
-            wchar_t failLog[128];
-            swprintf_s(failLog, L"[JXL] FullDecodeFromMemory failed: hr=0x%08X\n", (uint32_t)hr);
-            OutputDebugStringW(failLog);
-        }
-        if (FAILED(hr) || !outBuf) {
-            if (outBuf) _aligned_free(outBuf);
-            OutputDebugStringW(L"[P15] JXL decode failed\n");
-            return FAILED(hr) ? hr : E_FAIL;
-        }
-
-        // RGBA → BGRA swizzle (SIMD)
-        ImageLoaderSimd::SwizzleRGBAToBGRA(outBuf, (size_t)info.xsize * info.ysize);
-
-        outFrame->pixels = outBuf;
-        outFrame->width = (int)info.xsize;
-        outFrame->height = (int)info.ysize;
-        outFrame->stride = (int)(info.xsize * 4);
-        outFrame->memoryDeleter = [](uint8_t* p) { _aligned_free(p); };
-
-        wchar_t dbg[128];
-        swprintf_s(dbg, L"[P15] JXL decoded via libjxl OK (%ux%u)\n", info.xsize, info.ysize);
-        OutputDebugStringW(dbg);
-        return S_OK;
-    }
-
-
-    // ---------------------------------------------------------------
-    // Fallback: unsupported format for tile decode
-    // ---------------------------------------------------------------
-    OutputDebugStringW(L"[P15] FullDecodeFromMemory: unsupported format\n");
-    return E_NOTIMPL;
+    MoveDecodeResultToFrame(result, outFrame, nullptr);
+    return S_OK;
 }
 
 // ============================================================================
@@ -7103,13 +7125,7 @@ HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ct
 
     // --- Buffer Based Codecs ---
     // [v6.7] Expanded: Include ALL integrated specialized formats
-    bool isBufferCodec = (
-        fmt == L"JPEG" || fmt == L"WebP" || fmt == L"PNG" || fmt == L"GIF" || fmt == L"BMP" || fmt == L"JXL" ||
-        fmt == L"AVIF" || fmt == L"HEIC" ||
-        fmt == L"QOI" || fmt == L"TGA" || fmt == L"PNM" || fmt == L"WBMP" ||
-        fmt == L"PSD" || fmt == L"HDR" || fmt == L"PIC" || fmt == L"PCX" ||
-        fmt == L"SVG" || fmt == L"EXR"
-    );
+    bool isBufferCodec = IsUnifiedBufferCodec(fmt) || fmt == L"HEIC" || fmt == L"SVG";
     
     if (isBufferCodec) {
         QuickView::MappedFile mapping(filePath);
@@ -7119,7 +7135,7 @@ HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ct
         size_t mappedSize = mapping.size();
         
         // Dispatch
-        if (fmt == L"WebP" || fmt == L"GIF" || fmt == L"PNG" || fmt == L"AVIF" || fmt == L"JXL") { // APNG supported by Wuffs
+        if (ShouldProbeAnimatedBufferCodec(fmt)) { // APNG supported by Wuffs
             std::shared_ptr<QuickView::MappedFile> fileMap = std::make_shared<QuickView::MappedFile>(filePath);
             if (fileMap->IsValid()) {
                 std::unique_ptr<QuickView::IAnimationDecoder> animator;
@@ -7165,14 +7181,7 @@ HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ct
             }
         }
         
-        if (fmt == L"AVIF") {
-            HRESULT hr = AVIF::Load(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) {
-                result.metadata.LoaderName = L"libavif (Unified)";
-                return S_OK;
-            }
-        }
-        else if (fmt == L"HEIC") {
+        if (fmt == L"HEIC") {
             HRESULT hr = WIC_HEIC::Load(filePath, ctx, result, m_wicFactory.Get());
             if (SUCCEEDED(hr)) {
                 // [v10.3] Async Gain Map Decode for HEIC
@@ -7330,147 +7339,10 @@ HRESULT CImageLoader::LoadImageUnified(LPCWSTR filePath, const DecodeContext& ct
             // Both failed: propagate the original HEVC-missing hint for user prompt if recognized
             if (hevcMissing) return hrErr;
             return hr; // Returns libavif error if WIC error was generic
-        }
-        else if (fmt == L"JXL") {
-            // [JXL DC] Only use DC Preview if scaling is requested (Stage 1)
-             // or if explicitly forcing preview.
-             // [Fix] User Requirement: 提取缩略图逻辑仅在 titan 模式下进行，普通模式下不进行缩略图逻辑
-             if (ctx.isTitanMode && (ctx.targetWidth > 0 || ctx.targetHeight > 0 || ctx.forceRenderFull)) {
-                 CImageLoader::ThumbData tmp;
-                 HRESULT hr = CImageLoader::LoadThumbJXL_DC(mappedData, mappedSize, &tmp, &result.metadata, ctx.forceRenderFull, ctx.allowFakeBase);
-                 
-                 // [v8.4] Critical Fix: Respect E_ABORT from FastLane
-                 // If JXL loader explicitly aborts (e.g. Large Modular Image in FastLane), 
-                 // we MUST NOT fall through to full decode on this thread.
-                 if (hr == E_ABORT) {
-                     // FastLane requests 256x256. HeavyLane Base Layer requests screen size (e.g. 1920x1080).
-                     // If it's FastLane, abort. If it's HeavyLane, fall through to Full Decode.
-                     if (ctx.targetWidth < 1000 && ctx.targetHeight < 1000) {
-                         return E_ABORT;
-                     }
-                     // Else fall through
-                 }
-                 else if (SUCCEEDED(hr) && tmp.isValid) {
-                     result.width = tmp.width;
-                     result.height = tmp.height;
-                     result.stride = tmp.stride;
-                     size_t bufSize = (size_t)tmp.stride * tmp.height;
-                     result.pixels = ctx.allocator(bufSize);
-                     if (result.pixels) {
-                         memcpy(result.pixels, tmp.pixels.data(), bufSize);
-                         result.metadata.LoaderName = tmp.loaderName; 
-                         return S_OK;
-                     }
-                     // If alloc failed, fall through to full decode? No, E_OUTOFMEMORY.
-                     return E_OUTOFMEMORY;
-                 }
-             }
-             // Fall through to JXL::Load (Full) if DC failed or not requested
-        }
-        else if (fmt == L"WebP") {
-             // WebP Loader already accepts DecodeResult directly
-             HRESULT hr = QuickView::Codec::WebP::Load(mappedData, mappedSize, ctx, result);
-             if (SUCCEEDED(hr)) {
-                 result.metadata.LoaderName = L"WebP (Unified)";
-                 return S_OK;
-             }
-        }
-        else if (fmt == L"JPEG") {
-            HRESULT hr = JPEG::Load(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"TurboJPEG (Unified)"; return S_OK; }
-        }
-        else if (fmt == L"PNG") {
-            HRESULT hr = Wuffs::LoadPNG(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"Wuffs PNG (Unified)"; return S_OK; }
-        }
-        else if (fmt == L"GIF") {
-            HRESULT hr = Wuffs::LoadGIF(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"Wuffs GIF (Unified)"; return S_OK; }
-        }
-        else if (fmt == L"BMP") {
-            HRESULT hr = Wuffs::LoadBMP(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"Wuffs BMP (Unified)"; return S_OK; }
-        }
-        else if (fmt == L"QOI") {
-            HRESULT hr = Wuffs::LoadQOI(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"Wuffs QOI (Unified)"; return S_OK; }
-        }
-        else if (fmt == L"TGA") {
-            HRESULT hr = Wuffs::LoadTGA(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { 
-                result.metadata.LoaderName = L"Wuffs TGA (Unified)"; 
-                return S_OK; 
-            }
-            // [v6.9.7] Fallback: If Wuffs fails (Strict), try Stb (Robust)
-            // This ensures FastLane doesn't fail silently for valid TGA files.
-            hr = Stb::Load(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) {
-                // Stb sets LoaderName to "StbImage"
-                return S_OK;
-            }
-        }
-        else if (fmt == L"PNM") {
-            HRESULT hr = Wuffs::LoadNetPBM(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"Wuffs NetPBM (Unified)"; return S_OK; }
-        }
-        else if (fmt == L"WBMP") {
-            HRESULT hr = Wuffs::LoadWBMP(mappedData, mappedSize, ctx, result);
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"Wuffs WBMP (Unified)"; return S_OK; }
-        }
-        /* NanoSVG Removed */
-        else if (fmt == L"EXR") {
-             HRESULT hr = TinyEXR::Load(mappedData, mappedSize, ctx, result);
-             if (SUCCEEDED(hr)) { 
-                 return S_OK; 
-             }
-        }
-        else if (fmt == L"PSD") {
-             // Prefer native composite decode for PSB (version 2).
-             const bool isPsb = PsdComposite::IsPSB(mappedData, mappedSize);
-             if (isPsb) {
-                 HRESULT hr = PsdComposite::Load(mappedData, mappedSize, ctx, result);
-                 if (hr == E_ABORT || hr == E_OUTOFMEMORY) return hr;
-                 if (SUCCEEDED(hr)) return S_OK;
-             } else {
-                 HRESULT hr = Stb::Load(mappedData, mappedSize, ctx, result);
-                 if (SUCCEEDED(hr)) {
-                     // Stb::Load sets LoaderName to StbImage
-                     return S_OK;
-                 }
-             }
-
-             // Fallback to embedded JPEG preview when full decode is unavailable.
-             PreviewExtractor::ExtractedData exData;
-             if (PreviewExtractor::ExtractFromPSD(mappedData, mappedSize, exData) && exData.IsValid()) {
-                 HRESULT previewHr = JPEG::Load(exData.pData, exData.size, ctx, result);
-                 if (SUCCEEDED(previewHr)) {
-                     result.metadata.Format = L"PSD";
-                     result.metadata.LoaderName = L"PSD Preview (Embedded JPEG)";
-                     if (result.metadata.FormatDetails.empty()) {
-                         result.metadata.FormatDetails = L"PSD Preview";
-                     } else {
-                         result.metadata.FormatDetails += L" / PSD Preview";
-                     }
-                     return S_OK;
-                 }
-             }
-        }
-        else if (fmt == L"HDR") {
-             HRESULT hr = Stb::LoadHdr(mappedData, mappedSize, ctx, result);
-             if (SUCCEEDED(hr)) {
-                 return S_OK;
-             }
-        }
-        else if (fmt == L"PIC" || fmt == L"PCX") {
-             HRESULT hr = Stb::Load(mappedData, mappedSize, ctx, result);
-             if (SUCCEEDED(hr)) { 
-                 return S_OK; 
-             }
-        }
-        if (fmt == L"JXL") {
-            HRESULT hr = JXL::Load(mappedData, mappedSize, ctx, result);
+        } else {
+            HRESULT hr = LoadBufferUnified(mappedData, mappedSize, fmt, ctx, result);
             if (hr == E_OUTOFMEMORY || hr == E_ABORT) return hr;
-            if (SUCCEEDED(hr)) { result.metadata.LoaderName = L"libjxl (Unified)"; return S_OK; }
+            if (SUCCEEDED(hr)) return S_OK;
         }
     }
 

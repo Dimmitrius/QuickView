@@ -226,5 +226,23 @@ namespace QuickView {
         }
     }
 
+    inline bool SupportsTitanMemoryDecode(TitanFormat fmt) {
+        switch (fmt) {
+            case TitanFormat::JPEG:
+            case TitanFormat::PNG:
+            case TitanFormat::JXL:
+            case TitanFormat::WEBP:
+            case TitanFormat::AVIF:
+            case TitanFormat::BMP:
+            case TitanFormat::TGA:
+            case TitanFormat::GIF:
+            case TitanFormat::PNM:
+            case TitanFormat::Other:
+                return true;
+            default:
+                return false;
+        }
+    }
+
 } // namespace QuickView
 
